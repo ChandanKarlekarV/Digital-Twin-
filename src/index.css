@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --reliance-navy: #002B49;
+    --reliance-deepnavy: #001726;
+    --reliance-blue: #004B87;
+    --reliance-red: #ED1B24;
+    --reliance-cyan: #00F0FF;
+    --reliance-dark: #0A0E14;
+  }
+
+  body {
+    background-color: #0A0E14;
+    color: #F4F6F9;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+}
+
+/* Custom Glassmorphism UI classes */
+.glass-panel {
+  background: rgba(0, 43, 73, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 240, 255, 0.22);
+  box-shadow: 0 8px 32px 0 rgba(0, 10, 25, 0.65);
+}
+
+.glass-panel-hover:hover {
+  background: rgba(0, 75, 135, 0.85);
+  border-color: rgba(0, 240, 255, 0.55);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.35);
+}
+
+.glass-panel-alert {
+  background: rgba(40, 10, 15, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(237, 27, 36, 0.6);
+  box-shadow: 0 0 25px rgba(237, 27, 36, 0.45);
+}
+
+.glass-pill {
+  background: rgba(0, 23, 38, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+}
+
+/* Tactical Grid Background */
+.tactical-grid {
+  background-size: 30px 30px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Custom Scrollbar for HUD panels */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 23, 38, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.6);
+}
+
+/* KaTeX custom overrides for dark theme */
+.katex {
+  color: #F4F6F9 !important;
+  font-size: 1.05em !important;
+}
+
+.katex .mord.mathnormal {
+  color: #00F0FF !important;
+}
+
+.katex .mord {
+  color: #F4F6F9 !important;
+}
+
+.katex .mbin, .katex .mrel {
+  color: #8EA8BF !important;
+}
+
+/* CRT / Subsea scanline overlay for tactical HUD */
+.scanlines {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 6px 100%;
+  pointer-events: none;
+}

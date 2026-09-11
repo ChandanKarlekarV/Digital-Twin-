@@ -1,0 +1,226 @@
+# SYSTEM INSTRUCTION: KG-D6 SUBSEA DIGITAL TWIN & EDGE AI DASHBOARD ("VARUNA-AI")
+
+## 1. PROJECT IDENTITY & MISSION GOAL
+You are the Lead Principal Offshore Cyber-Physical Systems Architect and a 40x Hackathon Grand Champion. You are building an ultra-high-fidelity native desktop application (built via Tauri v2 + Rust backend with a React 19 / Vite / React Three Fiber frontend) representing the Reliance KG-D6 Deepwater Block in the Krishna Godavari Basin (Bay of Bengal).
+
+The platform codename is **"VARUNA-AI"** (Visual Analytics & Real-Time Underwater Network Assessment AI), replacing generic assistants with an authoritative, touch-responsive subsea intelligence system.
+
+### Core Non-Negotiable Constraints:
+1. **Form Factor:** Native Desktop Application (NOT a generic responsive webpage). Maximize system hardware acceleration.
+2. **Visual Viewport Dominance:** The 3D viewport MUST occupy at least 80% of the active screen at all times.
+3. **Clutter-Free HUD:** Zero static card clutter on the main screen. All tools, scanning suites, metocean controls, and emergency simulators must be housed within a sleek, semi-transparent Dropdown Command Dock at the top-left.
+4. **Click-to-Slide Analytics Drawer:** All telemetry, graphs, and audit feeds slide out smoothly from the right edge on demand (`Click-to-Slide`) and auto-retract when dismissed.
+5. **Interactive Physics Computation Window:** A dedicated slide-out window that exposes real-time, line-by-line LaTeX math derivations for Coriolis mass flow, ASTM D1250 VCF corrections, and water-cut deconvolution.
+6. **Subsea Spatial Navigation:** Fluid 360-degree OrbitControls with collision bounds, deep zooming, and a seamless "Dive Subsea" camera vector lerp transitioning from topside platform decks to 2,000m subsea Christmas Trees (XTs) and manifolds.
+7. **Reliance Brand Identity:** UI color palette strictly adopts Reliance corporate palettes:
+   - Primary Deep Navy: `#002B49`
+   - Secondary Accent Blue: `#004B87`
+   - Reliance Industrial Red (Alerts/Active states): `#ED1B24`
+   - High-Contrast Data White/Cyan: `#00F0FF` / `#F4F6F9`
+   - Dark Obsidian Matte Backdrop: `#0A0E14` (preserving 80% viewport clarity).
+
+---
+
+## 2. HARDWARE & MATHEMATICAL FOUNDATION KERNEL
+
+The application must run an internal high-speed synthetic Multiphase Flow Meter (MPFM) & Coriolis sensor engine producing data at 10 Hz (100ms ticks), mathematically verified against international petroleum standards:
+
+### A. Synthetic Coriolis Density & Resonant Frequency Model
+Oscillating tube frequency:
+$$f = \frac{1}{2\pi}\sqrt{\frac{k}{m_{\text{tube}} + \rho \cdot V_{\text{tube}}}}$$
+Transmitter computation of uncompensated density:
+$$\rho_{\text{obs}}(T) = C_1 \cdot \tau^2 - C_2 + K_T (T - T_0)$$
+Where:
+- $\tau = 1/f$ (Oscillation period in microseconds, typically $1100 - 1500\,\mu\text{s}$)
+- $C_1 = 4.2875 \times 10^{-4}$, $C_2 = 0.5218$, $K_T = -0.0125\,\text{kg/m}^3/^\circ\text{C}$, $T_0 = 20.0^\circ\text{C}$.
+
+### B. Standard Density & API Gravity (ASTM D1250 / API MPMS Ch. 11.1)
+Base water density at $60^\circ\text{F}$ ($15.56^\circ\text{C}$) is $\rho_{\text{water, 60}} = 999.016\,\text{kg/m}^3$.
+$$\text{SG}_{60/60} = \frac{\rho_{\text{oil, 60}}}{\rho_{\text{water, 60}}}$$
+$$^\circ\text{API} = \frac{141.5}{\text{SG}_{60/60}} - 131.5 \iff \text{SG}_{60/60} = \frac{141.5}{^\circ\text{API} + 131.5}$$
+
+### C. Temperature & Pressure Volume Correction Factors (VCF)
+$$\rho_{\text{base}} = \frac{\rho_{\text{obs}}}{\text{CTL} \times \text{CPL}}$$
+$$\text{CTL} = \exp\left[-\alpha_T \Delta T (1 + 0.8 \alpha_T \Delta T)\right]$$
+Where:
+$$\alpha_T = \frac{K_0}{\rho_{\text{base}}^2} + \frac{K_1}{\rho_{\text{base}}}$$
+($K_0 = 341.0957$, $K_1 = 0.0$ for KG-D6 light condensate/crude oil, $\Delta T = T_{\text{obs}} - 15.56^\circ\text{C}$).
+$$\text{CPL} = \frac{1}{1 - F \cdot (P_{\text{obs}} - P_e)}$$
+Where $F$ is isothermal fluid compressibility ($F \approx 1.25 \times 10^{-5}\,\text{bar}^{-1}$) and $P_e$ is equilibrium vapor pressure.
+
+### D. Multiphase Cut & Net Oil Deconvolution
+$$\rho_{\text{mix}} = \text{WC} \cdot \rho_{\text{water}} + (1 - \text{WC}) \cdot \rho_{\text{oil}}$$
+$$\text{WC} = \frac{\rho_{\text{mix}} - \rho_{\text{oil}}}{\rho_{\text{water}} - \rho_{\text{oil}}}$$
+$$\dot{m}_{\text{net\_oil}} = \dot{m}_{\text{total}} \times \left[1 - \left(\text{WC} \cdot \frac{\rho_{\text{water}}}{\rho_{\text{mix}}}\right)\right]$$
+$$\text{Net BPD} = \frac{\dot{m}_{\text{net\_oil}}\ (\text{kg/day})}{\rho_{\text{base}} \times 0.1589873}$$
+
+### E. Signal Denoising (Real-Time 1D Kalman Filter)
+For noisy and corrupted raw telemetry, the engine executes a continuous state estimator:
+$$x_k^- = A x_{k-1} + B u_k, \quad P_k^- = A P_{k-1} A^T + Q$$
+$$K_k = P_k^- H^T (H P_k^- H^T + R)^{-1}$$
+$$x_k = x_k^- + K_k (z_k - H x_k^-), \quad P_k = (I - K_k H) P_k^-$$
+Detecting sensor drift and zero-clipping bad packets instantly.
+
+---
+
+## 3. ARCHITECTURE & TECH STACK
+
+- **App Shell:** Tauri v2 (Rust) providing zero-overhead, sub-millisecond local system access and secure local IPC.
+- **Engine/Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Zustand (Global state), Lucide Icons, KaTeX (for mathematical equations rendering).
+- **3D Graphics & Shaders:** Three.js / React Three Fiber (R3F), `@react-three/drei`, GLSL Custom Shaders (Gerstner Wave Water Surface, Volumetric Subsea Fog, Thermal False-Color Shader, Distributed Acoustic Sensing Pulse Shader, Gamma Attenuation Raymarch Shader).
+- **High-Velocity Embedded Database:** DuckDB-Wasm running locally in-browser/in-app or embedded SQLite3 with WAL mode, capable of ingesting 100,000+ time-series records per second with microsecond retrieval for 7-day historical logs.
+- **Voice/Speech Synthesis:** Web Speech API synthesized through an authoritative, low-latency tactical subsea operator profile.
+
+---
+
+## 4. PHASED EXECUTION PLAN
+
+Execute the development sequentially through the following 12 phases. Ensure every phase is complete and error-free before proceeding to the next.
+
+### PHASE 1: Native Scaffolding & Desktop Shell Configuration
+- Initialize a Tauri v2 + React 19 + TypeScript + Vite project.
+- Configure `tauri.conf.json` for custom borderless or clean industrial window styling with hardware acceleration (`--enable-gpu-rasterization`).
+- Implement the Reliance Industrial Dark Theme design tokens in Tailwind:
+  - Deep Sea Navy: `#001726`
+  - Reliance Brand Blue: `#004B87`
+  - Warning/Critical Red: `#ED1B24`
+  - Cyan Telemetry: `#00F0FF`
+  - Surface Glass: `rgba(0, 43, 73, 0.65)` with `backdrop-blur-md` and 1px border `rgba(0, 240, 255, 0.2)`.
+- Set up the main layout frame ensuring the 3D Canvas element (`#canvas-container`) strictly maintains a minimum of 80% to 100% viewport coverage.
+
+### PHASE 2: Embedded Time-Series Storage Kernel (DuckDB / High-Speed SQLite)
+- Build a dedicated local telemetry service `TelemetryDatabase.ts`:
+  - Table: `production_telemetry` with fields: `timestamp (BIGINT)`, `asset_id (TEXT)`, `p_line_bar (REAL)`, `t_line_c (REAL)`, `f_osc_hz (REAL)`, `raw_density (REAL)`, `corrected_density (REAL)`, `api_gravity (REAL)`, `water_cut_pct (REAL)`, `gross_mass_rate (REAL)`, `net_oil_bpd (REAL)`, `status_flag (INTEGER)`.
+- Seed the database with 7 days of realistic KG-D6 baseline production history (120,000 Barrels/Day nominal gas-condensate/oil mix).
+- Expose sub-millisecond range queries (`SELECT AVG(net_oil_bpd), MAX(p_line_bar) FROM production_telemetry WHERE timestamp > ?`).
+
+### PHASE 3: Mathematical Physics Engine & Sensor Simulator
+- Build `physics/CoriolisEngine.ts`:
+  - Calculate period $\tau$ from raw frequency.
+  - Implement full non-linear temperature compensation ($K_T$) and Young's modulus adjustments.
+- Build `physics/ASTM1250Engine.ts`:
+  - Implement Newton-Raphson iteration to solve for $\rho_{\text{base}}$ through the iterative $\text{CTL}$ formulation.
+  - Compute $^\circ\text{API}$ and specific gravity.
+- Build `physics/KalmanFilter.ts`:
+  - 1D state estimator for pressure, temperature, and oscillation frequency to clean artificially injected noise spikes.
+- Create an observable telemetry emitter pumping synchronized updates at 10 Hz.
+
+### PHASE 4: 3D Scene Architecture & Subsea Environment Setup
+- Construct the React Three Fiber viewport inside `components/canvas/Scene.tsx`.
+- Add an asset-accurate, detailed 3D Oil Rig representation (Floating Production Storage and Offloading / Semi-Submersible platform topside) at $Y \ge 0$.
+- Add the ocean floor seabed at $Y = -120\,\text{units}$ with bathymetric terrain, subsea production trees (Christmas Trees), manifold hubs, and interconnected steel catenary risers (SCR) running from the seabed to the topside hull.
+- Enable OrbitControls with dampening, polar angle limits, and collision avoidance so the camera never clips through solid geometry.
+
+### PHASE 5: Realistic Dynamic Ocean Shader & "Dive Subsea" Transition
+- Write a custom GLSL Gerstner wave shader `shaders/OceanShader.ts`:
+  - Realistic transparent ocean blue (`#005F89` to `#001A29`) with specular highlights, subsurface scattering, fresnel transparency, and moving crest foam.
+  - Dual rendering: Water surface is visible from both above and below.
+- Implement the "Dive in Water" camera controller:
+  - Add a toggle button in the Command Dock to switch between "Topside Rig View" and "Subsea Seabed View".
+  - Camera executes a smooth cubic-bezier camera lerp across the water boundary.
+  - Dynamically inject underwater volumetric fog (`fogExp2`, density: `0.025`, color: `#001322`) when the camera position $Y < 0$.
+
+### PHASE 6: Interactive Touch/Click Asset Raycasting ("VARUNA-AI" Core)
+- Implement Three.js pointer raycasting on all interactive subsea and topside meshes:
+  - Subsea Riser Line A & B
+  - High-Pressure Production Manifold
+  - Subsea Wellhead Christmas Tree #1 & #2
+  - Topside Drill Rig Derrick & Mud Pumps
+- Clicking/touching any component triggers:
+  1. Highlight mesh with an animated pulsating edge rim (using post-processing outline pass or glowing emissive wireframe).
+  2. Camera smoothly centers focus on the selected component.
+  3. **VARUNA-AI Voice Synthesizer:** Speaks a concise tactical diagnostic: *"Riser Alpha-1 inspected. Internal Pressure: 242 bar. Integrity: 99.4%. Extraction Rate: 34,200 Barrels per day."*
+  4. Slides out the Click-to-Slide Telemetry Drawer with component-specific live stats.
+
+### PHASE 7: Advanced Multi-Spectral Scanning Suite
+Implement a scanning engine switchable via the Command Dock with three visual modes:
+1. **Thermal Scan Mode (DTS / Infrared):**
+   - Applies an inferno/ironbow false-color post-processing shader.
+   - Hot fluid ($85^\circ\text{C}$) visibly glows bright yellow/orange inside the subsea pipes, dissipating heat outward into the freezing Bay of Bengal ambient water ($3.5^\circ\text{C}$).
+2. **Structural Acoustic Scan Mode (DAS - Distributed Acoustic Sensing):**
+   - High-contrast wireframe shader displaying pulsing neon-cyan sonic waves traveling along the pipeline.
+   - Micro-stress cracks or turbulence flash in bright `#ED1B24` (Reliance Red) with acoustic amplitude waveforms.
+3. **Gamma Radiometric Tomography Mode (Virtual MPFM Cross-Section):**
+   - Raymarched cross-sectional cut showing simulated density distribution: gas core in center, oil intermediate layer, water boundary along the inner pipe perimeter.
+
+### PHASE 8: Sleek HUD & Collapsible Command Dock
+- Build the top-left **Command Dock (`components/hud/CommandDock.tsx`)**:
+  - Hidden by default inside a compact, semi-transparent pill: `[ ⚡ VARUNA COMMAND ]`.
+  - On click, opens a clean dropdown menu with categorized controls:
+    - *Camera Views:* Topside Deck, Subsea Riser, Seabed Manifold, Free Orbit.
+    - *Scanner Overlays:* Normal Visual, Thermal (DTS), Acoustic (DAS), Gamma Tomography.
+    - *Metocean Simulator:* Calm Current (1.2 knots), Monsoon Swell (4.5m waves), Cyclonic Storm (Severe VIV risk).
+    - *Emergency Injections:* Broken Pipe Rupture, Stuck Drill String, Hydrate Ice Plug.
+- Ensure the canvas remains at 80%+ visibility even when menus are open.
+
+### PHASE 9: "Click-to-Slide" Real-Time Telemetry Drawer
+- Build `components/hud/TelemetryDrawer.tsx`:
+  - Retracted by default to a thin neon-blue right border edge.
+  - Slides open on user tap or component selection.
+  - Visualizes real-time 10 Hz sparklines (Coriolis Frequency, Flow Velocity, Line Pressure, Temperature).
+  - Displays calibrated MPFM values: Gross Mass Flow, Net Oil (BPD), Water Cut (%), and $^\circ\text{API}$ Quality Grade.
+  - Toggle between "Raw Sensor Signal" (with injected noise) and "Kalman Filtered Signal" to prove the denoising algorithm.
+
+### PHASE 10: "Physics & Calculation Breakdown" Modal/Slide-Out Tab
+- Build `components/hud/PhysicsAuditModal.tsx`:
+  - An interactive calculation inspector window showing the full chain of live derivations.
+  - Dynamically updates with live values substituted into the formulas:
+    - Step 1: Resonant Frequency $\to$ Raw Density ($\rho_{\text{obs}}$)
+    - Step 2: ASTM D1250 $\text{CTL}$ & $\text{CPL}$ Factors
+    - Step 3: API Gravity Classification (e.g., $38.4^\circ\text{API}$ Light Condensate)
+    - Step 4: Water-Cut Split & Net Oil Mass Flow
+  - Render all equations beautifully via KaTeX with live value tags alongside mathematical symbols.
+
+### PHASE 11: Emergency Incident & Automated ESD (Emergency Shutdown) Engine
+- Build the scenario testing panel to simulate critical failures:
+  - **Scenario A: Pipe Rupture / Catastrophic Leak:**
+    - Downhole pressure drops by 60 bar in 200ms. Acoustic scan spikes to critical.
+    - VARUNA-AI automatically cuts in: sound alarm, triggers subsea emergency shutdown valve (SSIV) closure animation, and alerts the control room.
+  - **Scenario B: Drill Lock / Stuck Pipe:**
+    - Torque spikes past safety limits. Topside drill motor cuts out automatically.
+  - **Scenario C: Hydrate Plug Blockage:**
+    - Seabed temperature drops below $4^\circ\text{C}$ with localized pressure differentials, triggering automated methanol injection.
+
+### PHASE 12: Performance Profiling, Verification & Polish
+- Ensure steady 60 FPS performance on standard GPUs by instancing pipes and leveraging efficient Three.js buffer geometries.
+- Verify touch gesture response (pinch to zoom, two-finger rotate, single finger tap) on touch-enabled screens and trackpads.
+- Run complete end-to-end integration tests verifying that sensor noise is filtered, math is numerically exact, and all dropdown/slide-out drawers open and close smoothly without hitching.
+
+---
+
+## 5. COMPLETE FILE STRUCTURE TO CREATE
+
+varuna-twin/
+├── src-tauri/
+│   ├── Cargo.toml
+│   ├── tauri.conf.json
+│   └── src/main.rs
+├── src/
+│   ├── components/
+│   │   ├── canvas/
+│   │   │   ├── Scene.tsx
+│   │   │   ├── OilRigModel.tsx
+│   │   │   ├── SubseaFloor.tsx
+│   │   │   ├── OceanSurface.tsx
+│   │   │   ├── CameraRig.tsx
+│   │   │   └── Scanners/
+│   │   │       ├── ThermalMaterial.ts
+│   │   │       ├── AcousticWaveMaterial.ts
+│   │   │       └── GammaCrossSection.tsx
+│   │   └── hud/
+│   │       ├── CommandDock.tsx
+│   │       ├── TelemetryDrawer.tsx
+│   │       ├── PhysicsAuditModal.tsx
+│   │       └── VarunaVoiceIndicator.tsx
+│   ├── physics/
+│   │   ├── CoriolisEngine.ts
+│   │   ├── ASTM1250Engine.ts
+│   │   ├── KalmanFilter.ts
+│   │   └── MultiphaseCut.ts
+│   ├── store/
+│   │   ├── useRigStore.ts
+│   │   └── useTelemetryStore.ts
+│   ├── db/
+│   │   └── TelemetryDatabase.ts
+│   ├── App.tsx
+│   └── main.tsx

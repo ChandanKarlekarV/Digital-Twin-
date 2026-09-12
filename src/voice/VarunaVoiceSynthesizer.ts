@@ -37,7 +37,8 @@ export const PRELOADED_ELEVENLABS_VOICES: ElevenLabsVoiceOption[] = [
 
 /**
  * Tactical Subsea Audio & Voice Synthesis Engine for VARUNA-AI
- * Supports both ElevenLabs Ultra-Low Latency Streaming API and Web Speech API fallback.
+ * Synthesizes procedural emergency klaxons, storm gale sirens, drill overload beeps,
+ * and natural voice announcements via ElevenLabs API & Web Speech fallback.
  */
 class VarunaVoiceSynthesizer {
   private isMuted = false;
@@ -93,15 +94,135 @@ class VarunaVoiceSynthesizer {
   }
 
   /**
+   * Procedural Emergency Alarm Klaxon / Warning Sound Generator
+   * Generates distinct, high-impact audio alert signatures tailored for each incident type:
+   * - Weather Squall: Marine storm gale oscillating siren (480 Hz <-> 720 Hz)
+   * - Drill Damage / Stuck Drill: High-torque mechanical overload screech (3 rapid sweeps)
+   * - Pipe Blockage / Hydrate Plug: Subsea pressure choke klaxon (560 Hz -> 380 Hz)
+   * - Oil Overload: Process vessel high-level warning pulse
+   * - Pipe Rupture: Critical ESD two-tone emergency alarm
+   */
+  public playEmergencyAlarm(scenario: EmergencyScenario): void {
+    if (this.isMuted) return;
+    try {
+      this.initAudio();
+      if (!this.audioCtx) return;
+
+      if (this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+
+      const now = this.audioCtx.currentTime;
+
+      if (scenario === 'weather_squall') {
+        // Marine Storm Gale Warning Siren (Dual-Tone Rising Sweep)
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.linearRampToValueAtTime(740, now + 0.35);
+        osc.frequency.linearRampToValueAtTime(420, now + 0.7);
+
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.75);
+      } else if (scenario === 'drill_damage' || scenario === 'stuck_drill') {
+        // High-Torque Mechanical Strain Alert (3 Rapid Alarm Pulses)
+        [0, 0.16, 0.32].forEach((offset) => {
+          if (!this.audioCtx) return;
+          const osc = this.audioCtx.createOscillator();
+          const gain = this.audioCtx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(950, now + offset);
+          osc.frequency.exponentialRampToValueAtTime(1400, now + offset + 0.12);
+
+          gain.gain.setValueAtTime(0.2, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.13);
+
+          osc.connect(gain);
+          gain.connect(this.audioCtx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.14);
+        });
+      } else if (scenario === 'pipe_blockage' || scenario === 'hydrate_plug') {
+        // Subsea Choke & Flowline Constriction Klaxon
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(580, now);
+        osc.frequency.linearRampToValueAtTime(320, now + 0.5);
+
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.55);
+      } else if (scenario === 'oil_overload') {
+        // High-Level Separator Flooding Pulse (Dual Alternating Chime)
+        [0, 0.22].forEach((offset, idx) => {
+          if (!this.audioCtx) return;
+          const osc = this.audioCtx.createOscillator();
+          const gain = this.audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(idx === 0 ? 880 : 660, now + offset);
+
+          gain.gain.setValueAtTime(0.22, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+
+          osc.connect(gain);
+          gain.connect(this.audioCtx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.2);
+        });
+      } else if (scenario === 'rupture') {
+        // Critical Emergency ESD Decompression Siren (Urgent Two-Tone Sweep)
+        [0, 0.25, 0.5].forEach((offset, idx) => {
+          if (!this.audioCtx) return;
+          const osc = this.audioCtx.createOscillator();
+          const gain = this.audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(idx % 2 === 0 ? 880 : 440, now + offset);
+
+          gain.gain.setValueAtTime(0.28, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + offset + 0.22);
+
+          osc.connect(gain);
+          gain.connect(this.audioCtx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.23);
+        });
+      } else {
+        // Default tactical sonar acknowledgment
+        this.playSonarPing(880, 0.12);
+      }
+    } catch {
+      // Ignore audio sandbox restrictions
+    }
+  }
+
+  /**
    * Synthesize tactical alert for subsea incident scenario and progressive phase
+   * Plays the distinctive warning alarm sound FIRST, then speaks the tactical voice advisory!
    */
   public speakIncidentAlert(scenario: EmergencyScenario, phase: IncidentPhase = 1): void {
     const meta = INCIDENT_SCENARIOS_CATALOG[scenario];
     if (!meta) return;
 
-    this.playSonarPing(scenario === 'none' ? 880 : 540, 0.25);
+    // 1. Play realistic procedural warning alarm / siren immediately
+    this.playEmergencyAlarm(scenario);
+
+    // 2. Announce tactical incident diagnostics aloud after brief alarm lead-in
     const alertMessage = meta.phases[phase]?.tacticalVoiceAlert || meta.title;
-    this.speakCustom(alertMessage);
+
+    setTimeout(() => {
+      this.speakCustom(alertMessage);
+    }, 450);
   }
 
   /**

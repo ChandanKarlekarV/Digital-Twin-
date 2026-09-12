@@ -360,7 +360,7 @@ export const ASSET_CATALOG: Record<string, RigAssetInfo> = {
   },
 };
 
-export type CurrentFlowPower = 'slow' | 'moderate' | 'fast' | 'extreme';
+export type CurrentFlowPower = 'slow' | 'moderate' | 'fast' | 'extreme' | 'storm';
 export type TidePhase = 'flood' | 'ebb' | 'slack' | 'spring_surge';
 
 interface RigState {
@@ -397,9 +397,19 @@ interface RigState {
   currentDirectionDeg: number;
   currentDirectionLabel: string;
   tidePhase: TidePhase;
+  tidePhaseIndex: number;
+  isDynamicTideCycling: boolean;
+  dynamicTideSecondsRemaining: number;
   setCurrentFlowPower: (power: CurrentFlowPower) => void;
   setCurrentSpeedKnots: (speed: number) => void;
   setCurrentDirectionDeg: (deg: number) => void;
+  setDynamicTideCycling: (active: boolean) => void;
+  setTidePhaseIndex: (index: number) => void;
+
+  // Weather Side Panel
+  isWeatherPanelOpen: boolean;
+  setWeatherPanelOpen: (open: boolean) => void;
+  toggleWeatherPanel: () => void;
 
   // ElevenLabs Voice Integration
   elevenLabsApiKey: string | null;
@@ -528,6 +538,9 @@ export const useRigStore = create<RigState>((set, get) => ({
   currentDirectionDeg: 45,
   currentDirectionLabel: 'NE (045°)',
   tidePhase: 'flood',
+  tidePhaseIndex: 0,
+  isDynamicTideCycling: true,
+  dynamicTideSecondsRemaining: 10,
 
   setCurrentFlowPower: (power) => {
     let speed = 2.4;
@@ -548,6 +561,10 @@ export const useRigStore = create<RigState>((set, get) => ({
       tide = 'flood';
     } else if (power === 'extreme') {
       speed = 8.2;
+      metocean = 'cyclonic';
+      tide = 'spring_surge';
+    } else if (power === 'storm') {
+      speed = 8.8;
       metocean = 'cyclonic';
       tide = 'spring_surge';
     }
@@ -573,8 +590,11 @@ export const useRigStore = create<RigState>((set, get) => ({
     } else if (speed < 6.5) {
       power = 'fast';
       metocean = 'monsoon';
-    } else {
+    } else if (speed < 8.5) {
       power = 'extreme';
+      metocean = 'cyclonic';
+    } else {
+      power = 'storm';
       metocean = 'cyclonic';
     }
 
@@ -584,6 +604,14 @@ export const useRigStore = create<RigState>((set, get) => ({
   setCurrentDirectionDeg: (deg) => {
     set({ currentDirectionDeg: deg, currentDirectionLabel: getDirectionLabel(deg) });
   },
+
+  setDynamicTideCycling: (active) => set({ isDynamicTideCycling: active }),
+  setTidePhaseIndex: (index) => set({ tidePhaseIndex: index }),
+
+  // Weather Side Panel
+  isWeatherPanelOpen: false,
+  setWeatherPanelOpen: (open) => set({ isWeatherPanelOpen: open }),
+  toggleWeatherPanel: () => set((s) => ({ isWeatherPanelOpen: !s.isWeatherPanelOpen })),
 
   // ElevenLabs Voice Integration
   elevenLabsApiKey: cachedApiKey,

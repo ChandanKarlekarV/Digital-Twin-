@@ -38,6 +38,7 @@ export const OceanSurface: React.FC = () => {
       else if (currentFlowPower === 'moderate') waveScale = 1.0;
       else if (currentFlowPower === 'fast') waveScale = 1.8;
       else if (currentFlowPower === 'extreme') waveScale = 3.2;
+      else if (currentFlowPower === 'storm') waveScale = 4.8;
 
       oceanMaterial.uniforms.uWaveHeightScale.value = waveScale;
       oceanMaterial.uniforms.uIsUnderwater.value = camera.position.y < 0 ? 1.0 : 0.0;
@@ -66,6 +67,10 @@ export const OceanSurface: React.FC = () => {
         oceanMaterial.uniforms.uDeepColor.value.set('#001830');
         oceanMaterial.uniforms.uShallowColor.value.set('#00E5FF');
         oceanMaterial.uniforms.uFoamColor.value.set('#00FFFF');
+      } else if (currentFlowPower === 'storm') {
+        oceanMaterial.uniforms.uDeepColor.value.set('#001122');
+        oceanMaterial.uniforms.uShallowColor.value.set('#1A4968');
+        oceanMaterial.uniforms.uFoamColor.value.set('#FFFFFF');
       } else {
         oceanMaterial.uniforms.uDeepColor.value.set('#002B49');
         oceanMaterial.uniforms.uShallowColor.value.set('#0077B6');

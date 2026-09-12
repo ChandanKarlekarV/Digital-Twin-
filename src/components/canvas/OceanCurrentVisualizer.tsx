@@ -54,13 +54,30 @@ export const OceanCurrentVisualizer: React.FC = () => {
 
   // Material with dynamic glow based on current power
   const streamlineMaterial = useMemo(() => {
+    const isStorm = currentFlowPower === 'storm';
     const isExtreme = currentFlowPower === 'extreme';
     const isFast = currentFlowPower === 'fast';
     const isHolo = scannerMode === 'hologram';
 
-    const baseColor = isExtreme ? '#FF3300' : isFast ? '#00E5FF' : isHolo ? '#00B4D8' : '#0077B6';
-    const glowColor = isExtreme ? '#FF5500' : isFast ? '#00FFFF' : isHolo ? '#00FFFF' : '#00A8FF';
-    const intensity = isExtreme ? 4.0 : isFast ? 2.8 : 1.8;
+    const baseColor = isStorm
+      ? '#FF1100'
+      : isExtreme
+      ? '#FF4400'
+      : isFast
+      ? '#00E5FF'
+      : isHolo
+      ? '#00B4D8'
+      : '#0077B6';
+    const glowColor = isStorm
+      ? '#FF0055'
+      : isExtreme
+      ? '#FF5500'
+      : isFast
+      ? '#00FFFF'
+      : isHolo
+      ? '#00FFFF'
+      : '#00A8FF';
+    const intensity = isStorm ? 5.5 : isExtreme ? 4.0 : isFast ? 2.8 : 1.8;
 
     return new THREE.MeshStandardMaterial({
       color: new THREE.Color(baseColor),
@@ -69,7 +86,7 @@ export const OceanCurrentVisualizer: React.FC = () => {
       roughness: 0.2,
       metalness: 0.8,
       transparent: true,
-      opacity: 0.78,
+      opacity: 0.82,
       side: THREE.DoubleSide,
     });
   }, [currentFlowPower, scannerMode]);

@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Wrench,
   Sliders,
+  Wind,
 } from 'lucide-react';
 import {
   useRigStore,
@@ -52,6 +53,7 @@ export const CommandDock: React.FC = () => {
   const togglePhysicsModal = useRigStore((s) => s.togglePhysicsModal);
   const toggleTelemetryDrawer = useRigStore((s) => s.toggleTelemetryDrawer);
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
+  const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
@@ -209,12 +211,13 @@ export const CommandDock: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-4 gap-1 mb-2">
+          <div className="grid grid-cols-5 gap-1 mb-2">
             {[
               { id: 'slow', label: 'SLOW', sub: '0.6 kt' },
-              { id: 'moderate', label: 'MODERATE', sub: '2.4 kt' },
+              { id: 'moderate', label: 'MOD', sub: '2.4 kt' },
               { id: 'fast', label: 'FAST', sub: '4.6 kt' },
-              { id: 'extreme', label: 'EXTREME', sub: '8.2 kt' },
+              { id: 'extreme', label: 'SURGE', sub: '8.2 kt' },
+              { id: 'storm', label: 'STORM', sub: '8.8 kt' },
             ].map((p) => {
               const isActive = currentFlowPower === p.id;
               return (
@@ -224,10 +227,12 @@ export const CommandDock: React.FC = () => {
                     setCurrentFlowPower(p.id as any);
                     varunaVoice.playSonarPing(700, 0.08);
                   }}
-                  className={`p-1.5 rounded-lg text-center font-mono transition-all cursor-pointer border ${
+                  className={`p-1 rounded-lg text-center font-mono transition-all cursor-pointer border ${
                     isActive
-                      ? p.id === 'extreme'
-                        ? 'bg-rose-500/30 border-rose-400 text-rose-300 font-bold'
+                      ? p.id === 'storm'
+                        ? 'bg-rose-500/40 border-rose-400 text-rose-200 font-bold shadow-red-glow animate-pulse'
+                        : p.id === 'extreme'
+                        ? 'bg-orange-500/30 border-orange-400 text-orange-200 font-bold'
                         : p.id === 'fast'
                         ? 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
                         : 'bg-reliance-cyan/20 border-reliance-cyan text-reliance-cyan font-bold'
@@ -235,7 +240,7 @@ export const CommandDock: React.FC = () => {
                   }`}
                 >
                   <div className="text-[10px] font-bold">{p.label}</div>
-                  <div className="text-[8px] opacity-75">{p.sub}</div>
+                  <div className="text-[7.5px] opacity-75">{p.sub}</div>
                 </button>
               );
             })}
@@ -381,6 +386,17 @@ export const CommandDock: React.FC = () => {
 
           <button
             onClick={() => {
+              toggleWeatherPanel();
+              setCommandDockOpen(false);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-xs font-mono text-amber-300 border border-amber-400/40 transition-all cursor-pointer shadow-amber-glow"
+          >
+            <Wind className="w-3.5 h-3.5 text-amber-400" />
+            <span>KG-D6 Weather</span>
+          </button>
+
+          <button
+            onClick={() => {
               setVoiceModalOpen(true);
               setCommandDockOpen(false);
             }}
@@ -406,7 +422,7 @@ export const CommandDock: React.FC = () => {
               setReportModalOpen(true);
               setCommandDockOpen(false);
             }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-white border border-white/20 transition-all cursor-pointer"
+            className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-white border border-white/20 transition-all cursor-pointer"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Compliance Report</span>

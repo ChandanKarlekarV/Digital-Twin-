@@ -38,7 +38,7 @@ export const ComplianceReportModal: React.FC = () => {
   const handleDownloadCsv = () => {
     const csvContent = `data:text/csv;charset=utf-8,Section,Parameter,Observed_Value,Units,Compliance_Standard,Status
 ASSET_INFO,Asset_Name,${assetInfo?.name || selectedAssetId},N/A,ISO 14224,VERIFIED
-ASSET_INFO,Field_Location,Reliance KG-D6 Deepwater Basin,Coordinates: 16°35'N 82°18'E,DGH India,VERIFIED
+ASSET_INFO,Field_Location,Reliance KG-D6 Deepwater Basin,Coordinates: 16°18'00"N 82°20'00"E (Block KG-DWN-98/3),DGH India,VERIFIED
 ASSET_INFO,Water_Depth,2040,meters,Subsea Deepwater Class,VERIFIED
 METROLOGY,Oscillation_Frequency,${currentRecord?.f_osc_hz.toFixed(2)},Hz,API MPMS 5.6,COMPLIANT
 METROLOGY,Resonant_Period,${activeCoriolisResult?.period_us.toFixed(2)},microseconds,API MPMS 5.6,COMPLIANT
@@ -123,7 +123,7 @@ MULTIPHASE,Net_Standard_Oil_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd
                 OPERATOR & FACILITY:
               </div>
               <div className="text-sm font-bold text-white">RELIANCE INDUSTRIES LIMITED — KG-D6 BLOCK</div>
-              <div className="text-[11px] text-reliance-cyan">Bay of Bengal Deepwater Sector (16°35'N, 82°18'E)</div>
+              <div className="text-[11px] text-reliance-cyan">Bay of Bengal Deepwater Sector (16°18'00"N, 82°20'00"E • Block KG-DWN-98/3)</div>
             </div>
             <div className="text-right">
               <div className="text-[10px] text-reliance-textMuted uppercase font-bold">AUDIT TIMESTAMP:</div>

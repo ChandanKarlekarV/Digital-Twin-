@@ -8,7 +8,21 @@ import { PhysicsAuditModal } from './components/hud/PhysicsAuditModal';
 import { EmergencyIncidentPanel } from './components/hud/EmergencyIncidentPanel';
 import { VarunaVoiceIndicator } from './components/hud/VarunaVoiceIndicator';
 import { CurrentControlWidget } from './components/hud/CurrentControlWidget';
-import { Compass, Radio, Eye, ChevronDown, FolderOpen } from 'lucide-react';
+import { IncidentControlManager } from './components/hud/IncidentControlManager';
+import { ElevenLabsConfigModal } from './components/hud/ElevenLabsConfigModal';
+import { HardwareLinkModal } from './components/hud/HardwareLinkModal';
+import { ComplianceReportModal } from './components/hud/ComplianceReportModal';
+import {
+  Compass,
+  Radio,
+  Eye,
+  ChevronDown,
+  FolderOpen,
+  AlertTriangle,
+  Sparkles,
+  Cpu,
+  FileCheck,
+} from 'lucide-react';
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
 
 export default function App() {
@@ -17,6 +31,11 @@ export default function App() {
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
   const isCommandDockOpen = useRigStore((s) => s.isCommandDockOpen);
   const toggleCommandDock = useRigStore((s) => s.toggleCommandDock);
+
+  const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
+  const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
+  const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
+  const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
 
   const customObjFileName = useRigStore((s) => s.customObjFileName);
   const setCustomObjUrl = useRigStore((s) => s.setCustomObjUrl);
@@ -73,15 +92,15 @@ export default function App() {
 
       {/* ================= TOP TACTICAL HUD ================= */}
       <header className="absolute top-0 left-0 right-0 z-40 h-14 px-4 flex items-center justify-between pointer-events-none">
-        {/* Left: Command Dock Pill Trigger & Custom OBJ Loader */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        {/* Left: Command Dock Pill Trigger & Quick Action Modules */}
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
           <button
             onClick={toggleCommandDock}
-            className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/90 hover:bg-reliance-navy/90 transition-all shadow-cyan-glow cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/90 hover:bg-reliance-navy/90 transition-all shadow-cyan-glow cursor-pointer"
           >
-            <div className="w-2.5 h-2.5 rounded-full bg-reliance-cyan animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
             <span className="font-extrabold tracking-wider text-xs uppercase text-reliance-cyan">
-              VARUNA COMMAND
+              COMMAND
             </span>
             <ChevronDown
               className={`w-3.5 h-3.5 text-reliance-cyan transition-transform duration-200 ${
@@ -90,24 +109,49 @@ export default function App() {
             />
           </button>
 
-          {/* Quick .OBJ Model Button */}
+          {/* Quick Anomaly Simulator Button */}
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel border border-reliance-cyan/30 text-[11px] font-mono text-reliance-cyan hover:bg-reliance-blue/50 transition-all cursor-pointer shadow-cyan-glow"
-            title="Load your custom .obj 3D rig model"
+            onClick={toggleIncidentModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-reliance-red/40 text-[11px] font-mono text-rose-300 hover:bg-reliance-red/20 transition-all cursor-pointer shadow-red-glow"
+            title="Open Subsea Anomaly & Incident Suite (Pipe Choke, Drill Damage, Oil Overload, Squall)"
           >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span>{customObjFileName ? `RIG: ${customObjFileName.slice(0, 14)}...` : 'LOAD .OBJ RIG'}</span>
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">ANOMALIES</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-pill text-[11px] font-mono text-reliance-textMuted">
-            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>10 Hz SYNC</span>
-          </div>
+          {/* Quick ElevenLabs Voice Button */}
+          <button
+            onClick={() => setVoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-purple-400/40 text-[11px] font-mono text-purple-300 hover:bg-purple-500/20 transition-all cursor-pointer"
+            title="Configure ElevenLabs Voice Synthesizer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">VOICE</span>
+          </button>
+
+          {/* Quick Hardware HAL Bridge Button */}
+          <button
+            onClick={() => setHardwareModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-emerald-400/40 text-[11px] font-mono text-emerald-300 hover:bg-emerald-500/20 transition-all cursor-pointer"
+            title="Configure Hardware Serial / SCADA Gateway"
+          >
+            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden md:inline">HARDWARE</span>
+          </button>
+
+          {/* Quick Compliance Report Button */}
+          <button
+            onClick={() => setReportModalOpen(true)}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-white/20 text-[11px] font-mono text-white hover:bg-white/10 transition-all cursor-pointer"
+            title="Export Official PDF/CSV Compliance Audit Report"
+          >
+            <FileCheck className="w-3.5 h-3.5 text-reliance-cyan" />
+            <span>AUDIT REPORT</span>
+          </button>
         </div>
 
         {/* Center: Live Coordinates, Depth & Active Camera */}
-        <div className="hidden lg:flex items-center gap-4 px-5 py-2 rounded-full glass-panel border border-reliance-cyan/25 text-xs font-mono">
+        <div className="hidden xl:flex items-center gap-4 px-5 py-2 rounded-full glass-panel border border-reliance-cyan/25 text-xs font-mono">
           <div className="flex items-center gap-1.5 text-reliance-cyan">
             <Compass className="w-3.5 h-3.5" />
             <span>16°35'N 82°18'E</span>
@@ -126,7 +170,7 @@ export default function App() {
         </div>
 
         {/* Right: Quick View Presets & Voice Indicator */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
           <VarunaVoiceIndicator />
 
           <div className="flex items-center p-1 rounded-xl glass-panel border border-reliance-cyan/20 text-xs font-mono">
@@ -169,6 +213,18 @@ export default function App() {
 
       {/* ================= EMERGENCY INCIDENT PANEL ================= */}
       <EmergencyIncidentPanel />
+
+      {/* ================= INCIDENT CONTROL MANAGER MODAL ================= */}
+      <IncidentControlManager />
+
+      {/* ================= ELEVENLABS VOICE CONFIG MODAL ================= */}
+      <ElevenLabsConfigModal />
+
+      {/* ================= HARDWARE LINK MODAL ================= */}
+      <HardwareLinkModal />
+
+      {/* ================= COMPLIANCE AUDIT REPORT MODAL ================= */}
+      <ComplianceReportModal />
 
       {/* ================= CLICK-TO-SLIDE TELEMETRY DRAWER ================= */}
       <TelemetryDrawer />

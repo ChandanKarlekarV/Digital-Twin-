@@ -12,12 +12,18 @@ import {
   CheckCircle2,
   FolderOpen,
   X,
+  Sparkles,
+  Cpu,
+  ShieldCheck,
+  Wrench,
+  Sliders,
 } from 'lucide-react';
 import {
   useRigStore,
   CameraViewMode,
   ScannerMode,
   MetoceanCondition,
+  EmergencyScenario,
 } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
@@ -45,6 +51,10 @@ export const CommandDock: React.FC = () => {
 
   const togglePhysicsModal = useRigStore((s) => s.togglePhysicsModal);
   const toggleTelemetryDrawer = useRigStore((s) => s.toggleTelemetryDrawer);
+  const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
+  const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
+  const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
+  const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -70,7 +80,7 @@ export const CommandDock: React.FC = () => {
   return (
     <div
       ref={dockRef}
-      className="absolute top-16 left-4 z-50 w-80 sm:w-96 rounded-2xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 p-4 shadow-dock text-white font-sans backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150"
+      className="absolute top-16 left-4 z-50 w-84 sm:w-96 rounded-2xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 p-4 shadow-dock text-white font-sans backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150"
     >
       {/* Hidden File Input for Custom .OBJ */}
       <input
@@ -229,87 +239,131 @@ export const CommandDock: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. EMERGENCY INCIDENT SIMULATOR */}
+        {/* 4. EMERGENCY INCIDENTS & ANOMALY INJECTIONS */}
         <div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-reliance-red uppercase mb-1.5 font-semibold">
-            <AlertTriangle className="w-3 h-3 text-reliance-red" />
-            <span>Emergency Incident & ESD Injections</span>
+          <div className="flex items-center justify-between text-[10px] font-mono text-reliance-red uppercase mb-1.5 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-reliance-red" />
+              <span>Subsea Anomaly Scenarios</span>
+            </span>
+            <button
+              onClick={() => {
+                toggleIncidentModal();
+                setCommandDockOpen(false);
+              }}
+              className="text-[9px] text-reliance-cyan hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Sliders className="w-3 h-3" />
+              <span>4-PHASE MANAGER</span>
+            </button>
           </div>
-          <div className="space-y-1.5">
+
+          <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={() => {
                 setEmergencyScenario('none');
                 varunaVoice.speakDiagnostic('MANIFOLD-D6-MAIN');
               }}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-mono transition-all cursor-pointer border ${
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
                 emergencyScenario === 'none'
                   ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-bold'
                   : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>ALL NOMINAL (NO ACTIVE ESD)</span>
+              <div className="font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>ALL NOMINAL</span>
               </div>
             </button>
 
             <button
               onClick={() => {
-                setEmergencyScenario('rupture');
-                varunaVoice.speakDiagnostic('RISER-ALPHA');
+                setEmergencyScenario('pipe_blockage', 1);
+                varunaVoice.speakIncidentAlert('pipe_blockage', 1);
               }}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-mono transition-all cursor-pointer border ${
-                emergencyScenario === 'rupture'
-                  ? 'bg-reliance-red/30 border-reliance-red text-red-300 shadow-red-glow font-bold animate-pulse'
-                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-reliance-red hover:border-reliance-red/50'
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-reliance-red" />
-                <span>PIPE RUPTURE / CATASTROPHIC LEAK</span>
-              </div>
-              <span className="text-[10px] text-reliance-red font-bold">-60 BAR</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setEmergencyScenario('stuck_drill');
-                varunaVoice.speakDiagnostic('TOPSIDE-DRILL-RIG');
-              }}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-mono transition-all cursor-pointer border ${
-                emergencyScenario === 'stuck_drill'
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
+                emergencyScenario === 'pipe_blockage'
                   ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-bold'
-                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-amber-400 hover:border-amber-400/50'
+                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-amber-400'
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-amber-400" />
-                <span>DRILL STRING LOCK / JAM</span>
+              <div className="font-bold flex items-center gap-1">
+                <Activity className="w-3 h-3 text-amber-400" />
+                <span>PIPE CHOKE / WAX</span>
               </div>
-              <span className="text-[10px] text-amber-400 font-bold">+45 BAR</span>
             </button>
 
             <button
               onClick={() => {
-                setEmergencyScenario('hydrate_plug');
-                varunaVoice.speakDiagnostic('XT-WELLHEAD-02');
+                setEmergencyScenario('drill_damage', 1);
+                varunaVoice.speakIncidentAlert('drill_damage', 1);
               }}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-mono transition-all cursor-pointer border ${
-                emergencyScenario === 'hydrate_plug'
-                  ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200 font-bold'
-                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-cyan-400 hover:border-cyan-400/50'
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
+                emergencyScenario === 'drill_damage'
+                  ? 'bg-rose-500/30 border-rose-400 text-rose-200 font-bold'
+                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-rose-400'
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-cyan-400" />
-                <span>HYDRATE ICE PLUG BLOCKAGE</span>
+              <div className="font-bold flex items-center gap-1">
+                <Wrench className="w-3 h-3 text-rose-400" />
+                <span>DRILL DAMAGE</span>
               </div>
-              <span className="text-[10px] text-cyan-400 font-bold">3.2°C</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setEmergencyScenario('oil_overload', 1);
+                varunaVoice.speakIncidentAlert('oil_overload', 1);
+              }}
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
+                emergencyScenario === 'oil_overload'
+                  ? 'bg-orange-500/30 border-orange-400 text-orange-200 font-bold'
+                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-orange-400'
+              }`}
+            >
+              <div className="font-bold flex items-center gap-1">
+                <Flame className="w-3 h-3 text-orange-400" />
+                <span>OIL OVERLOAD</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setEmergencyScenario('weather_squall', 1);
+                varunaVoice.speakIncidentAlert('weather_squall', 1);
+              }}
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
+                emergencyScenario === 'weather_squall'
+                  ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200 font-bold'
+                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-cyan-400'
+              }`}
+            >
+              <div className="font-bold flex items-center gap-1">
+                <Waves className="w-3 h-3 text-cyan-400" />
+                <span>WEATHER SQUALL</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setEmergencyScenario('rupture', 1);
+                varunaVoice.speakIncidentAlert('rupture', 1);
+              }}
+              className={`p-2 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
+                emergencyScenario === 'rupture'
+                  ? 'bg-reliance-red/30 border-reliance-red text-red-300 font-bold animate-pulse'
+                  : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-reliance-red'
+              }`}
+            >
+              <div className="font-bold flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-reliance-red" />
+                <span>PIPE RUPTURE</span>
+              </div>
             </button>
           </div>
         </div>
 
-        {/* 5. QUICK AUDIT & DRAWER TOGGLES */}
+        {/* 5. MODALS & SYSTEM INTEGRATIONS */}
         <div className="pt-2 border-t border-reliance-cyan/20 grid grid-cols-2 gap-2">
           <button
             onClick={() => {
@@ -324,13 +378,35 @@ export const CommandDock: React.FC = () => {
 
           <button
             onClick={() => {
-              toggleTelemetryDrawer();
+              setVoiceModalOpen(true);
               setCommandDockOpen(false);
             }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-navy text-xs font-mono text-white border border-white/20 transition-all cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-purple-300 border border-purple-400/30 transition-all cursor-pointer"
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Telemetry Drawer</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>ElevenLabs Voice</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setHardwareModalOpen(true);
+              setCommandDockOpen(false);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-emerald-300 border border-emerald-400/30 transition-all cursor-pointer"
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            <span>Hardware Gateway</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setReportModalOpen(true);
+              setCommandDockOpen(false);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-white border border-white/20 transition-all cursor-pointer"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Compliance Report</span>
           </button>
         </div>
       </div>

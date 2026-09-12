@@ -2,9 +2,10 @@ import { telemetryDb } from '../db/TelemetryDatabase';
 import { coriolisEngine } from '../physics/CoriolisEngine';
 import { astm1250Engine } from '../physics/ASTM1250Engine';
 import { multiphaseCutEngine } from '../physics/MultiphaseCut';
+import { darcyWeisbachEngine } from '../physics/DarcyWeisbachHydraulics';
+import { drillTorsionalEngine } from '../physics/DrillTorsionalStress';
 import { KalmanFilter1D } from '../physics/KalmanFilter';
 import { useRigStore } from '../store/useRigStore';
-import { useTelemetryStore } from '../store/useTelemetryStore';
 
 async function runEndToEndVerification() {
   console.log('================================================================');
@@ -75,8 +76,33 @@ async function runEndToEndVerification() {
     `Base Density: ${astmRes.rho_base.toFixed(2)} kg/m³ (Converged in ${astmRes.iterations_count} iters) -> ${astmRes.api_gravity.toFixed(2)} °API [${astmRes.api_classification}]`
   );
 
-  // TEST 5: Multiphase Cut & Net Standard Volume (BPD)
-  console.log('\n--- TEST GROUP 4: MULTIPHASE CUT & DECONVOLUTION ---');
+  // TEST 5: Darcy-Weisbach Subsea Pipeline Hydraulics & Blockage Friction
+  console.log('\n--- TEST GROUP 4: DARCY-WEISBACH PIPELINE HYDRAULICS ---');
+  const hydRes = darcyWeisbachEngine.calculate({
+    massRateKgS: 58.2,
+    densityKgM3: 798.68,
+    blockageRatio: 0.45,
+  });
+  assert(
+    hydRes.reynoldsNumber > 10000 && hydRes.pressureDropBar > 0 && hydRes.frictionFactor > 0,
+    'Darcy-Weisbach Pipeline Friction & Constriction Solver',
+    `Re: ${hydRes.reynoldsNumber.toLocaleString()} (${hydRes.flowRegime}) -> f_D = ${hydRes.frictionFactor} -> ΔP = ${hydRes.pressureDropBar} bar (${hydRes.blockageSeverityPct}% Choke)`
+  );
+
+  // TEST 6: Downhole Drillstring Torsional Mechanics & Yield Stress
+  console.log('\n--- TEST GROUP 5: DRILLSTRING TORSIONAL STRESS & MECHANICS ---');
+  const drillRes = drillTorsionalEngine.calculate({
+    torqueKNm: 28.4,
+    rotarySpeedRPM: 120,
+  });
+  assert(
+    drillRes.torsionalShearStressMPa > 30 && drillRes.safetyFactor > 1.5,
+    'Drillstring Torsional Stress & Safety Factor Calculation',
+    `Torque: 28.4 kNm -> Shear Stress τ = ${drillRes.torsionalShearStressMPa} MPa -> Safety Factor SF = ${drillRes.safetyFactor} (Power: ${drillRes.rotaryPowerKW} kW)`
+  );
+
+  // TEST 7: Multiphase Cut & Net Standard Volume (BPD)
+  console.log('\n--- TEST GROUP 6: MULTIPHASE CUT & DECONVOLUTION ---');
   const mixDensity = 825.0;
   const grossMass = 58.2;
   const multiphaseRes = multiphaseCutEngine.deconvolveFlow(mixDensity, observedRho, grossMass, astmRes.rho_base);
@@ -86,8 +112,8 @@ async function runEndToEndVerification() {
     `Water-Cut: ${multiphaseRes.water_cut_percentage.toFixed(2)}% -> Net Oil: ${multiphaseRes.net_oil_mass_rate_kg_s.toFixed(2)} kg/s (${Math.round(multiphaseRes.net_oil_bpd).toLocaleString()} BPD)`
   );
 
-  // TEST 6: Real-Time 1D Kalman Filter Noise Suppression
-  console.log('\n--- TEST GROUP 5: 1D KALMAN STATE ESTIMATOR ---');
+  // TEST 8: Real-Time 1D Kalman Filter Noise Suppression
+  console.log('\n--- TEST GROUP 7: 1D KALMAN STATE ESTIMATOR ---');
   const kf = new KalmanFilter1D({ Q: 0.01, R: 0.2, initialState: 240.0, maxResidualThreshold: 45 });
   let rawVar = 0;
   let filtVar = 0;
@@ -106,8 +132,8 @@ async function runEndToEndVerification() {
     `Raw StdDev: ${rawSigma.toFixed(2)} bar -> Filtered StdDev: ${filtSigma.toFixed(2)} bar (${noiseReduction.toFixed(1)}% Noise Suppression)`
   );
 
-  // TEST 7: Zustand Global State Machine & Emergency Actions
-  console.log('\n--- TEST GROUP 6: SCENE STATE & EMERGENCY ESD INJECTIONS ---');
+  // TEST 9: Zustand Global State Machine & Emergency Anomaly Progression
+  console.log('\n--- TEST GROUP 8: SCENE STATE & 4-PHASE ANOMALY STATE MACHINE ---');
   useRigStore.getState().setSelectedAssetId('MANIFOLD-D6-MAIN');
   assert(
     useRigStore.getState().selectedAssetId === 'MANIFOLD-D6-MAIN',
@@ -115,11 +141,18 @@ async function runEndToEndVerification() {
     'Selected MANIFOLD-D6-MAIN successfully'
   );
 
-  useRigStore.getState().setEmergencyScenario('rupture');
+  useRigStore.getState().setEmergencyScenario('pipe_blockage', 2);
   assert(
-    useRigStore.getState().emergencyScenario === 'rupture',
-    'Emergency Incident Injection State Machine',
-    'Emergency scenario successfully set to Catastrophic Pipe Rupture'
+    useRigStore.getState().emergencyScenario === 'pipe_blockage' && useRigStore.getState().incidentPhase === 2,
+    'Phased Anomaly Injection State Machine',
+    'Emergency scenario successfully set to Pipe Blockage Phase 2 (Flow Choking)'
+  );
+
+  useRigStore.getState().nextIncidentPhase();
+  assert(
+    useRigStore.getState().incidentPhase === 3,
+    'Incident Phase Stepper Progression',
+    'Advanced to Phase 3: Critical Flowline Occlusion (ESD Trip)'
   );
 
   useRigStore.getState().setEmergencyScenario('none');

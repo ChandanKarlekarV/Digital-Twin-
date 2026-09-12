@@ -20,6 +20,7 @@ class TelemetryEmitterService {
   private isRunning = false;
   private tickCount = 0;
   private filterBanks: Map<string, AssetFilterBank> = new Map();
+  private autoPhaseTick = 0;
 
   constructor() {
     this.initFilterBanks();
@@ -71,8 +72,32 @@ class TelemetryEmitterService {
   private emitTick(): void {
     this.tickCount++;
     const now = Date.now();
-    const { selectedAssetId, emergencyScenario } = useRigStore.getState();
+    const {
+      selectedAssetId,
+      emergencyScenario,
+      incidentPhase,
+      isAutoSimulatingPhases,
+      nextIncidentPhase,
+      setEmergencyScenario,
+    } = useRigStore.getState();
+
     const activeAsset = selectedAssetId || 'RISER-ALPHA';
+
+    // Auto-simulation progression: advance phase every 60 ticks (6 seconds)
+    if (isAutoSimulatingPhases && emergencyScenario !== 'none') {
+      this.autoPhaseTick++;
+      if (this.autoPhaseTick >= 60) {
+        this.autoPhaseTick = 0;
+        if (incidentPhase < 4) {
+          nextIncidentPhase();
+        } else {
+          // Completed cycle: return to nominal
+          setEmergencyScenario('none', 1);
+        }
+      }
+    } else {
+      this.autoPhaseTick = 0;
+    }
 
     const assets = [
       { id: 'RISER-ALPHA', baseP: 242.0, baseT: 52.0, baseMass: 58.2, nominalBpd: 34200 },
@@ -101,21 +126,122 @@ class TelemetryEmitterService {
       let targetWC = 4.2 + Math.sin(this.tickCount * 0.01) * 0.6;
       let statusFlag = 0;
 
-      // Handle emergency scenarios
-      if (emergencyScenario === 'rupture' && (asset.id === 'RISER-ALPHA' || asset.id === 'MANIFOLD-D6-MAIN')) {
-        // Catastrophic pressure drop & sea water ingress
-        targetP = Math.max(15.0, asset.baseP - 68.0 - Math.random() * 8.0);
-        targetWC = Math.min(85.0, 48.0 + Math.random() * 10.0);
-        targetMass *= 0.35;
-        statusFlag = 2; // Critical ESD
-      } else if (emergencyScenario === 'stuck_drill' && (asset.id === 'TOPSIDE-DRILL-RIG' || asset.id === 'XT-WELLHEAD-01')) {
-        targetP = asset.baseP + 45.0 + Math.random() * 12.0;
-        statusFlag = 4; // Drill Lock
-      } else if (emergencyScenario === 'hydrate_plug' && (asset.id === 'MANIFOLD-D6-MAIN' || asset.id === 'XT-WELLHEAD-02')) {
-        targetT = 3.2 + Math.random() * 0.8; // Freezing seabed
-        targetP = asset.baseP + 35.0 + Math.random() * 5.0;
-        targetMass *= 0.15;
-        statusFlag = 3; // Hydrate alert
+      // ================= EMERGENCY & ANOMALY INCIDENT INJECTIONS =================
+      const pFactor = incidentPhase; // 1 to 4
+
+      switch (emergencyScenario) {
+        case 'pipe_blockage':
+          if (asset.id === 'MANIFOLD-D6-MAIN' || asset.id === 'RISER-ALPHA') {
+            if (pFactor === 1) {
+              targetP += 12.0 + Math.random() * 2.0;
+              targetMass *= 0.88;
+              statusFlag = 1; // Warning
+            } else if (pFactor === 2) {
+              targetP += 34.0 + Math.random() * 4.0;
+              targetMass *= 0.52;
+              targetWC += 3.5;
+              statusFlag = 1;
+            } else if (pFactor === 3) {
+              targetP += 64.0 + Math.random() * 6.0;
+              targetMass *= 0.15;
+              targetWC += 8.0;
+              statusFlag = 2; // Critical ESD
+            } else if (pFactor === 4) {
+              targetP += 8.0 + Math.sin(this.tickCount * 0.1) * 2.0;
+              targetMass *= 0.92;
+              statusFlag = 0; // Remediated
+            }
+          }
+          break;
+
+        case 'drill_damage':
+          if (asset.id === 'TOPSIDE-DRILL-RIG' || asset.id === 'XT-WELLHEAD-01') {
+            if (pFactor === 1) {
+              targetP += 8.0 + Math.sin(this.tickCount * 0.5) * 4.0;
+              statusFlag = 1;
+            } else if (pFactor === 2) {
+              targetP += 26.0 + Math.sin(this.tickCount * 0.8) * 8.0;
+              statusFlag = 1;
+            } else if (pFactor === 3) {
+              targetP += 48.0 + Math.random() * 8.0;
+              statusFlag = 4; // Mechanical Jam
+            } else if (pFactor === 4) {
+              targetP = asset.baseP + 4.0;
+              statusFlag = 0;
+            }
+          }
+          break;
+
+        case 'oil_overload':
+          if (asset.id === 'TOPSIDE-DRILL-RIG' || asset.id === 'TOPSIDE-MPFM-01' || asset.id === 'MANIFOLD-D6-MAIN') {
+            if (pFactor === 1) {
+              targetMass *= 1.35;
+              targetP += 14.0;
+              statusFlag = 1;
+            } else if (pFactor === 2) {
+              targetMass *= 1.68;
+              targetWC += 12.0;
+              targetP += 28.0;
+              statusFlag = 1;
+            } else if (pFactor === 3) {
+              targetMass *= 1.95;
+              targetWC += 18.0;
+              targetP += 45.0;
+              statusFlag = 2; // High-high trip
+            } else if (pFactor === 4) {
+              targetMass *= 1.05;
+              targetP += 5.0;
+              statusFlag = 0;
+            }
+          }
+          break;
+
+        case 'weather_squall':
+          // Metocean wave heaves perturb all subsea asset motion
+          targetP += Math.sin(this.tickCount * 0.15) * (pFactor * 3.5);
+          if (pFactor === 3) statusFlag = 1;
+          break;
+
+        case 'rupture':
+          if (asset.id === 'RISER-ALPHA' || asset.id === 'MANIFOLD-D6-MAIN') {
+            if (pFactor === 1) {
+              targetP -= 18.0;
+              targetWC += 10.0;
+              statusFlag = 1;
+            } else if (pFactor >= 2) {
+              targetP = Math.max(15.0, asset.baseP - 68.0 - Math.random() * 6.0);
+              targetWC = Math.min(85.0, 52.0 + Math.random() * 8.0);
+              targetMass *= 0.35;
+              statusFlag = 2; // ESD
+            }
+          }
+          break;
+
+        case 'hydrate_plug':
+          if (asset.id === 'MANIFOLD-D6-MAIN' || asset.id === 'XT-WELLHEAD-02') {
+            if (pFactor <= 2) {
+              targetT = 3.8 - pFactor * 0.6;
+              targetP += 18.0 * pFactor;
+              statusFlag = 1;
+            } else if (pFactor === 3) {
+              targetT = 2.4 + Math.random() * 0.4;
+              targetP += 44.0;
+              targetMass *= 0.18;
+              statusFlag = 3;
+            } else if (pFactor === 4) {
+              targetT = 12.0;
+              targetP = asset.baseP + 4.0;
+              statusFlag = 0;
+            }
+          }
+          break;
+
+        case 'stuck_drill':
+          if (asset.id === 'TOPSIDE-DRILL-RIG' || asset.id === 'XT-WELLHEAD-01') {
+            targetP = asset.baseP + 42.0 + Math.random() * 10.0;
+            statusFlag = 4;
+          }
+          break;
       }
 
       // Inject raw sensor noise & occasional multiphase bubble glitch

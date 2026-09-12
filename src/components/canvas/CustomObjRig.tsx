@@ -16,11 +16,13 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
   const [objGroup, setObjGroup] = useState<THREE.Group | null>(null);
   const setSelectedAssetId = useRigStore((s) => s.setSelectedAssetId);
   const scannerMode = useRigStore((s) => s.scannerMode);
+  const emergencyScenario = useRigStore((s) => s.emergencyScenario);
+  const incidentPhase = useRigStore((s) => s.incidentPhase);
 
   // Scaled coordinate constants matching user yellow marking line
   const MODEL_SCALE = 45.0;
   const WATER_LINE_OBJ_Y = -0.22; // Column midpoint water line
-  const SEABED_WORLD_Y = (-0.585 - WATER_LINE_OBJ_Y) * MODEL_SCALE; // -16.425m (matches user yellow line)
+  const SEABED_WORLD_Y = (-0.585 - WATER_LINE_OBJ_Y) * MODEL_SCALE; // -16.425m
   const BEDROCK_BOTTOM_WORLD_Y = (-2.4719 - WATER_LINE_OBJ_Y) * MODEL_SCALE; // -101.3m
   const LAND_WIDTH = 110.0;
   const LAND_DEPTH = 110.0;
@@ -35,6 +37,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
 
   // Reference for ONLY the INNER spinning drill mechanism (Outer cylinder is 100% static!)
   const innerDrillGroupRef = useRef<THREE.Group | null>(null);
+  const wholeRigGroupRef = useRef<THREE.Group | null>(null);
 
   // Animate shader uniforms and spin ONLY the INNER drill string on every frame
   useFrame(({ clock }, delta) => {
@@ -49,9 +52,42 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     if (holoSeabedMatRef.current) holoSeabedMatRef.current.uniforms.uTime.value = t;
 
     // 2. Continuous rotary spin applied ONLY to the INNER drill string & bit (~40 RPM)
-    // The outer cylinder, outer walls, and bedrock remain 100% static!
+    const isDrillIssue = emergencyScenario === 'drill_damage' || emergencyScenario === 'stuck_drill';
+    const isSquall = emergencyScenario === 'weather_squall';
+
     if (innerDrillGroupRef.current) {
-      innerDrillGroupRef.current.rotation.y += delta * 4.2;
+      if (isDrillIssue && incidentPhase >= 3) {
+        // Complete stall + violent high-frequency vibration jitter
+        const jitterX = (Math.sin(t * 65.0) + (Math.random() - 0.5)) * 0.12;
+        const jitterZ = (Math.cos(t * 55.0) + (Math.random() - 0.5)) * 0.12;
+        innerDrillGroupRef.current.position.x = jitterX;
+        innerDrillGroupRef.current.position.z = jitterZ;
+      } else if (isDrillIssue && incidentPhase >= 1) {
+        // Stick-slip rotational jerking
+        const wobble = Math.sin(t * 30.0) * (0.04 * incidentPhase);
+        innerDrillGroupRef.current.position.x = wobble;
+        innerDrillGroupRef.current.position.z = -wobble;
+        innerDrillGroupRef.current.rotation.y += delta * (4.2 - incidentPhase * 1.1);
+      } else {
+        innerDrillGroupRef.current.position.x = 0;
+        innerDrillGroupRef.current.position.z = 0;
+        innerDrillGroupRef.current.rotation.y += delta * 4.2;
+      }
+    }
+
+    // 3. Platform pitch/roll heave during severe weather squalls
+    if (wholeRigGroupRef.current) {
+      if (isSquall) {
+        const heaveAngle = Math.sin(t * 1.5) * (0.015 * incidentPhase);
+        const pitchAngle = Math.cos(t * 1.2) * (0.012 * incidentPhase);
+        wholeRigGroupRef.current.rotation.z = heaveAngle;
+        wholeRigGroupRef.current.rotation.x = pitchAngle;
+        wholeRigGroupRef.current.position.y = Math.sin(t * 2.0) * (0.25 * incidentPhase);
+      } else {
+        wholeRigGroupRef.current.rotation.z = 0;
+        wholeRigGroupRef.current.rotation.x = 0;
+        wholeRigGroupRef.current.position.y = 0;
+      }
     }
   });
 
@@ -61,7 +97,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     loader.load(
       objUrl,
       (loadedObj) => {
-        // Calculate bounding box and center
         const box = new THREE.Box3().setFromObject(loadedObj);
         const center = new THREE.Vector3();
         box.getCenter(center);
@@ -77,25 +112,23 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         loadedObj.rotation.y = -Math.PI / 2;
 
         // Holographic & Standard Component Color Palettes
-        // 1. Holographic Cyber Palettes (High-tech vibrant glowing tones)
-        const hPillars = new THREE.Color('#FF0055');    // Luminous Cyber Crimson (Pillars)
-        const hFootings = new THREE.Color('#FF9100');   // Glowing Amber/Bronze (Footings)
-        const hCranes = new THREE.Color('#FF6D00');     // Laser Orange (Cranes)
-        const hPipes = new THREE.Color('#00E5FF');      // Electric Cyan (Pipes/Manifolds)
-        const hDerrick = new THREE.Color('#00F5D4');    // Quantum Aqua (Derrick)
-        const hHelipadRing = new THREE.Color('#FACC15'); // Radiant Solar Yellow Ring
-        const hHelipadDeck = new THREE.Color('#0F172A'); // Deep Carbon Deck
-        const hDeck = new THREE.Color('#00B4D8');       // Cyber Blueprint Blue (Deck)
+        const hPillars = new THREE.Color('#FF0055');
+        const hFootings = new THREE.Color('#FF9100');
+        const hCranes = new THREE.Color('#FF6D00');
+        const hPipes = new THREE.Color('#00E5FF');
+        const hDerrick = new THREE.Color('#00F5D4');
+        const hHelipadRing = new THREE.Color('#FACC15');
+        const hHelipadDeck = new THREE.Color('#0F172A');
+        const hDeck = new THREE.Color('#00B4D8');
 
-        // 2. Standard Opaque Coated Palettes
-        const cRed = new THREE.Color('#ED1B24');        // 1. Pillars (4 Stability Columns)
-        const cBrown = new THREE.Color('#795548');      // 2. Foundation below pillars & Drill Derrick
-        const cOrange = new THREE.Color('#FF6B00');     // 3. Cranes & Booms
-        const cPipeGrey = new THREE.Color('#94A3B8');   // 4. Pipes, Braces & Jumpers
-        const cHelipadRing = new THREE.Color('#FACC15'); // 5. Helipad Landing Ring
-        const cHelipadDeck = new THREE.Color('#1E293B'); // 6. Helipad Pad Deck
-        const cDeck = new THREE.Color('#334155');       // 7. Main Production Deck
-        const cCasingGrey = new THREE.Color('#78909C');  // Static Outer Casing Cylinder
+        const cRed = new THREE.Color('#ED1B24');
+        const cBrown = new THREE.Color('#795548');
+        const cOrange = new THREE.Color('#FF6B00');
+        const cPipeGrey = new THREE.Color('#94A3B8');
+        const cHelipadRing = new THREE.Color('#FACC15');
+        const cHelipadDeck = new THREE.Color('#1E293B');
+        const cDeck = new THREE.Color('#334155');
+        const cCasingGrey = new THREE.Color('#78909C');
 
         // Initialize reusable Holographic materials
         const holoRigMat = createHolographicMaterial({
@@ -108,7 +141,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         });
         holoRigMatRef.current = holoRigMat;
 
-        // Static Outer Cylinder Casing (Semi-transparent so spinning inner drill is clearly visible)
+        // Static Outer Cylinder Casing
         const holoOuterCasingMat = createHolographicMaterial({
           baseColor: '#003366',
           glowColor: '#00A3FF',
@@ -138,7 +171,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         });
         holoManifoldMatRef.current = holoManifoldMat;
 
-        // Traverse and apply per-mesh specialized styling
         loadedObj.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
@@ -148,10 +180,9 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
             const name = mesh.name || '';
 
             if (name === 'pCube2') {
-              // Hide raw block in favor of our continuous enclosed bedrock terrain
               mesh.visible = false;
             } else if (name === 'model_Mesh') {
-              // STATIC Outer Borehole Casing Cylinder (Kept 100% static and stationary!)
+              // STATIC Outer Borehole Casing Cylinder
               if (scannerMode === 'hologram') {
                 mesh.material = holoOuterCasingMat;
               } else {
@@ -165,7 +196,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
                 });
               }
             } else if (name === 'model1_Mesh') {
-              // Subsea Manifold, Wellhead Jumpers, Valves & Mudmats (Static)
+              // Subsea Manifold, Wellhead Jumpers, Valves & Mudmats
               if (scannerMode === 'hologram') {
                 mesh.material = holoManifoldMat;
               } else {
@@ -197,43 +228,39 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
                 let chosen = isHolo ? hDeck : cDeck;
 
                 if (cy < -0.03) {
-                  // Below deck:
                   if (cy < -0.46) {
-                    // Foundation footings / mudmats below pillars -> Brown / Amber Hologram
                     if (distXZ < 0.08) {
-                      chosen = isHolo ? hPipes : cPipeGrey; // central riser conduit
+                      chosen = isHolo ? hPipes : cPipeGrey;
                     } else {
-                      chosen = isHolo ? hFootings : cBrown; // Foundation below pillars
+                      chosen = isHolo ? hFootings : cBrown;
                     }
                   } else {
-                    // Between -0.46 and -0.03:
                     if (distXZ < 0.06) {
-                      chosen = isHolo ? hPipes : cPipeGrey; // Central vertical riser conduit
+                      chosen = isHolo ? hPipes : cPipeGrey;
                     } else if (cy > -0.35 && cy < -0.15 && (Math.abs(cx) < 0.05 || Math.abs(cz) < 0.05)) {
-                      chosen = isHolo ? hPipes : cPipeGrey; // Horizontal structural pipe cross-braces
+                      chosen = isHolo ? hPipes : cPipeGrey;
                     } else {
-                      chosen = isHolo ? hPillars : cRed; // Red/Crimson buoyant stability columns
+                      chosen = isHolo ? hPillars : cRed;
                     }
                   }
                 } else {
-                  // Above deck (cy >= -0.03):
                   const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
                   if (cy > 0.30 && distHelipad < 0.25) {
                     if (cy > 0.36 && distHelipad < 0.20) {
-                      chosen = isHolo ? hHelipadRing : cHelipadRing; // Helipad Landing Ring
+                      chosen = isHolo ? hHelipadRing : cHelipadRing;
                     } else {
-                      chosen = isHolo ? hHelipadDeck : cHelipadDeck; // Helipad Deck Base
+                      chosen = isHolo ? hHelipadDeck : cHelipadDeck;
                     }
                   } else if (cy > 0.12 && distXZ < 0.14) {
-                    chosen = isHolo ? hDerrick : cBrown; // Rotary drill floor & derrick lattice tower
+                    chosen = isHolo ? hDerrick : cBrown;
                   } else if (cy > 0.45 && distXZ < 0.18) {
-                    chosen = isHolo ? hDerrick : cBrown; // High crown block of derrick
+                    chosen = isHolo ? hDerrick : cBrown;
                   } else if (cy > 0.20 && (Math.abs(cx) > 0.12 || Math.abs(cz) > 0.13)) {
-                    chosen = isHolo ? hCranes : cOrange; // Heavy-lift deck pedestal cranes & booms
+                    chosen = isHolo ? hCranes : cOrange;
                   } else if (Math.abs(cy - 0.08) < 0.04 && distXZ < 0.22) {
-                    chosen = isHolo ? hPipes : cPipeGrey; // Deck pipe manifolds
+                    chosen = isHolo ? hPipes : cPipeGrey;
                   } else {
-                    chosen = isHolo ? hDeck : cDeck; // Main production deck
+                    chosen = isHolo ? hDeck : cDeck;
                   }
                 }
 
@@ -281,11 +308,10 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     innerDrillRodGeo,
   } = useMemo(() => {
     const wallHeight = Math.abs(BEDROCK_BOTTOM_WORLD_Y - SEABED_WORLD_Y); // 84.875m
-    const slotW = 16.0; // Central inspection chamber width
-    const frontWingW = (LAND_WIDTH - slotW) / 2; // 47.0m
-    const halfDepth = LAND_DEPTH / 2; // 55.0m
+    const slotW = 16.0;
+    const frontWingW = (LAND_WIDTH - slotW) / 2;
+    const halfDepth = LAND_DEPTH / 2;
 
-    // 1. Level Sand Seabed Plane with Natural Dunes, Humps and Bumps (110m x 110m)
     const segments = 96;
     const sandGeo = new THREE.PlaneGeometry(LAND_WIDTH, LAND_DEPTH, segments, segments);
     const pos = sandGeo.attributes.position;
@@ -329,13 +355,10 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     sandGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     sandGeo.computeVertexNormals();
 
-    // 2. Fully Covered Solid Bedrock Blocks:
     const backBlock = new THREE.BoxGeometry(LAND_WIDTH, wallHeight, halfDepth);
     const leftFrontBlock = new THREE.BoxGeometry(frontWingW, wallHeight, halfDepth);
     const rightFrontBlock = new THREE.BoxGeometry(frontWingW, wallHeight, halfDepth);
     const bottomBlock = new THREE.BoxGeometry(LAND_WIDTH, 4.0, LAND_DEPTH);
-
-    // 3. Inner Rotating Drill Rod Geometry (fits inside the static outer cylinder)
     const drillRod = new THREE.CylinderGeometry(0.55, 0.55, wallHeight + 4.0, 16);
 
     return {
@@ -350,23 +373,19 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
 
   if (!objGroup) return null;
 
-  // Direct 3D mesh raycast click handler with Jarvis voice feedback
   const handleObjectClick = (e: any) => {
     e.stopPropagation();
-
     const clickedMesh = e.object as THREE.Mesh;
     const meshName = clickedMesh?.name || '';
     const clickPoint = e.point as THREE.Vector3;
 
     if (meshName === 'model1_Mesh') {
-      // Subsea Manifold & Jumpers
       setSelectedAssetId('MANIFOLD-D6-MAIN');
       varunaVoice.speakDiagnostic('MANIFOLD-D6-MAIN');
       return;
     }
 
     if (meshName === 'model_Mesh' || clickedMesh?.userData?.isDrill) {
-      // Subterranean Borehole Drill String
       setSelectedAssetId('DRILL-SYSTEM');
       varunaVoice.speakDiagnostic('DRILL-SYSTEM');
       return;
@@ -407,14 +426,15 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
   const isThermal = scannerMode === 'thermal';
   const isHologram = scannerMode === 'hologram';
 
+  const isDrillIssue = emergencyScenario === 'drill_damage' || emergencyScenario === 'stuck_drill';
+
   const wallHeight = Math.abs(BEDROCK_BOTTOM_WORLD_Y - SEABED_WORLD_Y);
   const wallCenterY = (BEDROCK_BOTTOM_WORLD_Y - SEABED_WORLD_Y) / 2;
   const slotW = 16.0;
-  const frontWingW = (LAND_WIDTH - slotW) / 2; // 47.0m
-  const halfDepth = LAND_DEPTH / 2; // 55.0m
-  const wingCenterX = slotW / 2 + frontWingW / 2; // 31.5m
+  const frontWingW = (LAND_WIDTH - slotW) / 2;
+  const halfDepth = LAND_DEPTH / 2;
+  const wingCenterX = slotW / 2 + frontWingW / 2;
 
-  // Hologram Bedrock material
   const holoBedrockMat = isHologram
     ? new THREE.MeshStandardMaterial({
         color: '#002244',
@@ -431,11 +451,11 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
       });
 
   return (
-    <group>
-      {/* 1. Main 3D Rig (With STATIC Outer Cylinder Casing and Topside Structure) */}
+    <group ref={wholeRigGroupRef}>
+      {/* 1. Main 3D Rig */}
       <primitive object={objGroup} onClick={handleObjectClick} />
 
-      {/* 2. ONLY THE INNER DRILL ROTARY SHAFT & BIT SPINS (Outer Cylinder is STATIC!) */}
+      {/* 2. ONLY THE INNER DRILL ROTARY SHAFT & BIT SPINS */}
       <group
         ref={innerDrillGroupRef}
         position={[0, 0, 0]}
@@ -445,22 +465,22 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           varunaVoice.speakDiagnostic('DRILL-SYSTEM');
         }}
       >
-        {/* Inner Spinning Drill Rod (Spans from Seabed down to -98m) */}
+        {/* Inner Spinning Drill Rod */}
         <mesh
           geometry={innerDrillRodGeo}
           position={[0, SEABED_WORLD_Y + wallCenterY, 0]}
           userData={{ isDrill: true }}
         >
           <meshStandardMaterial
-            color="#E0E6ED"
-            emissive={isHologram ? '#00FFFF' : '#00D4FF'}
-            emissiveIntensity={isHologram ? 1.6 : 0.4}
+            color={isDrillIssue ? '#FF2200' : '#E0E6ED'}
+            emissive={isDrillIssue ? '#FF0000' : isHologram ? '#00FFFF' : '#00D4FF'}
+            emissiveIntensity={isDrillIssue ? 3.5 : isHologram ? 1.6 : 0.4}
             metalness={0.92}
             roughness={0.18}
           />
         </mesh>
 
-        {/* Inner Rotating Spiral Helical Drilling Cutters (Attached to Inner Rod) */}
+        {/* Inner Rotating Spiral Helical Drilling Cutters */}
         {[-25, -45, -65, -85].map((yPos) => (
           <group key={yPos} position={[0, yPos, 0]}>
             {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, idx) => (
@@ -471,9 +491,9 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
               >
                 <boxGeometry args={[0.25, 2.2, 0.25]} />
                 <meshStandardMaterial
-                  color="#00FFFF"
-                  emissive="#0088FF"
-                  emissiveIntensity={1.4}
+                  color={isDrillIssue ? '#FF5500' : '#00FFFF'}
+                  emissive={isDrillIssue ? '#FF2200' : '#0088FF'}
+                  emissiveIntensity={isDrillIssue ? 3.0 : 1.4}
                   metalness={0.85}
                   roughness={0.2}
                 />
@@ -486,20 +506,19 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         <mesh position={[0, -98, 0]} userData={{ isDrill: true }}>
           <coneGeometry args={[1.3, 3.2, 12]} />
           <meshStandardMaterial
-            color="#FFD700"
-            emissive={isHologram ? '#00FFFF' : '#FFAA00'}
-            emissiveIntensity={isHologram ? 1.8 : 0.5}
+            color={isDrillIssue ? '#FF0000' : '#FFD700'}
+            emissive={isDrillIssue ? '#FF3300' : isHologram ? '#00FFFF' : '#FFAA00'}
+            emissiveIntensity={isDrillIssue ? 4.5 : isHologram ? 1.8 : 0.5}
             metalness={0.9}
             roughness={0.2}
           />
         </mesh>
       </group>
 
-      {/* 3. STATIC Outer Casing Guide Rings (Firmly Anchored to Bedrock Wall) */}
+      {/* 3. STATIC Outer Casing Guide Rings */}
       <group position={[0, 0, 0]}>
         {[-20, -40, -60, -80].map((depth) => (
           <group key={`static-ring-${depth}`} position={[0, depth, 0]}>
-            {/* Outer Static Collar Flange */}
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
               <ringGeometry args={[1.5, 2.0, 32]} />
               <meshStandardMaterial
@@ -515,15 +534,15 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         ))}
       </group>
 
-      {/* 4. Subsea Pipeline Network: 9 Pipes & Ground Flowlines with Animated Thick Glowing Dark Blue Arrows */}
+      {/* 4. Subsea Pipeline Network: 9 Pipes & Ground Flowlines */}
       <SubseaPipelineFlowNetwork />
 
-      {/* 5. Animated Upward-Flowing Glowing Dark Blue Oil Arrows in Central Borehole */}
+      {/* 5. Animated Upward-Flowing Oil Arrows in Central Borehole */}
       <OilFlowArrows />
 
-      {/* 5. 100% STATIC Solid Enclosed Bedrock Foundation (Left, Right, Back, Front Wings) */}
+      {/* 6. 100% STATIC Solid Enclosed Bedrock Foundation */}
       <group position={[0, SEABED_WORLD_Y, 0]}>
-        {/* Top Level Sand Seabed Surface with Dunes and Humps */}
+        {/* Top Level Sand Seabed Surface with Dunes */}
         <mesh
           geometry={sandSeabedGeo}
           rotation={[-Math.PI / 2, 0, 0]}
@@ -547,7 +566,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           />
         </mesh>
 
-        {/* STATIC Solid Back Bedrock Half (110m W x 55m D, covers entire rear) */}
+        {/* STATIC Solid Back Bedrock Half */}
         <mesh
           geometry={backBedrockGeo}
           position={[0, wallCenterY, -halfDepth / 2]}
@@ -560,7 +579,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           }}
         />
 
-        {/* STATIC Solid Front-Left Bedrock Wing (47m W x 55m D, covers left side completely!) */}
+        {/* STATIC Solid Front-Left Bedrock Wing */}
         <mesh
           geometry={leftFrontBedrockGeo}
           position={[-wingCenterX, wallCenterY, halfDepth / 2]}
@@ -573,7 +592,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           }}
         />
 
-        {/* STATIC Solid Front-Right Bedrock Wing (47m W x 55m D, covers right side completely!) */}
+        {/* STATIC Solid Front-Right Bedrock Wing */}
         <mesh
           geometry={rightFrontBedrockGeo}
           position={[wingCenterX, wallCenterY, halfDepth / 2]}
@@ -586,7 +605,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           }}
         />
 
-        {/* STATIC Solid Bottom Bedrock Base Slab (110m x 110m x 4m) */}
+        {/* STATIC Solid Bottom Bedrock Base Slab */}
         <mesh
           geometry={bottomSlabGeo}
           position={[0, -wallHeight - 2.0, 0]}
@@ -594,14 +613,13 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           receiveShadow
         />
 
-        {/* STATIC Holographic Wireframe Edges on the Bedrock Sides */}
+        {/* STATIC Holographic Wireframe Edges on Bedrock */}
         {isHologram && (
           <group position={[0, wallCenterY, 0]}>
             <lineSegments>
               <edgesGeometry args={[new THREE.BoxGeometry(LAND_WIDTH, wallHeight, LAND_DEPTH)]} />
               <lineBasicMaterial color="#00FFFF" transparent opacity={0.7} linewidth={2} />
             </lineSegments>
-            {/* Horizontal Geological Strata Scan Rings */}
             {[-15, -35, -55, -75].map((yDepth) => (
               <lineSegments key={yDepth} position={[0, yDepth + wallHeight / 2, 0]}>
                 <edgesGeometry args={[new THREE.BoxGeometry(LAND_WIDTH + 0.2, 0.1, LAND_DEPTH + 0.2)]} />

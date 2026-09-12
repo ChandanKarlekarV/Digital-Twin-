@@ -5,30 +5,34 @@ import { useRigStore } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 /**
- * Animated Upward-Moving Glowing Dark Blue Oil Flow Arrows
+ * Animated Upward-Moving Glowing Oil Flow Arrows
  * Represents pressurized crude oil & gas stream rising from deep reservoir (-96m)
  * to topside production separator (+14m).
+ * Dynamically reacts to Oil Overload (surging speed/amber glow) and Blockages.
  */
 export const OilFlowArrows: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
   const setSelectedAssetId = useRigStore((s) => s.setSelectedAssetId);
+  const emergencyScenario = useRigStore((s) => s.emergencyScenario);
+  const incidentPhase = useRigStore((s) => s.incidentPhase);
 
   const ARROW_COUNT = 22;
   const BOTTOM_Y = -96.0;
   const TOP_Y = 14.0;
   const TOTAL_HEIGHT = TOP_Y - BOTTOM_Y; // 110m
-  const SPEED = 16.0; // m/s upward fluid velocity
 
-  // Create high-precision 3D Arrow Geometry (Cone head pointing UP + Cylinder stem)
+  // Base speed
+  const BASE_SPEED = 16.0;
+
+  // Create high-precision 3D Arrow Geometry
   const arrowGeo = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     const coneGeo = new THREE.ConeGeometry(0.85, 2.2, 16);
-    coneGeo.translate(0, 1.1, 0); // Cone sits on top
+    coneGeo.translate(0, 1.1, 0);
 
     const stemGeo = new THREE.CylinderGeometry(0.35, 0.35, 2.0, 16);
-    stemGeo.translate(0, -1.0, 0); // Cylinder below cone
+    stemGeo.translate(0, -1.0, 0);
 
-    // Merge geometries
     const conePositions = coneGeo.attributes.position.array;
     const stemPositions = stemGeo.attributes.position.array;
     const coneNormals = coneGeo.attributes.normal.array;
@@ -48,29 +52,47 @@ export const OilFlowArrows: React.FC = () => {
     return geo;
   }, []);
 
-  // Glowing Dark Blue Oil Flow Material
+  // Glowing Dynamic Oil Flow Material
   const arrowMaterial = useMemo(() => {
+    const isOverload = emergencyScenario === 'oil_overload';
+    const isBlockage = emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug';
+
+    let color = '#001F66';
+    let emissive = '#0038FF';
+    let intensity = 3.2;
+
+    if (isOverload) {
+      color = '#FF5500';
+      emissive = '#FFCC00'; // Intense Gold/Fire Glow
+      intensity = 5.5;
+    } else if (isBlockage) {
+      color = '#450A0A';
+      emissive = '#EF4444';
+      intensity = 2.0;
+    }
+
     return new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#001F66'), // Deep rich dark blue
-      emissive: new THREE.Color('#0038FF'), // Radiant glowing dark/royal blue
-      emissiveIntensity: 3.2,
+      color: new THREE.Color(color),
+      emissive: new THREE.Color(emissive),
+      emissiveIntensity: intensity,
       roughness: 0.15,
       metalness: 0.85,
       transparent: true,
       opacity: 0.95,
       side: THREE.DoubleSide,
     });
-  }, []);
+  }, [emergencyScenario, incidentPhase]);
 
   // Energy Rings Material for upward acoustic flow pulse
   const ringMaterial = useMemo(() => {
+    const isOverload = emergencyScenario === 'oil_overload';
     return new THREE.MeshBasicMaterial({
-      color: new THREE.Color('#002B99'),
+      color: isOverload ? new THREE.Color('#FFAA00') : new THREE.Color('#002B99'),
       transparent: true,
-      opacity: 0.65,
+      opacity: isOverload ? 0.85 : 0.65,
       side: THREE.DoubleSide,
     });
-  }, []);
+  }, [emergencyScenario]);
 
   // References to each individual arrow mesh
   const arrowRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -78,10 +100,20 @@ export const OilFlowArrows: React.FC = () => {
   useFrame(({ clock }) => {
     const time = clock.getElapsedTime();
 
+    const isOverload = emergencyScenario === 'oil_overload';
+    const isBlockage = emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug';
+
+    let effectiveSpeed = BASE_SPEED;
+    if (isOverload) {
+      effectiveSpeed = BASE_SPEED * (1.0 + incidentPhase * 0.5); // Up to 48 m/s
+    } else if (isBlockage) {
+      effectiveSpeed = incidentPhase >= 3 ? 1.5 : BASE_SPEED * 0.4;
+    }
+
     arrowRefs.current.forEach((mesh, i) => {
       if (mesh) {
         const baseOffset = (i / ARROW_COUNT) * TOTAL_HEIGHT;
-        const currentY = ((baseOffset + time * SPEED) % TOTAL_HEIGHT) + BOTTOM_Y;
+        const currentY = ((baseOffset + time * effectiveSpeed) % TOTAL_HEIGHT) + BOTTOM_Y;
         mesh.position.y = currentY;
 
         // Slight rotation for spiral drill-follow vortex effect
@@ -104,7 +136,7 @@ export const OilFlowArrows: React.FC = () => {
         varunaVoice.speakDiagnostic('RISER-ALPHA');
       }}
     >
-      {/* 22 Animated Glowing Dark Blue 3D Arrows moving UP */}
+      {/* 22 Animated Glowing 3D Arrows moving UP */}
       {Array.from({ length: ARROW_COUNT }).map((_, i) => (
         <mesh
           key={i}

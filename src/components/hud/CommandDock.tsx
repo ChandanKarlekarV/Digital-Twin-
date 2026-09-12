@@ -56,6 +56,10 @@ export const CommandDock: React.FC = () => {
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
 
+  const currentFlowPower = useRigStore((s) => s.currentFlowPower);
+  const setCurrentFlowPower = useRigStore((s) => s.setCurrentFlowPower);
+  const currentDirectionLabel = useRigStore((s) => s.currentDirectionLabel);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -201,7 +205,7 @@ export const CommandDock: React.FC = () => {
               <span>Water Flow Power & Tides</span>
             </span>
             <span className="text-reliance-cyan font-bold">
-              {useRigStore.getState().currentDirectionLabel}
+              {currentDirectionLabel}
             </span>
           </div>
 
@@ -212,8 +216,7 @@ export const CommandDock: React.FC = () => {
               { id: 'fast', label: 'FAST', sub: '4.6 kt' },
               { id: 'extreme', label: 'EXTREME', sub: '8.2 kt' },
             ].map((p) => {
-              const isActive = useRigStore((s) => s.currentFlowPower) === p.id;
-              const setCurrentFlowPower = useRigStore((s) => s.setCurrentFlowPower);
+              const isActive = currentFlowPower === p.id;
               return (
                 <button
                   key={p.id}

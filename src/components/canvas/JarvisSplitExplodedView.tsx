@@ -176,11 +176,13 @@ const SPLIT_MODULES: SplitModuleDef[] = [
 
 export const JarvisSplitExplodedView: React.FC = () => {
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
-  const isPipeSliced = useRigStore((s) => s.isPipeSliced);
-  const setPipeSliceModalOpen = useRigStore((s) => s.setPipeSliceModalOpen);
   const selectedSplitPartId = useRigStore((s) => s.selectedSplitPartId);
+  const isPipeSliced = useRigStore((s) => s.isPipeSliced);
+  const isPipeSliceModalOpen = useRigStore((s) => s.isPipeSliceModalOpen);
+  const activeHoloModal = useRigStore((s) => s.activeHoloModal);
   const zoomToSplitPart = useRigStore((s) => s.zoomToSplitPart);
   const openHoloModal = useRigStore((s) => s.openHoloModal);
+  const setPipeSliceModalOpen = useRigStore((s) => s.setPipeSliceModalOpen);
 
   const groupRefs = useRef<{ [key: string]: THREE.Group | null }>({});
   const sliceGroupRef = useRef<THREE.Group>(null);
@@ -265,42 +267,44 @@ export const JarvisSplitExplodedView: React.FC = () => {
                 </mesh>
 
                 {/* Floating Cyberpunk HTML Badge */}
-                <Html
-                  position={[0, 3.2, 0]}
-                  center
-                  distanceFactor={45}
-                  zIndexRange={[100, 0]}
-                >
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      zoomToSplitPart(mod.id);
-                      openHoloModal(mod.id as HolographicComponentType);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl border backdrop-blur-md cursor-pointer select-none transition-all duration-200 font-mono shadow-dock ${
-                      isSelected
-                        ? 'bg-reliance-cyan/90 text-reliance-deepnavy border-white shadow-cyan-glow scale-110 font-bold'
-                        : 'bg-reliance-deepnavy/90 text-white border-reliance-cyan/40 hover:border-reliance-cyan hover:scale-105'
-                    }`}
+                {!activeHoloModal && !isPipeSliceModalOpen && (
+                  <Html
+                    position={[0, 3.2, 0]}
+                    center
+                    distanceFactor={45}
+                    zIndexRange={[100, 0]}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="w-2 h-2 rounded-full animate-ping"
-                        style={{ backgroundColor: mod.color }}
-                      />
-                      <span className="text-[10px] tracking-wider uppercase font-extrabold">
-                        {mod.name}
-                      </span>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        zoomToSplitPart(mod.id);
+                        openHoloModal(mod.id as HolographicComponentType);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl border backdrop-blur-md cursor-pointer select-none transition-all duration-200 font-mono shadow-dock ${
+                        isSelected
+                          ? 'bg-reliance-cyan/90 text-reliance-deepnavy border-white shadow-cyan-glow scale-110 font-bold'
+                          : 'bg-reliance-deepnavy/90 text-white border-reliance-cyan/40 hover:border-reliance-cyan hover:scale-105'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2 h-2 rounded-full animate-ping"
+                          style={{ backgroundColor: mod.color }}
+                        />
+                        <span className="text-[10px] tracking-wider uppercase font-extrabold">
+                          {mod.name}
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-reliance-textMuted mt-0.5">
+                        {mod.metrics}
+                      </div>
+                      <div className="mt-1.5 pt-1 border-t border-white/15 flex justify-between items-center text-[8px] text-reliance-cyan">
+                        <span>TOUCH TO ZOOM</span>
+                        <span>[INSPECT]</span>
+                      </div>
                     </div>
-                    <div className="text-[9px] text-reliance-textMuted mt-0.5">
-                      {mod.metrics}
-                    </div>
-                    <div className="mt-1.5 pt-1 border-t border-white/15 flex justify-between items-center text-[8px] text-reliance-cyan">
-                      <span>TOUCH TO ZOOM</span>
-                      <span>[INSPECT]</span>
-                    </div>
-                  </div>
-                </Html>
+                  </Html>
+                )}
               </group>
             )}
           </group>

@@ -361,26 +361,6 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
               onPointerOut={() => (document.body.style.cursor = 'default')}
             />
 
-            {/* 3D Floating Cyberpunk Pipe Label Badge */}
-            <Html
-              position={[midPoint.x, midPoint.y + 2.0, midPoint.z]}
-              center
-              distanceFactor={38}
-              zIndexRange={[80, 0]}
-            >
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  useRigStore.getState().openHoloModal(pipeKey);
-                  useRigStore.getState().setCameraViewMode(pipeKey);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-reliance-deepnavy/90 border border-reliance-cyan/60 hover:border-white text-white text-[9px] font-mono font-extrabold tracking-wider cursor-pointer select-none transition-all shadow-dock hover:scale-110 flex items-center gap-1.5 backdrop-blur-md"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-reliance-cyan animate-pulse" />
-                <span>PIPE {pipeIdx + 1}</span>
-              </div>
-            </Html>
-
             {/* Wellhead / Pipeline Ground Connection Flanges */}
             <mesh position={pipe.points[0]}>
               <cylinderGeometry args={[pipe.radius * 1.6, pipe.radius * 1.6, 0.8, 16]} />

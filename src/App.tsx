@@ -15,6 +15,7 @@ import { ComplianceReportModal } from './components/hud/ComplianceReportModal';
 import { KgD6WeatherSidePanel } from './components/hud/KgD6WeatherSidePanel';
 import { JarvisGestureVoiceHUD } from './components/hud/JarvisGestureVoiceHUD';
 import { JarvisPipeSliceModal } from './components/hud/JarvisPipeSliceModal';
+import { HolographicPartInspectionModal } from './components/hud/HolographicPartInspectionModal';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
 import {
   Compass,
@@ -295,6 +296,9 @@ export default function App() {
 
       {/* ================= JARVIS FULL-SCREEN PIPE 1 SLICE INSPECTION MODAL ================= */}
       <JarvisPipeSliceModal />
+
+      {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
+      <HolographicPartInspectionModal />
 
       {/* ================= CLICK-TO-SLIDE TELEMETRY DRAWER ================= */}
       <TelemetryDrawer />

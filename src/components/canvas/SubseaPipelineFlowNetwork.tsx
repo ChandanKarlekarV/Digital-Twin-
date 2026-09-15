@@ -1,7 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useRigStore } from '../../store/useRigStore';
+import { Html } from '@react-three/drei';
+import { useRigStore, HolographicComponentType } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 interface FlowPipeDefinition {
@@ -338,40 +339,77 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
         varunaVoice.speakDiagnostic('MANIFOLD-D6-MAIN');
       }}
     >
-      {/* 9 Subsea Pipe Tubes + Animated Thick Glowing Arrows */}
-      {pipeData.map((pipe, pipeIdx) => (
-        <group key={pipe.id}>
-          {/* Static Subsea Pipe Tube */}
-          <mesh geometry={pipe.tubeGeo} material={pipeMaterial} receiveShadow castShadow />
+      {/* 9 Subsea Pipe Tubes + Animated Thick Glowing Arrows + 3D Holographic Labels */}
+      {pipeData.map((pipe, pipeIdx) => {
+        const pipeKey = `pipe${pipeIdx + 1}` as HolographicComponentType;
+        const midPoint = pipe.points[Math.floor(pipe.points.length / 2)] || pipe.points[0];
 
-          {/* Wellhead / Pipeline Ground Connection Flanges */}
-          <mesh position={pipe.points[0]}>
-            <cylinderGeometry args={[pipe.radius * 1.6, pipe.radius * 1.6, 0.8, 16]} />
-            <meshStandardMaterial
-              color={isBlockage ? '#EF4444' : '#F59E0B'}
-              metalness={0.8}
-              roughness={0.2}
-              emissive={isBlockage ? '#DC2626' : '#FF8800'}
-              emissiveIntensity={isBlockage ? 1.5 : 0.3}
-            />
-          </mesh>
-
-          {/* Animated Thick Glowing Dark Blue / Alert Arrows moving along the pipe */}
-          {Array.from({ length: pipe.arrowCount }).map((_, arrowIdx) => (
+        return (
+          <group key={pipe.id}>
+            {/* Static Subsea Pipe Tube */}
             <mesh
-              key={`arrow-${pipe.id}-${arrowIdx}`}
-              ref={(el) => {
-                if (!arrowMeshRefs.current[pipeIdx]) {
-                  arrowMeshRefs.current[pipeIdx] = [];
-                }
-                arrowMeshRefs.current[pipeIdx][arrowIdx] = el;
+              geometry={pipe.tubeGeo}
+              material={pipeMaterial}
+              receiveShadow
+              castShadow
+              onClick={(e) => {
+                e.stopPropagation();
+                useRigStore.getState().openHoloModal(pipeKey);
+                useRigStore.getState().setCameraViewMode(pipeKey);
               }}
-              geometry={thickArrowGeo}
-              material={dynamicArrowMat}
+              onPointerOver={() => (document.body.style.cursor = 'pointer')}
+              onPointerOut={() => (document.body.style.cursor = 'default')}
             />
-          ))}
-        </group>
-      ))}
+
+            {/* 3D Floating Cyberpunk Pipe Label Badge */}
+            <Html
+              position={[midPoint.x, midPoint.y + 2.0, midPoint.z]}
+              center
+              distanceFactor={38}
+              zIndexRange={[80, 0]}
+            >
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useRigStore.getState().openHoloModal(pipeKey);
+                  useRigStore.getState().setCameraViewMode(pipeKey);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-reliance-deepnavy/90 border border-reliance-cyan/60 hover:border-white text-white text-[9px] font-mono font-extrabold tracking-wider cursor-pointer select-none transition-all shadow-dock hover:scale-110 flex items-center gap-1.5 backdrop-blur-md"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-reliance-cyan animate-pulse" />
+                <span>PIPE {pipeIdx + 1}</span>
+              </div>
+            </Html>
+
+            {/* Wellhead / Pipeline Ground Connection Flanges */}
+            <mesh position={pipe.points[0]}>
+              <cylinderGeometry args={[pipe.radius * 1.6, pipe.radius * 1.6, 0.8, 16]} />
+              <meshStandardMaterial
+                color={isBlockage ? '#EF4444' : '#F59E0B'}
+                metalness={0.8}
+                roughness={0.2}
+                emissive={isBlockage ? '#DC2626' : '#FF8800'}
+                emissiveIntensity={isBlockage ? 1.5 : 0.3}
+              />
+            </mesh>
+
+            {/* Animated Thick Glowing Dark Blue / Alert Arrows moving along the pipe */}
+            {Array.from({ length: pipe.arrowCount }).map((_, arrowIdx) => (
+              <mesh
+                key={`arrow-${pipe.id}-${arrowIdx}`}
+                ref={(el) => {
+                  if (!arrowMeshRefs.current[pipeIdx]) {
+                    arrowMeshRefs.current[pipeIdx] = [];
+                  }
+                  arrowMeshRefs.current[pipeIdx][arrowIdx] = el;
+                }}
+                geometry={thickArrowGeo}
+                material={dynamicArrowMat}
+              />
+            ))}
+          </group>
+        );
+      })}
 
       {/* 3D Pulsing Obstruction Beacon at the Manifold Blockage Junction */}
       {isBlockage && (

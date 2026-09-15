@@ -88,10 +88,98 @@ export const CameraRig: React.FC = () => {
       targetCamPos.current.set(-16, -12, 22);
       targetLookAt.current.set(-12, -22, -2);
       transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe2') {
+      targetCamPos.current.set(16, -12, 22);
+      targetLookAt.current.set(12, -22, -2);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe3') {
+      targetCamPos.current.set(-16, -12, -22);
+      targetLookAt.current.set(-12, -22, 2);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe4') {
+      targetCamPos.current.set(16, -12, -22);
+      targetLookAt.current.set(12, -22, 2);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe5') {
+      targetCamPos.current.set(-35, -10, 10);
+      targetLookAt.current.set(-24, -16, 0);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe6') {
+      targetCamPos.current.set(35, -10, 10);
+      targetLookAt.current.set(24, -16, 0);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe7') {
+      targetCamPos.current.set(10, -10, -35);
+      targetLookAt.current.set(0, -16, -24);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe8') {
+      targetCamPos.current.set(10, -10, 35);
+      targetLookAt.current.set(0, -16, 24);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe9') {
+      targetCamPos.current.set(12, -10, 18);
+      targetLookAt.current.set(0, -15.5, 0);
+      transitionSpeed.current = 3.5;
     } else if (cameraViewMode === 'pipe1_slice') {
       targetCamPos.current.set(-8, -6, 18);
       targetLookAt.current.set(-14, -8, 12);
       transitionSpeed.current = 4.0;
+    } else if (cameraViewMode === 'drill') {
+      targetCamPos.current.set(0, 12, 22);
+      targetLookAt.current.set(0, 8, 0);
+      transitionSpeed.current = 3.8;
+    } else if (cameraViewMode === 'motor') {
+      targetCamPos.current.set(0, 24, 18);
+      targetLookAt.current.set(0, 20, 0);
+      transitionSpeed.current = 3.8;
+    } else if (cameraViewMode === 'helipad') {
+      targetCamPos.current.set(24, 28, 24);
+      targetLookAt.current.set(12, 20, 12);
+      transitionSpeed.current = 3.8;
+    } else if (cameraViewMode === 'crane1') {
+      targetCamPos.current.set(-24, 26, 16);
+      targetLookAt.current.set(-12, 18, 0);
+      transitionSpeed.current = 3.8;
+    } else if (cameraViewMode === 'crane2') {
+      targetCamPos.current.set(24, 26, -16);
+      targetLookAt.current.set(12, 18, 0);
+      transitionSpeed.current = 3.8;
+    } else if (cameraViewMode === 'upper_rig') {
+      targetCamPos.current.set(38, 36, 42);
+      targetLookAt.current.set(0, 22, 0);
+      transitionSpeed.current = 3.2;
+    } else if (cameraViewMode === 'well1') {
+      targetCamPos.current.set(-32, -12, -32);
+      targetLookAt.current.set(-26, -16.2, -26);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well2') {
+      targetCamPos.current.set(32, -12, -32);
+      targetLookAt.current.set(26, -16.2, -26);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well3') {
+      targetCamPos.current.set(-32, -12, 32);
+      targetLookAt.current.set(-26, -16.2, 26);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well4') {
+      targetCamPos.current.set(32, -12, 32);
+      targetLookAt.current.set(26, -16.2, 26);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well5') {
+      targetCamPos.current.set(-48, -12, 8);
+      targetLookAt.current.set(-42, -16.2, 0);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well6') {
+      targetCamPos.current.set(48, -12, 8);
+      targetLookAt.current.set(42, -16.2, 0);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'well7') {
+      targetCamPos.current.set(8, -12, -48);
+      targetLookAt.current.set(0, -16.2, -42);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'wells1_7') {
+      targetCamPos.current.set(45, -5, 45);
+      targetLookAt.current.set(0, -16, 0);
+      transitionSpeed.current = 3.0;
     } else if (cameraViewMode === 'split') {
       targetCamPos.current.set(58, 35, 68);
       targetLookAt.current.set(0, 0, 0);

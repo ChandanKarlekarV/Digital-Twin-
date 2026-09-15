@@ -168,9 +168,81 @@ async function runEndToEndVerification() {
   // Voice command: "pipe 1"
   useRigStore.getState().executeVoiceCommand('pipe 1');
   assert(
-    useRigStore.getState().cameraViewMode === 'pipe1' && useRigStore.getState().selectedAssetId === 'RISER-ALPHA',
-    'Jarvis Voice: "Pipe 1" Camera Lock & Asset Focus',
-    'Camera locked to Pipe 1 and selected RISER-ALPHA'
+    useRigStore.getState().cameraViewMode === 'pipe1' && useRigStore.getState().activeHoloModal === 'pipe1',
+    'Jarvis Voice: "Pipe 1" Camera Lock & Hologram Modal',
+    'Camera locked to Pipe 1 and opened holographic inspection box'
+  );
+
+  // Voice command: "pipe 5"
+  useRigStore.getState().executeVoiceCommand('pipe 5');
+  assert(
+    useRigStore.getState().cameraViewMode === 'pipe5' && useRigStore.getState().activeHoloModal === 'pipe5',
+    'Jarvis Voice: "Pipe 5" Infield Gathering Line Hologram',
+    'Targeted Pipe 5 and opened gathering line inspection box'
+  );
+
+  // Voice command: "drill"
+  useRigStore.getState().executeVoiceCommand('drill');
+  assert(
+    useRigStore.getState().cameraViewMode === 'drill' && useRigStore.getState().activeHoloModal === 'drill',
+    'Jarvis Voice: "Drill" PDC Bit & Rotary Hologram',
+    'Camera locked to Drill string and opened drill inspection deck'
+  );
+
+  // Voice command: "motor"
+  useRigStore.getState().executeVoiceCommand('motor');
+  assert(
+    useRigStore.getState().cameraViewMode === 'motor' && useRigStore.getState().activeHoloModal === 'motor',
+    'Jarvis Voice: "Motor" 1,200 HP Top Drive & VFD',
+    'Opened 1,200 HP top drive induction motor diagnostics box'
+  );
+
+  // Voice command: "helipad"
+  useRigStore.getState().executeVoiceCommand('helipad');
+  assert(
+    useRigStore.getState().cameraViewMode === 'helipad' && useRigStore.getState().activeHoloModal === 'helipad',
+    'Jarvis Voice: "Helipad" CAP 437 Aviation Deck',
+    'Opened CAP 437 offshore helideck telemetry box'
+  );
+
+  // Voice command: "crane 1"
+  useRigStore.getState().executeVoiceCommand('crane 1');
+  assert(
+    useRigStore.getState().cameraViewMode === 'crane1' && useRigStore.getState().activeHoloModal === 'crane1',
+    'Jarvis Voice: "Crane 1" Heavy-Lift Port Crane',
+    'Opened 65 MT heavy-lift pedestal crane 1 telemetry box'
+  );
+
+  // Voice command: "crane 2"
+  useRigStore.getState().executeVoiceCommand('crane 2');
+  assert(
+    useRigStore.getState().cameraViewMode === 'crane2' && useRigStore.getState().activeHoloModal === 'crane2',
+    'Jarvis Voice: "Crane 2" Auxiliary Starboard Crane',
+    'Opened 30 MT auxiliary deck crane 2 telemetry box'
+  );
+
+  // Voice command: "upper rig"
+  useRigStore.getState().executeVoiceCommand('upper rig');
+  assert(
+    useRigStore.getState().cameraViewMode === 'upper_rig' && useRigStore.getState().activeHoloModal === 'upper_rig',
+    'Jarvis Voice: "Upper Rig" Derrick Mast & Topside Deck',
+    'Opened topside structure and process separation deck'
+  );
+
+  // Voice command: "well 3"
+  useRigStore.getState().executeVoiceCommand('well 3');
+  assert(
+    useRigStore.getState().cameraViewMode === 'well3' && useRigStore.getState().activeHoloModal === 'well3',
+    'Jarvis Voice: "Well 3" Subsea Christmas Tree (D6-R1)',
+    'Targeted deepwater well 3 and opened Christmas Tree wellhead box'
+  );
+
+  // Voice command: "wells 1-7"
+  useRigStore.getState().executeVoiceCommand('the wells');
+  assert(
+    useRigStore.getState().cameraViewMode === 'wells1_7' && useRigStore.getState().activeHoloModal === 'wells1_7',
+    'Jarvis Voice: "The Wells" 7-Wellhead Subsea Cluster',
+    'Opened 7-well subsea field diagnostics deck'
   );
 
   // Voice command: "slice it"
@@ -185,16 +257,8 @@ async function runEndToEndVerification() {
   useRigStore.getState().executeVoiceCommand('split');
   assert(
     useRigStore.getState().isSplitViewActive === true && useRigStore.getState().cameraViewMode === 'split',
-    'Jarvis Voice: "Split" 3D Exploded Subsea Assembly',
-    'Subsea digital twin exploded into 6 decoupled floating parts'
-  );
-
-  // Select decoupled part: "drill"
-  useRigStore.getState().zoomToSplitPart('part-drill');
-  assert(
-    useRigStore.getState().selectedSplitPartId === 'part-drill' && useRigStore.getState().cameraViewMode === 'part_detail',
-    'Touch-To-Zoom Decoupled Split Part Focus',
-    'Focused and zoomed into decoupled Drill String assembly'
+    'Jarvis Voice: "Split" Iron Man 12-Module Exploded Assembly',
+    'Subsea digital twin exploded into 12 decoupled floating modules'
   );
 
   // Voice command: "assemble"
@@ -211,4 +275,5 @@ async function runEndToEndVerification() {
 }
 
 runEndToEndVerification().catch(console.error);
+
 

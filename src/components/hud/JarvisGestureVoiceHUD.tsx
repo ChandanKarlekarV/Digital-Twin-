@@ -99,35 +99,67 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       ctx.lineTo(w - 8, h - 20);
       ctx.stroke();
 
-      // Draw tracking reticle & hand landmarks
+      // Draw tracking reticle & hand skeleton landmarks
       if (result.gesture) {
         const hx = result.handX * w;
         const hy = result.handY * h;
 
+        // Draw connecting skeleton bones
+        if (result.landmarks.length >= 5) {
+          const palmPt = result.landmarks.find((l) => l.type === 'palm') || result.landmarks[0];
+          const wristPt = result.landmarks.find((l) => l.type === 'wrist') || result.landmarks[4];
+
+          ctx.strokeStyle = 'rgba(0, 255, 136, 0.65)';
+          ctx.lineWidth = 1.5;
+
+          // Wrist to palm
+          if (wristPt && palmPt) {
+            ctx.beginPath();
+            ctx.moveTo(wristPt.x * w, wristPt.y * h);
+            ctx.lineTo(palmPt.x * w, palmPt.y * h);
+            ctx.stroke();
+          }
+
+          // Palm to fingers
+          result.landmarks.forEach((pt) => {
+            if (pt.type !== 'palm' && pt.type !== 'wrist') {
+              ctx.beginPath();
+              ctx.moveTo(palmPt.x * w, palmPt.y * h);
+              ctx.lineTo(pt.x * w, pt.y * h);
+              ctx.stroke();
+            }
+          });
+        }
+
         // Glowing center reticle
         ctx.beginPath();
-        ctx.arc(hx, hy, 12, 0, Math.PI * 2);
+        ctx.arc(hx, hy, 14, 0, Math.PI * 2);
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.25)';
         ctx.fill();
 
         // Crosshairs
         ctx.beginPath();
-        ctx.moveTo(hx - 18, hy);
-        ctx.lineTo(hx + 18, hy);
-        ctx.moveTo(hx, hy - 18);
-        ctx.lineTo(hx, hy + 18);
+        ctx.moveTo(hx - 20, hy);
+        ctx.lineTo(hx + 20, hy);
+        ctx.moveTo(hx, hy - 20);
+        ctx.lineTo(hx, hy + 20);
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Draw finger landmarks
+        // Draw finger landmark nodes
         result.landmarks.forEach((p) => {
           ctx.beginPath();
-          ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+          ctx.arc(p.x * w, p.y * h, 3.5, 0, Math.PI * 2);
           ctx.fillStyle = '#00ff88';
           ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.stroke();
         });
       }
     });
@@ -153,6 +185,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       varunaVoice.speakCustom('Jarvis voice listener online.');
     }
   };
+
+  const cameraPermissionState = useRigStore((s) => s.cameraPermissionState);
+  const openHoloModal = useRigStore((s) => s.openHoloModal);
 
   return (
     <div className="absolute top-16 right-4 sm:right-6 z-40 w-72 sm:w-80 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 rounded-2xl shadow-dock backdrop-blur-2xl text-white font-sans transition-all animate-in fade-in duration-200">

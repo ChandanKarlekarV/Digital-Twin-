@@ -239,16 +239,29 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-reliance-navy/50 border border-white/10 text-center font-mono space-y-1.5">
+            <div className="p-3 rounded-xl bg-reliance-navy/50 border border-white/10 text-center font-mono space-y-2">
               <div className="text-[10px] text-reliance-textMuted">
-                Camera gesture control is currently off
+                {cameraPermissionState === 'requesting'
+                  ? 'Requesting webcam access...'
+                  : cameraPermissionState === 'denied'
+                  ? '⚠️ Camera access blocked in browser. Click the lock/tune icon in address bar to Allow.'
+                  : cameraPermissionState === 'error'
+                  ? '⚠️ Unable to access camera device. Verify no other app is using it.'
+                  : 'Webcam gesture tracking ready'}
               </div>
               <button
                 onClick={handleToggleCamera}
-                className="w-full py-1.5 px-3 rounded-lg bg-reliance-blue/60 hover:bg-reliance-blue border border-reliance-cyan/40 text-[11px] font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2 shadow-cyan-glow"
+                disabled={cameraPermissionState === 'requesting'}
+                className="w-full py-1.5 px-3 rounded-lg bg-reliance-blue/70 hover:bg-reliance-blue border border-reliance-cyan/50 text-[11px] font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-2 shadow-cyan-glow disabled:opacity-50"
               >
                 <Video className="w-3.5 h-3.5 text-reliance-cyan" />
-                <span>TURN ON GESTURE CAMERA</span>
+                <span>
+                  {cameraPermissionState === 'requesting'
+                    ? 'CONNECTING CAMERA...'
+                    : cameraPermissionState === 'denied'
+                    ? 'RETRY CAMERA ACCESS'
+                    : 'TURN ON GESTURE CAMERA'}
+                </span>
               </button>
             </div>
           )}

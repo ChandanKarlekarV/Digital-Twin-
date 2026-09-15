@@ -7,6 +7,7 @@ import { OceanSurface } from './OceanSurface';
 import { InteractiveHighlightRings } from './InteractiveHighlightRings';
 import { GammaCrossSection } from './Scanners/GammaCrossSection';
 import { OceanCurrentVisualizer } from './OceanCurrentVisualizer';
+import { JarvisSplitExplodedView } from './JarvisSplitExplodedView';
 import { useRigStore } from '../../store/useRigStore';
 
 /**
@@ -92,6 +93,7 @@ export const Scene: React.FC = () => {
         <OceanCurrentVisualizer />
         <InteractiveHighlightRings />
         <GammaCrossSection />
+        <JarvisSplitExplodedView />
       </Suspense>
     </Canvas>
   );

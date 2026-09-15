@@ -13,6 +13,8 @@ import { ElevenLabsConfigModal } from './components/hud/ElevenLabsConfigModal';
 import { HardwareLinkModal } from './components/hud/HardwareLinkModal';
 import { ComplianceReportModal } from './components/hud/ComplianceReportModal';
 import { KgD6WeatherSidePanel } from './components/hud/KgD6WeatherSidePanel';
+import { JarvisGestureVoiceHUD } from './components/hud/JarvisGestureVoiceHUD';
+import { JarvisPipeSliceModal } from './components/hud/JarvisPipeSliceModal';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
 import {
   Compass,
@@ -25,6 +27,9 @@ import {
   Cpu,
   FileCheck,
   Wind,
+  Layers,
+  Scissors,
+  Video,
 } from 'lucide-react';
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
 
@@ -40,6 +45,12 @@ export default function App() {
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
+
+  const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
+  const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
+  const isPipeSliced = useRigStore((s) => s.isPipeSliced);
+  const setPipeSliced = useRigStore((s) => s.setPipeSliced);
+  const isGestureCameraActive = useRigStore((s) => s.isGestureCameraActive);
 
   const customObjFileName = useRigStore((s) => s.customObjFileName);
   const setCustomObjUrl = useRigStore((s) => s.setCustomObjUrl);
@@ -137,6 +148,34 @@ export default function App() {
             <span className="hidden sm:inline">WEATHER</span>
           </button>
 
+          {/* Quick Jarvis Split / Explode View Button */}
+          <button
+            onClick={() => setSplitViewActive(!isSplitViewActive)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border text-[11px] font-mono transition-all cursor-pointer ${
+              isSplitViewActive
+                ? 'bg-amber-500/30 border-amber-400 text-amber-200 shadow-amber-glow font-bold'
+                : 'border-amber-400/40 text-amber-300 hover:bg-amber-500/20'
+            }`}
+            title="Toggle Jarvis Holographic Exploded Split View"
+          >
+            <Layers className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden lg:inline">{isSplitViewActive ? 'ASSEMBLE' : 'JARVIS SPLIT'}</span>
+          </button>
+
+          {/* Quick Pipe 1 Slice Button */}
+          <button
+            onClick={() => setPipeSliced(!isPipeSliced)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border text-[11px] font-mono transition-all cursor-pointer ${
+              isPipeSliced
+                ? 'bg-reliance-cyan/30 border-reliance-cyan text-white shadow-cyan-glow font-bold'
+                : 'border-reliance-cyan/40 text-reliance-cyan hover:bg-reliance-blue/30'
+            }`}
+            title="Toggle Pipe 1 Axial Cross-Section Slice"
+          >
+            <Scissors className="w-3.5 h-3.5 text-reliance-cyan" />
+            <span className="hidden lg:inline">{isPipeSliced ? 'CLOSE SLICE' : 'SLICE PIPE 1'}</span>
+          </button>
+
           {/* Quick ElevenLabs Voice Button */}
           <button
             onClick={() => setVoiceModalOpen(true)}
@@ -160,7 +199,7 @@ export default function App() {
           {/* Quick Compliance Report Button */}
           <button
             onClick={() => setReportModalOpen(true)}
-            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-white/20 text-[11px] font-mono text-white hover:bg-white/10 transition-all cursor-pointer"
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-white/20 text-[11px] font-mono text-white hover:bg-white/10 transition-all cursor-pointer"
             title="Export Official PDF/CSV Compliance Audit Report"
           >
             <FileCheck className="w-3.5 h-3.5 text-reliance-cyan" />
@@ -250,6 +289,12 @@ export default function App() {
 
       {/* ================= KG-D6 LIVE WEATHER & MARINE FORECAST SIDE PANEL ================= */}
       <KgD6WeatherSidePanel />
+
+      {/* ================= JARVIS FLOATING GESTURE CAMERA & VOICE HUD ================= */}
+      <JarvisGestureVoiceHUD />
+
+      {/* ================= JARVIS FULL-SCREEN PIPE 1 SLICE INSPECTION MODAL ================= */}
+      <JarvisPipeSliceModal />
 
       {/* ================= CLICK-TO-SLIDE TELEMETRY DRAWER ================= */}
       <TelemetryDrawer />

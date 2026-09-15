@@ -84,10 +84,22 @@ export const CameraRig: React.FC = () => {
       targetCamPos.current.set(22, -8, 26);
       targetLookAt.current.set(0, -10.5, 0);
       transitionSpeed.current = 3.5;
-    } else if (cameraViewMode === 'riser') {
-      targetCamPos.current.set(-24, -4, 26);
-      targetLookAt.current.set(0, -6, 0);
-      transitionSpeed.current = 3.0;
+    } else if (cameraViewMode === 'riser' || cameraViewMode === 'pipe1') {
+      targetCamPos.current.set(-16, -12, 22);
+      targetLookAt.current.set(-12, -22, -2);
+      transitionSpeed.current = 3.5;
+    } else if (cameraViewMode === 'pipe1_slice') {
+      targetCamPos.current.set(-8, -6, 18);
+      targetLookAt.current.set(-14, -8, 12);
+      transitionSpeed.current = 4.0;
+    } else if (cameraViewMode === 'split') {
+      targetCamPos.current.set(58, 35, 68);
+      targetLookAt.current.set(0, 0, 0);
+      transitionSpeed.current = 2.8;
+    } else if (cameraViewMode === 'part_detail') {
+      targetCamPos.current.set(20, 5, 25);
+      targetLookAt.current.set(0, 0, 0);
+      transitionSpeed.current = 3.8;
     }
   }, [cameraViewMode]);
 

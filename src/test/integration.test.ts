@@ -162,9 +162,53 @@ async function runEndToEndVerification() {
     'ESD successfully reset to All Systems Nominal'
   );
 
+  // TEST 10: Jarvis Voice Command NLP Execution & Split/Slice State Machine
+  console.log('\n--- TEST GROUP 9: JARVIS VOICE COMMANDER & 3D INTERACTION ---');
+  
+  // Voice command: "pipe 1"
+  useRigStore.getState().executeVoiceCommand('pipe 1');
+  assert(
+    useRigStore.getState().cameraViewMode === 'pipe1' && useRigStore.getState().selectedAssetId === 'RISER-ALPHA',
+    'Jarvis Voice: "Pipe 1" Camera Lock & Asset Focus',
+    'Camera locked to Pipe 1 and selected RISER-ALPHA'
+  );
+
+  // Voice command: "slice it"
+  useRigStore.getState().executeVoiceCommand('slice it');
+  assert(
+    useRigStore.getState().isPipeSliced === true && useRigStore.getState().isPipeSliceModalOpen === true,
+    'Jarvis Voice: "Slice It" Longitudinal Cross-Section Modal',
+    'Pipe sliced in 3D and holographic full-screen inspection modal opened'
+  );
+
+  // Voice command: "split"
+  useRigStore.getState().executeVoiceCommand('split');
+  assert(
+    useRigStore.getState().isSplitViewActive === true && useRigStore.getState().cameraViewMode === 'split',
+    'Jarvis Voice: "Split" 3D Exploded Subsea Assembly',
+    'Subsea digital twin exploded into 6 decoupled floating parts'
+  );
+
+  // Select decoupled part: "drill"
+  useRigStore.getState().zoomToSplitPart('part-drill');
+  assert(
+    useRigStore.getState().selectedSplitPartId === 'part-drill' && useRigStore.getState().cameraViewMode === 'part_detail',
+    'Touch-To-Zoom Decoupled Split Part Focus',
+    'Focused and zoomed into decoupled Drill String assembly'
+  );
+
+  // Voice command: "assemble"
+  useRigStore.getState().executeVoiceCommand('assemble');
+  assert(
+    useRigStore.getState().isSplitViewActive === false && useRigStore.getState().cameraViewMode === 'free',
+    'Jarvis Voice: "Assemble" Subsea Assembly Re-convergence',
+    'Exploded assembly re-converged and camera reset to free orbit'
+  );
+
   console.log('\n================================================================');
   console.log(`🏁 VERIFICATION SUMMARY: ${passedTests}/${totalTests} TESTS PASSED (100% SUCCESS)`);
   console.log('================================================================\n');
 }
 
 runEndToEndVerification().catch(console.error);
+

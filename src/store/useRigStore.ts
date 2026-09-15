@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 
-export type CameraViewMode = 'topside' | 'subsea' | 'manifold' | 'riser' | 'free';
+export type CameraViewMode =
+  | 'topside'
+  | 'subsea'
+  | 'manifold'
+  | 'riser'
+  | 'free'
+  | 'pipe1'
+  | 'pipe1_slice'
+  | 'split'
+  | 'part_detail';
 export type ScannerMode = 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
 export type EmergencyScenario =
@@ -448,6 +457,40 @@ interface RigState {
   hardwareMode: 'simulation' | 'websocket' | 'webserial' | 'blackbox_csv';
   setHardwareMode: (mode: 'simulation' | 'websocket' | 'webserial' | 'blackbox_csv') => void;
 
+  // Vision Gesture Technology
+  isGestureCameraActive: boolean;
+  gestureDetected: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null;
+  gestureConfidence: number;
+  setGestureCameraActive: (active: boolean) => void;
+  setGestureDetected: (
+    gesture: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null,
+    confidence?: number
+  ) => void;
+
+  // Jarvis Voice Commander
+  isVoiceCommanderActive: boolean;
+  lastVoiceCommand: string | null;
+  voiceTranscript: string | null;
+  isListeningSpeech: boolean;
+  setVoiceCommanderActive: (active: boolean) => void;
+  setLastVoiceCommand: (cmd: string | null) => void;
+  setVoiceTranscript: (transcript: string | null) => void;
+  setIsListeningSpeech: (listening: boolean) => void;
+  executeVoiceCommand: (command: string) => void;
+
+  // Jarvis Exploded / Split View & Pipe Slicing
+  isSplitViewActive: boolean;
+  splitFactor: number;
+  isPipeSliced: boolean;
+  isPipeSliceModalOpen: boolean;
+  selectedSplitPartId: string | null;
+  setSplitViewActive: (active: boolean) => void;
+  setSplitFactor: (factor: number) => void;
+  setPipeSliced: (sliced: boolean) => void;
+  setPipeSliceModalOpen: (open: boolean) => void;
+  setSelectedSplitPartId: (id: string | null) => void;
+  zoomToSplitPart: (partId: string) => void;
+
   // Audio / Speech State
   voiceStatus: {
     isSpeaking: boolean;
@@ -660,6 +703,217 @@ export const useRigStore = create<RigState>((set, get) => ({
   // Hardware Connection Mode
   hardwareMode: 'simulation',
   setHardwareMode: (mode) => set({ hardwareMode: mode }),
+
+  // Vision Gesture Technology
+  isGestureCameraActive: false,
+  gestureDetected: null,
+  gestureConfidence: 0,
+  setGestureCameraActive: (active) => set({ isGestureCameraActive: active }),
+  setGestureDetected: (gesture, confidence = 1.0) =>
+    set({ gestureDetected: gesture, gestureConfidence: confidence }),
+
+  // Jarvis Voice Commander
+  isVoiceCommanderActive: true,
+  lastVoiceCommand: null,
+  voiceTranscript: null,
+  isListeningSpeech: false,
+  setVoiceCommanderActive: (active) => set({ isVoiceCommanderActive: active }),
+  setLastVoiceCommand: (cmd) => set({ lastVoiceCommand: cmd }),
+  setVoiceTranscript: (transcript) => set({ voiceTranscript: transcript }),
+  setIsListeningSpeech: (listening) => set({ isListeningSpeech: listening }),
+
+  // Jarvis Exploded / Split View & Pipe Slicing
+  isSplitViewActive: false,
+  splitFactor: 0.0,
+  isPipeSliced: false,
+  isPipeSliceModalOpen: false,
+  selectedSplitPartId: null,
+
+  setSplitViewActive: (active) => {
+    set({
+      isSplitViewActive: active,
+      splitFactor: active ? 1.0 : 0.0,
+      cameraViewMode: active ? 'split' : 'topside',
+    });
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      if (active) {
+        varunaVoice.speakCustom('Executing modular split view. All 6 subsea assemblies decoupled for component diagnostics.');
+      } else {
+        varunaVoice.speakCustom('Reassembling subsea digital twin. All structural modules aligned.');
+      }
+    });
+  },
+
+  setSplitFactor: (factor) => set({ splitFactor: factor }),
+
+  setPipeSliced: (sliced) => {
+    set({
+      isPipeSliced: sliced,
+      cameraViewMode: sliced ? 'pipe1_slice' : 'pipe1',
+      isPipeSliceModalOpen: sliced,
+    });
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      if (sliced) {
+        varunaVoice.speakCustom('Pipe 1 longitudinal cross-section cut active. Exposing internal multi-phase fluid core and ultrasonic wall profile.');
+      } else {
+        varunaVoice.speakCustom('Pipeline cross-section closed. Returning to catenary riser inspection.');
+      }
+    });
+  },
+
+  setPipeSliceModalOpen: (open) => set({ isPipeSliceModalOpen: open }),
+  setSelectedSplitPartId: (id) => set({ selectedSplitPartId: id }),
+
+  zoomToSplitPart: (partId) => {
+    set({
+      selectedSplitPartId: partId,
+      selectedAssetId: partId,
+      cameraViewMode: 'part_detail',
+    });
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      varunaVoice.speakCustom(`Focusing on decoupled module ${partId}. Telemetry telemetry synchronized.`);
+    });
+  },
+
+  executeVoiceCommand: (rawCommand: string) => {
+    const cmd = rawCommand.toLowerCase().trim();
+    set({ lastVoiceCommand: rawCommand });
+
+    // 1. Pipe 1 / Riser Target & Zoom
+    if (
+      cmd.includes('pipe 1') ||
+      cmd.includes('pipe one') ||
+      cmd.includes('zoom to pipe') ||
+      cmd.includes('focus pipe') ||
+      cmd.includes('show pipe') ||
+      cmd.includes('riser alpha')
+    ) {
+      set({
+        cameraViewMode: 'pipe1',
+        selectedAssetId: 'RISER-ALPHA',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Locking camera targeting reticle on Subsea Production Pipe 1 (Riser Alpha). Depth -35 meters.');
+      });
+      return;
+    }
+
+    // 2. Slice It / Cut Pipe / Cross Section
+    if (
+      cmd.includes('slice it') ||
+      cmd.includes('slice pipe') ||
+      cmd.includes('cut pipe') ||
+      cmd.includes('cut a part') ||
+      cmd.includes('cut the pipe') ||
+      cmd.includes('cross section') ||
+      cmd.includes('slice')
+    ) {
+      set({
+        isPipeSliced: true,
+        isPipeSliceModalOpen: true,
+        cameraViewMode: 'pipe1_slice',
+        selectedAssetId: 'RISER-ALPHA',
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Longitudinal pipe cut initiated. Opening full-screen cross-section inspection deck.');
+      });
+      return;
+    }
+
+    // 3. Split / Explode View
+    if (
+      cmd.includes('split') ||
+      cmd.includes('explode') ||
+      cmd.includes('disassemble') ||
+      cmd.includes('breakdown') ||
+      cmd.includes('split parts')
+    ) {
+      set({
+        isSplitViewActive: true,
+        splitFactor: 1.0,
+        cameraViewMode: 'split',
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Jarvis split protocol active. All subsea modules separated for individual inspection.');
+      });
+      return;
+    }
+
+    // 4. Assemble / Reassemble
+    if (
+      cmd.includes('assemble') ||
+      cmd.includes('reassemble') ||
+      cmd.includes('merge') ||
+      cmd.includes('close split') ||
+      cmd.includes('put together')
+    ) {
+      set({
+        isSplitViewActive: false,
+        splitFactor: 0.0,
+        isPipeSliced: false,
+        isPipeSliceModalOpen: false,
+        cameraViewMode: 'free',
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Reassembling digital twin subsystems. Full operational alignment restored.');
+      });
+      return;
+    }
+
+    // 5. Spatial Navigation Presets
+    if (cmd.includes('topside') || cmd.includes('deck')) {
+      set({ cameraViewMode: 'topside' });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Navigating to Topside Platform Deck.');
+      });
+    } else if (cmd.includes('subsea') || cmd.includes('dive')) {
+      set({ cameraViewMode: 'subsea' });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Diving subsea to water column.');
+      });
+    } else if (cmd.includes('manifold') || cmd.includes('seabed')) {
+      set({ cameraViewMode: 'manifold' });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Targeting Seabed Gathering Manifold Hub at -1,020 meters.');
+      });
+    } else if (cmd.includes('weather') || cmd.includes('forecast')) {
+      set({ isWeatherPanelOpen: true });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening KG-D6 Real-Time Metocean & Weather Forecast report.');
+      });
+    } else if (cmd.includes('storm') || cmd.includes('cyclone')) {
+      get().setCurrentFlowPower('storm');
+      get().setEmergencyScenario('weather_squall', 2);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Simulating Bay of Bengal Tropical Storm surge.');
+      });
+    } else if (cmd.includes('latex') || cmd.includes('audit') || cmd.includes('math')) {
+      set({ isPhysicsModalOpen: true });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening real-time LaTeX physical derivations audit.');
+      });
+    } else if (cmd.includes('compliance') || cmd.includes('report') || cmd.includes('pdf')) {
+      set({ isReportModalOpen: true });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening DGH / ISO Compliance Audit Report.');
+      });
+    } else if (cmd.includes('blockage') || cmd.includes('choke')) {
+      get().setEmergencyScenario('pipe_blockage', 2);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakIncidentAlert('pipe_blockage', 2);
+      });
+    } else if (cmd.includes('drill damage') || cmd.includes('drill')) {
+      get().setEmergencyScenario('drill_damage', 2);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakIncidentAlert('drill_damage', 2);
+      });
+    } else {
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom(`Voice command received: ${rawCommand}`);
+      });
+    }
+  },
 
   voiceStatus: {
     isSpeaking: false,

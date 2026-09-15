@@ -34,6 +34,8 @@ class JarvisGestureVisionEngine {
   private animFrameId: number | null = null;
   private stream: MediaStream | null = null;
   private isRunning = false;
+  private mediaPipeHands: any = null;
+  private smoothedLandmarks: HandLandmark[] = [];
 
   private prevCentroid: { x: number; y: number; time: number } | null = null;
   private lastSliceTime = 0;
@@ -80,8 +82,12 @@ class JarvisGestureVisionEngine {
       }
 
       this.videoElement.srcObject = this.stream;
-      await this.videoElement.play().catch((e) => {
-        console.warn('Autoplay warning on video play:', e);
+      await new Promise<void>((resolve) => {
+        if (!this.videoElement) return resolve();
+        this.videoElement.onloadedmetadata = () => {
+          this.videoElement?.play().then(() => resolve()).catch(() => resolve());
+        };
+        setTimeout(resolve, 800);
       });
 
       if (!this.canvasElement) {
@@ -89,6 +95,25 @@ class JarvisGestureVisionEngine {
         this.canvasElement.width = 160;
         this.canvasElement.height = 120;
         this.ctx = this.canvasElement.getContext('2d', { willReadFrequently: true });
+      }
+
+      // Initialize MediaPipe Hands if CDN script is loaded
+      if (typeof window !== 'undefined' && (window as any).Hands) {
+        try {
+          this.mediaPipeHands = new (window as any).Hands({
+            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+          });
+          this.mediaPipeHands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.55,
+            minTrackingConfidence: 0.55,
+          });
+          this.mediaPipeHands.onResults(this.handleMediaPipeResults);
+        } catch (mpErr) {
+          console.warn('MediaPipe Hands initialization fallback to CV color space:', mpErr);
+          this.mediaPipeHands = null;
+        }
       }
 
       this.isRunning = true;
@@ -126,30 +151,50 @@ class JarvisGestureVisionEngine {
   }
 
   /**
-   * Multi-tier fallback for camera stream acquisition
+   * 4-Stage Resolution Fallback Ladder for Bulletproof Webcam Acquisition
    */
   private async acquireCameraStream(): Promise<MediaStream> {
-    // Tier 1: Relaxed ideal resolution
+    // Stage 1: 1080p
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+    } catch (e1) {
+      console.warn('Stage 1 (1080p) failed, trying Stage 2 (720p)...', e1);
+    }
+
+    // Stage 2: 720p
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+    } catch (e2) {
+      console.warn('Stage 2 (720p) failed, trying Stage 3 (480p)...', e2);
+    }
+
+    // Stage 3: 480p
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
-    } catch (err1) {
-      console.warn('Tier 1 camera acquisition failed, trying unconstrained video: true...', err1);
+    } catch (e3) {
+      console.warn('Stage 3 (480p) failed, trying Stage 4 (generic video: true)...', e3);
     }
 
-    // Tier 2: Plain boolean constraint
+    // Stage 4: Plain boolean constraint
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: false,
       });
-    } catch (err2) {
-      console.warn('Tier 2 unconstrained failed, enumerating devices...', err2);
+    } catch (e4) {
+      console.warn('Stage 4 (unconstrained) failed, enumerating devices...', e4);
     }
 
-    // Tier 3: Enumerating video devices directly
+    // Stage 5: Enumerate video devices directly
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((d) => d.kind === 'videoinput');
     if (videoDevices.length > 0) {
@@ -167,6 +212,117 @@ class JarvisGestureVisionEngine {
 
     throw new Error('Camera access denied or hardware unavailable.');
   }
+
+  /**
+   * MediaPipe Hands Result Pipeline
+   */
+  private handleMediaPipeResults = (results: any): void => {
+    if (!this.isRunning || !results) return;
+
+    const multiHandLandmarks = results.multiHandLandmarks || [];
+    if (multiHandLandmarks.length === 0) {
+      return;
+    }
+
+    const firstHand = multiHandLandmarks[0];
+    const isTwoHanded = multiHandLandmarks.length >= 2;
+
+    // Convert and smooth 21 landmarks using Exponential Moving Average (EMA: alpha = 0.65)
+    const rawLandmarks: HandLandmark[] = firstHand.map((lm: any, idx: number) => {
+      const typeMap: { [k: number]: HandLandmark['type'] } = {
+        0: 'wrist',
+        4: 'thumb',
+        8: 'index',
+        12: 'middle',
+        16: 'ring',
+        20: 'pinky',
+        9: 'palm',
+      };
+      return {
+        x: 1.0 - lm.x, // Mirror X axis
+        y: lm.y,
+        type: typeMap[idx] || undefined,
+      };
+    });
+
+    if (this.smoothedLandmarks.length !== rawLandmarks.length) {
+      this.smoothedLandmarks = rawLandmarks;
+    } else {
+      this.smoothedLandmarks = this.smoothedLandmarks.map((prev, idx) => ({
+        ...prev,
+        x: prev.x * 0.35 + rawLandmarks[idx].x * 0.65,
+        y: prev.y * 0.35 + rawLandmarks[idx].y * 0.65,
+      }));
+    }
+
+    const wrist = this.smoothedLandmarks[0];
+    const thumbTip = this.smoothedLandmarks[4];
+    const indexTip = this.smoothedLandmarks[8];
+    const middleTip = this.smoothedLandmarks[12];
+    const ringTip = this.smoothedLandmarks[16];
+    const pinkyTip = this.smoothedLandmarks[20];
+
+    const indexPip = this.smoothedLandmarks[6];
+    const middlePip = this.smoothedLandmarks[10];
+    const ringPip = this.smoothedLandmarks[14];
+    const pinkyPip = this.smoothedLandmarks[18];
+
+    // Distance metrics from wrist
+    const distSq = (a: HandLandmark, b: HandLandmark) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip);
+    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip);
+    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip);
+    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip);
+
+    const pinchDist = Math.sqrt(distSq(thumbTip, indexTip));
+    const isPinching = pinchDist < 0.055;
+
+    let gesture: RecognizedGesture = 'PALM';
+    let fingerCount = 5;
+
+    // Kinematic Gesture Decision Tree
+    if (isTwoHanded) {
+      const secondHand = multiHandLandmarks[1];
+      const h1x = 1.0 - firstHand[0].x;
+      const h2x = 1.0 - secondHand[0].x;
+      if (Math.abs(h1x - h2x) > 0.28) {
+        gesture = 'SPLIT';
+        fingerCount = 10;
+      }
+    } else if (isPinching) {
+      gesture = 'PINCH';
+      fingerCount = 2;
+    } else if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      gesture = 'POINT';
+      fingerCount = 1;
+    } else if (!isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      gesture = 'FIST';
+      fingerCount = 0;
+    } else {
+      gesture = 'PALM';
+      fingerCount = 5;
+    }
+
+    const result: GestureTrackingResult = {
+      gesture,
+      confidence: 0.96,
+      handX: wrist.x,
+      handY: wrist.y,
+      palmRadius: 0.18,
+      isPinching,
+      isTwoHanded,
+      landmarks: this.smoothedLandmarks,
+      fingerCount,
+    };
+
+    useRigStore.getState().setGestureDetected(gesture, 0.96);
+    this.handleGestureAction(result);
+
+    if (this.videoElement) {
+      this.onFrameCallbacks.forEach((cb) => cb(result, this.videoElement!));
+    }
+  };
 
   /**
    * Starts Synthetic / Demo Vision Simulation mode for devices without camera access
@@ -302,32 +458,49 @@ class JarvisGestureVisionEngine {
     };
   }
 
+  private isProcessingMediaPipe = false;
+
   private processLoop = (): void => {
     if (!this.isRunning || !this.videoElement || !this.ctx || !this.canvasElement) return;
 
     if (this.videoElement.readyState >= 2) {
-      const w = this.canvasElement.width;
-      const h = this.canvasElement.height;
-
-      // Draw mirrored video frame into low-res processing canvas
-      this.ctx.save();
-      this.ctx.scale(-1, 1);
-      this.ctx.drawImage(this.videoElement, -w, 0, w, h);
-      this.ctx.restore();
-
-      const imgData = this.ctx.getImageData(0, 0, w, h);
-      const result = this.analyzeFrame(imgData, w, h);
-
-      // Update state store
-      if (result.gesture) {
-        useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+      if (this.mediaPipeHands && !this.isProcessingMediaPipe) {
+        this.isProcessingMediaPipe = true;
+        this.mediaPipeHands
+          .send({ image: this.videoElement })
+          .catch((err: any) => {
+            console.warn('MediaPipe send error:', err);
+          })
+          .finally(() => {
+            this.isProcessingMediaPipe = false;
+          });
       }
 
-      // Handle gesture-driven 3D actions
-      this.handleGestureAction(result);
+      // If MediaPipe is not available, process via CV Color-Space pipeline
+      if (!this.mediaPipeHands) {
+        const w = this.canvasElement.width;
+        const h = this.canvasElement.height;
 
-      // Trigger UI overlays
-      this.onFrameCallbacks.forEach((cb) => cb(result, this.videoElement!));
+        // Draw mirrored video frame into low-res processing canvas
+        this.ctx.save();
+        this.ctx.scale(-1, 1);
+        this.ctx.drawImage(this.videoElement, -w, 0, w, h);
+        this.ctx.restore();
+
+        const imgData = this.ctx.getImageData(0, 0, w, h);
+        const result = this.analyzeFrame(imgData, w, h);
+
+        // Update state store
+        if (result.gesture) {
+          useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+        }
+
+        // Handle gesture-driven 3D actions
+        this.handleGestureAction(result);
+
+        // Trigger UI overlays
+        this.onFrameCallbacks.forEach((cb) => cb(result, this.videoElement!));
+      }
     }
 
     this.animFrameId = requestAnimationFrame(this.processLoop);

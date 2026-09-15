@@ -66,18 +66,24 @@ interface HoloRigSectionProps {
 }
 
 /**
- * 3D Model Section Cropper
- * Uses the user's REAL rig model (untitled.obj) cropped/focused directly on each subsystem:
- * - Helipad, Cranes 1 & 2, Upper Rig Derrick, Drill, Motor, Subsea Manifold & Wells
+ * 3D Model Section Cropper & Selective Component Highlighting
+ * - Long Rotatable Cylindrical Subsea Pipes with Multiphase Fluid Core
+ * - Vibrant White Glowing Helipad with green perimeter lights
+ * - Radiant Orange Crane 1 & Crane 2
+ * - Emerald Cyan Upper Derrick Mast & Top Drive
+ * - Full 360° OrbitControls & Smooth Drag Zoom
  */
 const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate, orbitControlsRef }) => {
   const [modelGroup, setModelGroup] = useState<THREE.Group | null>(null);
   const customObjUrl = useRigStore((s) => s.customObjUrl || '/models/untitled.obj');
   const groupRef = useRef<THREE.Group>(null);
+  const pipeFluidMeshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
 
   const MODEL_SCALE = 45.0;
   const WATER_LINE_OBJ_Y = -0.22;
+
+  const isPipe = type.startsWith('pipe');
 
   // Compute focal target and initial camera offset for each section
   const sectionConfig = useMemo(() => {
@@ -85,11 +91,11 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
       case 'helipad':
         return {
           focalOffset: new THREE.Vector3(5.4, 25.5, -22.5),
-          camPos: new THREE.Vector3(12, 32, -12),
+          camPos: new THREE.Vector3(14, 32, -10),
           targetBounds: [14, 8, 14] as [number, number, number],
           camDistance: 16,
           label: 'CAP 437 HELIDECK SECTION',
-          wireColor: '#FACC15',
+          wireColor: '#FFFFFF',
         };
       case 'crane1':
         return {
@@ -154,18 +160,20 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
         };
       default: // pipe1 to pipe9
         return {
-          focalOffset: new THREE.Vector3(0, -10, 0),
-          camPos: new THREE.Vector3(12, -2, 18),
-          targetBounds: [14, 28, 14] as [number, number, number],
-          camDistance: 20,
-          label: `SUBSEA PIPE ${type.replace('pipe', '')} CATENARY SECTION`,
+          focalOffset: new THREE.Vector3(0, 0, 0),
+          camPos: new THREE.Vector3(0, 0, 14),
+          targetBounds: [8, 18, 8] as [number, number, number],
+          camDistance: 14,
+          label: `SUBSEA PRODUCTION PIPE ${type.replace('pipe', '')} CYLINDER`,
           wireColor: '#00E5FF',
         };
     }
   }, [type]);
 
-  // Load and style the actual model
+  // Load and apply exact selective highlight shaders to model meshes
   useEffect(() => {
+    if (isPipe) return;
+
     loadModelOnce(customObjUrl, (loadedObj) => {
       const cloned = loadedObj.clone(true);
       const box = new THREE.Box3().setFromObject(cloned);
@@ -178,7 +186,7 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
       cloned.position.z = -center.z * MODEL_SCALE;
       cloned.rotation.y = -Math.PI / 2;
 
-      // Apply signature holographic wireframe + glowing shader materials
+      // Selectively highlight target component while dimming the background rig
       cloned.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           const mesh = child as THREE.Mesh;
@@ -187,34 +195,90 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           if (name === 'pCube2') {
             mesh.visible = false;
           } else if (name === 'model_Mesh') {
+            // Drill casing
+            const isTarget = type === 'drill';
             mesh.material = new THREE.MeshStandardMaterial({
-              color: '#005588',
-              emissive: '#00E5FF',
-              emissiveIntensity: 0.8,
+              color: isTarget ? '#00E5FF' : '#001A33',
+              emissive: isTarget ? '#00FFFF' : '#001122',
+              emissiveIntensity: isTarget ? 3.0 : 0.1,
               wireframe: true,
               transparent: true,
-              opacity: 0.65,
+              opacity: isTarget ? 0.95 : 0.1,
               side: THREE.DoubleSide,
             });
           } else if (name === 'model1_Mesh') {
+            // Subsea manifold & wellheads
+            const isTarget = type.startsWith('well') || type === 'wells1_7';
             mesh.material = new THREE.MeshStandardMaterial({
-              color: '#00FFAA',
-              emissive: '#00E5FF',
-              emissiveIntensity: 1.2,
+              color: isTarget ? '#C084FC' : '#001A33',
+              emissive: isTarget ? '#A855F7' : '#001122',
+              emissiveIntensity: isTarget ? 3.2 : 0.1,
               wireframe: true,
               transparent: true,
-              opacity: 0.85,
+              opacity: isTarget ? 0.95 : 0.1,
               side: THREE.DoubleSide,
             });
-          } else {
-            // modelfinal_Mesh: Topside deck, cranes, helipad, derrick
+          } else if (name === 'modelfinal_Mesh') {
+            // Topside rig: Selectively color triangles according to target part
+            const geo = mesh.geometry.clone();
+            const pos = geo.attributes.position;
+            const count = pos.count;
+            const colors = new Float32Array(count * 3);
+
+            const cDimmed = new THREE.Color('#031526');
+            const cHelipadWhiteGlow = new THREE.Color('#FFFFFF');
+            const cCraneOrange = new THREE.Color('#FF6D00');
+            const cDerrickCyan = new THREE.Color('#00F5D4');
+            const cMotorSky = new THREE.Color('#38BDF8');
+
+            for (let i = 0; i < count; i += 3) {
+              const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
+              const x1 = pos.getX(i + 1), y1 = pos.getY(i + 1), z1 = pos.getZ(i + 1);
+              const x2 = pos.getX(i + 2), y2 = pos.getY(i + 2), z2 = pos.getZ(i + 2);
+
+              const cx = (x0 + x1 + x2) / 3;
+              const cy = (y0 + y1 + y2) / 3;
+              const cz = (z0 + z1 + z2) / 3;
+              const distXZ = Math.sqrt(cx * cx + cz * cz);
+              const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
+
+              let chosen = cDimmed;
+
+              if (type === 'helipad' && cy > 0.30 && distHelipad < 0.25) {
+                // VIBRANT PURE WHITE GLOW FOR HELIPAD ONLY
+                chosen = cHelipadWhiteGlow;
+              } else if (type === 'crane1' && cy > 0.18 && (cx < -0.10 || cz < -0.12)) {
+                // RADIANT ORANGE FOR CRANE 1
+                chosen = cCraneOrange;
+              } else if (type === 'crane2' && cy > 0.18 && (cx > 0.10 || cz > 0.12)) {
+                // RADIANT ORANGE FOR CRANE 2
+                chosen = cCraneOrange;
+              } else if (type === 'upper_rig' && cy > 0.10 && distXZ < 0.22) {
+                // EMERALD CYAN FOR UPPER RIG DERRICK
+                chosen = cDerrickCyan;
+              } else if (type === 'motor' && cy > 0.08 && cy < 0.28 && distXZ < 0.14) {
+                // SKY BLUE FOR TOP DRIVE MOTOR
+                chosen = cMotorSky;
+              }
+
+              for (let j = 0; j < 3; j++) {
+                const idx = (i + j) * 3;
+                colors[idx] = chosen.r;
+                colors[idx + 1] = chosen.g;
+                colors[idx + 2] = chosen.b;
+              }
+            }
+
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            mesh.geometry = geo;
+
             mesh.material = new THREE.MeshStandardMaterial({
-              color: '#003366',
-              emissive: '#00FFFF',
-              emissiveIntensity: 0.9,
+              vertexColors: true,
+              roughness: 0.25,
+              metalness: 0.6,
               wireframe: true,
               transparent: true,
-              opacity: 0.75,
+              opacity: 0.88,
               side: THREE.DoubleSide,
             });
           }
@@ -223,23 +287,29 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
 
       setModelGroup(cloned);
     });
-  }, [customObjUrl]);
+  }, [customObjUrl, type, isPipe]);
 
   // Set camera view centered on this section
   useEffect(() => {
-    camera.position.set(
-      sectionConfig.camPos.x - sectionConfig.focalOffset.x,
-      sectionConfig.camPos.y - sectionConfig.focalOffset.y,
-      sectionConfig.camPos.z - sectionConfig.focalOffset.z
-    );
-    camera.lookAt(0, 0, 0);
+    if (isPipe) {
+      camera.position.set(0, 0, 14);
+      camera.lookAt(0, 0, 0);
+    } else {
+      camera.position.set(
+        sectionConfig.camPos.x - sectionConfig.focalOffset.x,
+        sectionConfig.camPos.y - sectionConfig.focalOffset.y,
+        sectionConfig.camPos.z - sectionConfig.focalOffset.z
+      );
+      camera.lookAt(0, 0, 0);
+    }
+
     if (orbitControlsRef.current) {
       orbitControlsRef.current.target.set(0, 0, 0);
       orbitControlsRef.current.update();
     }
-  }, [sectionConfig, camera, orbitControlsRef]);
+  }, [sectionConfig, camera, orbitControlsRef, isPipe]);
 
-  // Gentle laser scanning beam animation
+  // Gentle laser scanning beam animation & continuous fluid flow
   const laserRef = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
@@ -247,21 +317,78 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
       const halfH = sectionConfig.targetBounds[1] / 2;
       laserRef.current.position.y = Math.sin(t * 2.5) * halfH;
     }
+    if (pipeFluidMeshRef.current) {
+      pipeFluidMeshRef.current.rotation.y = t * 1.5;
+    }
   });
 
   return (
     <group ref={groupRef}>
-      {/* Centered Model Section: Shifted so focalOffset is precisely at origin [0, 0, 0] */}
-      {modelGroup && (
-        <group
-          position={[
-            -sectionConfig.focalOffset.x,
-            -sectionConfig.focalOffset.y,
-            -sectionConfig.focalOffset.z,
-          ]}
-        >
-          <primitive object={modelGroup} />
+      {/* 1. LONG ROTATABLE CYLINDRICAL PIPE RENDERER (For Pipes 1-9) */}
+      {isPipe ? (
+        <group position={[0, 0, 0]}>
+          {/* Outer Glowing High-Tech Cylindrical Wireframe Cage */}
+          <mesh>
+            <cylinderGeometry args={[2.0, 2.0, 16.0, 36, 18, true]} />
+            <meshBasicMaterial color="#00E5FF" wireframe transparent opacity={0.65} />
+          </mesh>
+
+          {/* Inner Translucent High-Pressure Oil & Gas Multiphase Core */}
+          <mesh ref={pipeFluidMeshRef}>
+            <cylinderGeometry args={[1.5, 1.5, 15.8, 28, 1]} />
+            <meshStandardMaterial
+              color="#FFA500"
+              emissive="#FF7700"
+              emissiveIntensity={2.8}
+              transparent
+              opacity={0.85}
+              roughness={0.15}
+              metalness={0.85}
+            />
+          </mesh>
+
+          {/* Heavy Structural Connection Flange Rings Along the Cylinder */}
+          {[-6.5, -3.2, 0, 3.2, 6.5].map((yPos) => (
+            <group key={yPos} position={[0, yPos, 0]}>
+              <mesh>
+                <torusGeometry args={[2.3, 0.22, 16, 36]} />
+                <meshStandardMaterial
+                  color="#00FFFF"
+                  emissive="#00FFFF"
+                  emissiveIntensity={1.8}
+                  metalness={0.9}
+                  roughness={0.2}
+                />
+              </mesh>
+              {/* Radial Bolt Couplers */}
+              {[0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3].map((angle, idx) => (
+                <mesh key={idx} position={[Math.cos(angle) * 2.3, 0, Math.sin(angle) * 2.3]}>
+                  <sphereGeometry args={[0.2, 8, 8]} />
+                  <meshBasicMaterial color="#00FFFF" />
+                </mesh>
+              ))}
+            </group>
+          ))}
+
+          {/* Optical Fiber Sensor Strain Line */}
+          <mesh position={[2.05, 0, 0]}>
+            <cylinderGeometry args={[0.06, 0.06, 16.0, 8]} />
+            <meshStandardMaterial color="#FF0055" emissive="#FF0033" emissiveIntensity={4.0} />
+          </mesh>
         </group>
+      ) : (
+        /* 2. REAL MODEL SECTION WITH PRECISION SELECTIVE HIGHLIGHTING */
+        modelGroup && (
+          <group
+            position={[
+              -sectionConfig.focalOffset.x,
+              -sectionConfig.focalOffset.y,
+              -sectionConfig.focalOffset.z,
+            ]}
+          >
+            <primitive object={modelGroup} />
+          </group>
+        )
       )}
 
       {/* Holographic 3D Section Crop Bounding Cage */}
@@ -279,7 +406,7 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           <lineBasicMaterial
             color={sectionConfig.wireColor}
             transparent
-            opacity={0.65}
+            opacity={0.7}
             linewidth={2}
           />
         </lineSegments>
@@ -295,7 +422,7 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           <meshBasicMaterial
             color={sectionConfig.wireColor}
             transparent
-            opacity={0.15}
+            opacity={0.18}
             side={THREE.DoubleSide}
           />
         </mesh>

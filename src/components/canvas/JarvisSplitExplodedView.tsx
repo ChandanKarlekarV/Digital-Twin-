@@ -354,23 +354,25 @@ export const JarvisSplitExplodedView: React.FC = () => {
           </mesh>
 
           {/* Sliced Pipe 3D Hologram Callout */}
-          <Html position={[0, 8.5, 0]} center distanceFactor={40}>
-            <div
-              onClick={() => setPipeSliceModalOpen(true)}
-              className="px-3.5 py-2 rounded-2xl glass-panel-alert border border-reliance-cyan/60 bg-reliance-deepnavy/95 text-white font-mono text-xs shadow-cyan-glow cursor-pointer hover:scale-105 transition-all"
-            >
-              <div className="flex items-center gap-1.5 text-reliance-cyan font-bold text-[10px]">
-                <span className="w-2 h-2 rounded-full bg-reliance-cyan animate-ping" />
-                <span>PIPE 1 AXIAL CROSS-SECTION</span>
+          {!activeHoloModal && !isPipeSliceModalOpen && (
+            <Html position={[0, 8.5, 0]} center distanceFactor={40}>
+              <div
+                onClick={() => setPipeSliceModalOpen(true)}
+                className="px-3.5 py-2 rounded-2xl glass-panel-alert border border-reliance-cyan/60 bg-reliance-deepnavy/95 text-white font-mono text-xs shadow-cyan-glow cursor-pointer hover:scale-105 transition-all"
+              >
+                <div className="flex items-center gap-1.5 text-reliance-cyan font-bold text-[10px]">
+                  <span className="w-2 h-2 rounded-full bg-reliance-cyan animate-ping" />
+                  <span>PIPE 1 AXIAL CROSS-SECTION</span>
+                </div>
+                <div className="text-[9px] text-white/90 mt-0.5">
+                  WALL: 18.4 mm • MULTIPHASE OIL/GAS CORE
+                </div>
+                <div className="mt-1 text-[8px] bg-reliance-cyan/20 text-reliance-cyan px-2 py-0.5 rounded text-center font-bold">
+                  CLICK FOR FULLSCREEN INSPECTION
+                </div>
               </div>
-              <div className="text-[9px] text-white/90 mt-0.5">
-                WALL: 18.4 mm • MULTIPHASE OIL/GAS CORE
-              </div>
-              <div className="mt-1 text-[8px] bg-reliance-cyan/20 text-reliance-cyan px-2 py-0.5 rounded text-center font-bold">
-                CLICK FOR FULLSCREEN INSPECTION
-              </div>
-            </div>
-          </Html>
+            </Html>
+          )}
         </group>
       )}
     </group>

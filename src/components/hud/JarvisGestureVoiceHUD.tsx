@@ -186,11 +186,29 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     }
   };
 
+  const isSyntheticCameraActive = useRigStore((s) => s.isSyntheticCameraActive);
   const cameraPermissionState = useRigStore((s) => s.cameraPermissionState);
+  const cameraErrorMessage = useRigStore((s) => s.cameraErrorMessage);
   const openHoloModal = useRigStore((s) => s.openHoloModal);
+  const setGestureDetected = useRigStore((s) => s.setGestureDetected);
+
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
+  const handleStartDemoVision = () => {
+    jarvisGestureEngine.startSynthetic();
+    varunaVoice.speakCustom('Synthetic demo vision mode active. Simulating hand gestures in real time.');
+  };
+
+  const triggerSpecificGesture = (gesture: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST') => {
+    setGestureDetected(gesture, 0.98);
+    if (gesture === 'SPLIT') setSplitViewActive(true);
+    else if (gesture === 'FIST') setSplitViewActive(false);
+    else if (gesture === 'SLICE') setPipeSliced(true);
+    else if (gesture === 'POINT') executeVoiceCommand('pipe 1');
+  };
 
   return (
-    <div className="absolute top-16 right-4 sm:right-6 z-40 w-72 sm:w-80 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 rounded-2xl shadow-dock backdrop-blur-2xl text-white font-sans transition-all animate-in fade-in duration-200">
+    <div className="absolute top-16 right-4 sm:right-6 z-40 w-72 sm:w-84 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 rounded-2xl shadow-dock backdrop-blur-2xl text-white font-sans transition-all animate-in fade-in duration-200">
       {/* HUD Header */}
       <div className="flex items-center justify-between p-2.5 border-b border-reliance-cyan/20">
         <div className="flex items-center gap-2">
@@ -217,38 +235,82 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         <div className="p-2.5 space-y-2.5">
           {/* Gesture Camera Viewfinder Box */}
           {isGestureCameraActive ? (
-            <div className="relative w-full h-32 rounded-xl bg-black/80 overflow-hidden border border-reliance-cyan/40 flex items-center justify-center">
-              <canvas
-                ref={canvasRef}
-                width={280}
-                height={160}
-                className="w-full h-full object-cover"
-              />
+            <div className="space-y-1.5">
+              <div className="relative w-full h-32 rounded-xl bg-black/80 overflow-hidden border border-reliance-cyan/40 flex items-center justify-center">
+                <canvas
+                  ref={canvasRef}
+                  width={280}
+                  height={160}
+                  className="w-full h-full object-cover"
+                />
 
-              {/* Active Gesture Detection Badge */}
-              <div className="absolute top-1.5 left-2 bg-reliance-deepnavy/90 border border-reliance-cyan/60 px-2 py-0.5 rounded text-[9px] font-mono text-reliance-cyan font-bold flex items-center gap-1 shadow-cyan-glow">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>
-                  GESTURE: {gestureDetected ? `[${gestureDetected}]` : 'TRACKING...'}
-                </span>
+                {/* Active Gesture Detection Badge */}
+                <div className="absolute top-1.5 left-2 bg-reliance-deepnavy/90 border border-reliance-cyan/60 px-2 py-0.5 rounded text-[9px] font-mono text-reliance-cyan font-bold flex items-center gap-1 shadow-cyan-glow">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>
+                    {isSyntheticCameraActive ? 'DEMO GESTURE: ' : 'GESTURE: '}
+                    {gestureDetected ? `[${gestureDetected}]` : 'TRACKING...'}
+                  </span>
+                </div>
+
+                {/* Viewfinder Status Overlay */}
+                <div className="absolute bottom-1.5 right-2 text-[8px] font-mono text-emerald-400 bg-black/70 px-1.5 py-0.5 rounded">
+                  {isSyntheticCameraActive ? 'SYNTHETIC 30 FPS' : 'WEBCAM 30 FPS'}
+                </div>
               </div>
 
-              {/* Viewfinder Status Overlay */}
-              <div className="absolute bottom-1.5 right-2 text-[8px] font-mono text-emerald-400 bg-black/70 px-1.5 py-0.5 rounded">
-                30 FPS • VISION ENGINE
+              {/* Interactive Gesture Simulator Pills (Available in both live and synthetic modes) */}
+              <div className="flex items-center justify-between gap-1 pt-1 overflow-x-auto text-[9px] font-mono scrollbar-none">
+                <button
+                  onClick={() => triggerSpecificGesture('PALM')}
+                  className="px-1.5 py-0.5 rounded bg-reliance-navy/60 hover:bg-reliance-blue/60 border border-white/15 text-white/80 cursor-pointer"
+                  title="Simulate Open Palm (Orbit)"
+                >
+                  ✋ Orbit
+                </button>
+                <button
+                  onClick={() => triggerSpecificGesture('PINCH')}
+                  className="px-1.5 py-0.5 rounded bg-reliance-navy/60 hover:bg-reliance-blue/60 border border-white/15 text-white/80 cursor-pointer"
+                  title="Simulate Pinch (Zoom)"
+                >
+                  🤏 Pinch
+                </button>
+                <button
+                  onClick={() => triggerSpecificGesture('SPLIT')}
+                  className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/40 text-amber-200 cursor-pointer"
+                  title="Simulate Two Hands (Split Rig)"
+                >
+                  👐 Split
+                </button>
+                <button
+                  onClick={() => triggerSpecificGesture('SLICE')}
+                  className="px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-400/40 text-cyan-200 cursor-pointer"
+                  title="Simulate Swipe (Slice Pipe)"
+                >
+                  ✌️ Slice
+                </button>
+                <button
+                  onClick={() => triggerSpecificGesture('FIST')}
+                  className="px-1.5 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-400/40 text-emerald-200 cursor-pointer"
+                  title="Simulate Fist (Assemble)"
+                >
+                  ✊ Assemble
+                </button>
               </div>
             </div>
           ) : (
             <div className="p-3 rounded-xl bg-reliance-navy/50 border border-white/10 text-center font-mono space-y-2">
-              <div className="text-[10px] text-reliance-textMuted">
-                {cameraPermissionState === 'requesting'
-                  ? 'Requesting webcam access...'
-                  : cameraPermissionState === 'denied'
-                  ? '⚠️ Camera access blocked in browser. Click the lock/tune icon in address bar to Allow.'
-                  : cameraPermissionState === 'error'
-                  ? '⚠️ Unable to access camera device. Verify no other app is using it.'
-                  : 'Webcam gesture tracking ready'}
+              <div className="text-[10px] text-reliance-textMuted leading-relaxed">
+                {cameraErrorMessage ? (
+                  <span className="text-amber-300 flex items-center justify-center gap-1">
+                    <span>⚠️ {cameraErrorMessage}</span>
+                  </span>
+                ) : (
+                  'Camera gesture tracking ready'
+                )}
               </div>
+
+              {/* Primary Webcam Button */}
               <button
                 onClick={handleToggleCamera}
                 disabled={cameraPermissionState === 'requesting'}
@@ -257,12 +319,44 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                 <Video className="w-3.5 h-3.5 text-reliance-cyan" />
                 <span>
                   {cameraPermissionState === 'requesting'
-                    ? 'CONNECTING CAMERA...'
-                    : cameraPermissionState === 'denied'
-                    ? 'RETRY CAMERA ACCESS'
-                    : 'TURN ON GESTURE CAMERA'}
+                    ? 'REQUESTING CAMERA...'
+                    : cameraPermissionState === 'denied' || cameraErrorMessage
+                    ? 'RETRY ACCESS CAMERA'
+                    : 'TURN ON WEBCAM'}
                 </span>
               </button>
+
+              {/* Synthetic Simulation Mode Button */}
+              <button
+                onClick={handleStartDemoVision}
+                className="w-full py-1.5 px-3 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-400/40 text-[10px] font-bold text-emerald-200 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                <span>🧪 TEST DEMO VISION (NO WEBCAM NEEDED)</span>
+              </button>
+
+              {/* Camera Troubleshoot Guide Toggle */}
+              <button
+                onClick={() => setShowTroubleshoot(!showTroubleshoot)}
+                className="text-[9px] text-reliance-cyan/80 hover:text-reliance-cyan underline cursor-pointer pt-0.5 block mx-auto"
+              >
+                {showTroubleshoot ? '▲ Hide Camera Troubleshooting Guide' : '▼ How to enable Camera Access in Windows / Chrome'}
+              </button>
+
+              {showTroubleshoot && (
+                <div className="text-left text-[9px] p-2 rounded-lg bg-black/60 border border-reliance-cyan/20 space-y-1.5 text-white/90">
+                  <div className="font-bold text-reliance-cyan">Windows & Browser Access Checklist:</div>
+                  <div>
+                    1. <strong>Windows Privacy</strong>: Press <kbd className="bg-white/10 px-1 rounded">Win + I</kbd> &rarr; <em>Privacy & security</em> &rarr; <em>Camera</em> &rarr; Turn <strong>ON</strong> "Let apps access your camera".
+                  </div>
+                  <div>
+                    2. <strong>Browser Permission</strong>: In your address bar next to <code className="text-cyan-300">http://localhost:1420</code>, click the <strong>tune / sliders icon</strong> and switch <strong>Camera to Allow</strong>.
+                  </div>
+                  <div>
+                    3. <strong>Close Other Apps</strong>: Make sure Zoom, Microsoft Teams, Discord, or Windows Camera app aren't using the webcam.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

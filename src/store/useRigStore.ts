@@ -511,11 +511,15 @@ interface RigState {
 
   // Vision Gesture Technology
   isGestureCameraActive: boolean;
+  isSyntheticCameraActive: boolean;
   cameraPermissionState: 'idle' | 'requesting' | 'active' | 'denied' | 'error';
+  cameraErrorMessage: string | null;
   gestureDetected: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null;
   gestureConfidence: number;
   setGestureCameraActive: (active: boolean) => void;
+  setSyntheticCameraActive: (active: boolean) => void;
   setCameraPermissionState: (status: 'idle' | 'requesting' | 'active' | 'denied' | 'error') => void;
+  setCameraErrorMessage: (msg: string | null) => void;
   setGestureDetected: (
     gesture: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null,
     confidence?: number
@@ -774,11 +778,15 @@ export const useRigStore = create<RigState>((set, get) => ({
 
   // Vision Gesture Technology
   isGestureCameraActive: false,
+  isSyntheticCameraActive: false,
   cameraPermissionState: 'idle',
+  cameraErrorMessage: null,
   gestureDetected: null,
   gestureConfidence: 0,
   setGestureCameraActive: (active) => set({ isGestureCameraActive: active }),
+  setSyntheticCameraActive: (active) => set({ isSyntheticCameraActive: active }),
   setCameraPermissionState: (status) => set({ cameraPermissionState: status }),
+  setCameraErrorMessage: (msg) => set({ cameraErrorMessage: msg }),
   setGestureDetected: (gesture, confidence = 1.0) =>
     set({ gestureDetected: gesture, gestureConfidence: confidence }),
 

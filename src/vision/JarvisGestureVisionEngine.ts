@@ -43,28 +43,25 @@ class JarvisGestureVisionEngine {
   // Viewfinder draw callback for UI canvas
   private onFrameCallbacks: Set<(result: GestureTrackingResult, video: HTMLVideoElement) => void> = new Set();
 
+  private isSynthetic = false;
+  private syntheticTime = 0;
+  private syntheticCanvas: HTMLCanvasElement | null = null;
+  private syntheticCtx: CanvasRenderingContext2D | null = null;
+
   public async start(): Promise<boolean> {
-    if (this.isRunning && this.stream?.active) return true;
+    if (this.isRunning && (this.stream?.active || this.isSynthetic)) return true;
 
     const store = useRigStore.getState();
     store.setCameraPermissionState('requesting');
+    store.setCameraErrorMessage(null);
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('getUserMedia is not supported by this browser environment.');
-        store.setCameraPermissionState('error');
-        return false;
+        throw new Error('MediaDevices API not supported in this browser context. Please access via http://localhost:1420 or HTTPS.');
       }
 
-      // Request user media with flexible constraints
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640, min: 320 },
-          height: { ideal: 480, min: 240 },
-          facingMode: 'user',
-        },
-        audio: false,
-      });
+      this.isSynthetic = false;
+      this.stream = await this.acquireCameraStream();
 
       if (!this.videoElement) {
         this.videoElement = document.createElement('video');
@@ -72,7 +69,6 @@ class JarvisGestureVisionEngine {
         this.videoElement.setAttribute('webkit-playsinline', 'true');
         this.videoElement.muted = true;
         this.videoElement.autoplay = true;
-        // Keep in DOM with zero opacity to ensure reliable mobile/safari background playback
         this.videoElement.style.position = 'fixed';
         this.videoElement.style.top = '-9999px';
         this.videoElement.style.left = '-9999px';
@@ -97,25 +93,109 @@ class JarvisGestureVisionEngine {
 
       this.isRunning = true;
       store.setGestureCameraActive(true);
+      store.setSyntheticCameraActive(false);
       store.setCameraPermissionState('active');
+      store.setCameraErrorMessage(null);
 
       this.processLoop();
       return true;
     } catch (err: unknown) {
       console.error('Failed to initialize Jarvis Vision Camera:', err);
       const errName = (err as { name?: string })?.name;
+      const errMsg = (err as { message?: string })?.message || '';
+
+      let userFriendlyMsg = 'Unable to start camera.';
       if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
         store.setCameraPermissionState('denied');
+        userFriendlyMsg = 'Camera blocked. In Windows: Settings > Privacy > Camera > Turn ON access. In Browser: Click the lock icon in address bar to Allow.';
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+        store.setCameraPermissionState('error');
+        userFriendlyMsg = 'Camera is in use by another app (Zoom/Teams/Discord/Camera app). Close it and retry.';
+      } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+        store.setCameraPermissionState('error');
+        userFriendlyMsg = 'No physical webcam detected on this device. You can use the Demo Vision mode.';
       } else {
         store.setCameraPermissionState('error');
+        userFriendlyMsg = errMsg || 'Camera initialization error. Try Demo Vision mode.';
       }
+
+      store.setCameraErrorMessage(userFriendlyMsg);
       store.setGestureCameraActive(false);
       return false;
     }
   }
 
+  /**
+   * Multi-tier fallback for camera stream acquisition
+   */
+  private async acquireCameraStream(): Promise<MediaStream> {
+    // Tier 1: Relaxed ideal resolution
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+    } catch (err1) {
+      console.warn('Tier 1 camera acquisition failed, trying unconstrained video: true...', err1);
+    }
+
+    // Tier 2: Plain boolean constraint
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+    } catch (err2) {
+      console.warn('Tier 2 unconstrained failed, enumerating devices...', err2);
+    }
+
+    // Tier 3: Enumerating video devices directly
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+    if (videoDevices.length > 0) {
+      for (const dev of videoDevices) {
+        try {
+          return await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: dev.deviceId } },
+            audio: false,
+          });
+        } catch (e) {
+          console.warn(`Failed device ${dev.label || dev.deviceId}`, e);
+        }
+      }
+    }
+
+    throw new Error('Camera access denied or hardware unavailable.');
+  }
+
+  /**
+   * Starts Synthetic / Demo Vision Simulation mode for devices without camera access
+   */
+  public startSynthetic(): boolean {
+    this.stop();
+    this.isSynthetic = true;
+    this.isRunning = true;
+
+    if (!this.syntheticCanvas) {
+      this.syntheticCanvas = document.createElement('canvas');
+      this.syntheticCanvas.width = 280;
+      this.syntheticCanvas.height = 160;
+      this.syntheticCtx = this.syntheticCanvas.getContext('2d');
+    }
+
+    const store = useRigStore.getState();
+    store.setGestureCameraActive(true);
+    store.setSyntheticCameraActive(true);
+    store.setCameraPermissionState('active');
+    store.setCameraErrorMessage(null);
+
+    this.processSyntheticLoop();
+    return true;
+  }
+
   public stop(): void {
     this.isRunning = false;
+    this.isSynthetic = false;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -136,9 +216,84 @@ class JarvisGestureVisionEngine {
 
     const store = useRigStore.getState();
     store.setGestureCameraActive(false);
+    store.setSyntheticCameraActive(false);
     store.setCameraPermissionState('idle');
     store.setGestureDetected(null, 0);
   }
+
+  /**
+   * Continuous Synthetic Hand Simulator Loop
+   */
+  private processSyntheticLoop = (): void => {
+    if (!this.isRunning || !this.isSynthetic || !this.syntheticCanvas || !this.syntheticCtx) return;
+
+    this.syntheticTime += 0.025;
+    const t = this.syntheticTime;
+    const w = this.syntheticCanvas.width;
+    const h = this.syntheticCanvas.height;
+    const ctx = this.syntheticCtx;
+
+    // Draw dark grid cyberpunk background
+    ctx.fillStyle = '#06101e';
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle grid lines
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+
+    // Dynamic oscillating hand position
+    const cx = 0.5 + Math.sin(t * 0.8) * 0.22;
+    const cy = 0.5 + Math.cos(t * 0.6) * 0.18;
+
+    // Cycle through gestures every 5 seconds
+    const phase = Math.floor(t / 5) % 4;
+    let gesture: RecognizedGesture = 'PALM';
+    if (phase === 1) gesture = 'PINCH';
+    else if (phase === 2) gesture = 'POINT';
+    else if (phase === 3) gesture = 'SPLIT';
+
+    const landmarks: HandLandmark[] = [
+      { x: cx, y: cy, type: 'palm' },
+      { x: cx, y: cy - 0.22, type: 'middle' },
+      { x: cx - 0.14, y: cy - 0.12, type: 'thumb' },
+      { x: cx + 0.14, y: cy - 0.12, type: 'pinky' },
+      { x: cx, y: cy + 0.2, type: 'wrist' },
+      { x: cx - 0.07, y: cy - 0.19, type: 'index' },
+      { x: cx + 0.07, y: cy - 0.19, type: 'ring' },
+    ];
+
+    const result: GestureTrackingResult = {
+      gesture,
+      confidence: 0.95,
+      handX: cx,
+      handY: cy,
+      palmRadius: 0.2,
+      isPinching: gesture === 'PINCH',
+      isTwoHanded: gesture === 'SPLIT',
+      landmarks,
+      fingerCount: gesture === 'PALM' ? 5 : gesture === 'PINCH' ? 2 : gesture === 'POINT' ? 1 : 10,
+    };
+
+    useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+    this.handleGestureAction(result);
+
+    // Call registered UI viewfinder callbacks with synthetic canvas image
+    this.onFrameCallbacks.forEach((cb) => cb(result, this.syntheticCanvas as unknown as HTMLVideoElement));
+
+    this.animFrameId = requestAnimationFrame(this.processSyntheticLoop);
+  };
 
   public registerFrameCallback(cb: (result: GestureTrackingResult, video: HTMLVideoElement) => void): () => void {
     this.onFrameCallbacks.add(cb);

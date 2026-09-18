@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "npx tsx server/index.ts",
+    "dev:all": "npx tsx server/index.ts & vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "node start-desktop.js",

@@ -18,6 +18,7 @@ import { KgD6WeatherSidePanel } from './components/hud/KgD6WeatherSidePanel';
 import { JarvisGestureVoiceHUD } from './components/hud/JarvisGestureVoiceHUD';
 import { JarvisPipeSliceModal } from './components/hud/JarvisPipeSliceModal';
 import { HolographicPartInspectionModal } from './components/hud/HolographicPartInspectionModal';
+import { MidnightSettlementModal } from './components/hud/MidnightSettlementModal';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
 import {
   Compass,
@@ -38,6 +39,8 @@ import {
   Sliders,
   RotateCcw,
   Zap,
+  Calendar,
+  Database,
 } from 'lucide-react';
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
 import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
@@ -54,6 +57,7 @@ export default function App() {
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
+  const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
 
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
@@ -233,7 +237,22 @@ export default function App() {
                 </div>
               </button>
 
-              {/* Audit Report */}
+              {/* 6-Month AI Production Ledger & Midnight Settlement */}
+              <button
+                onClick={() => {
+                  setEodModalOpen(true);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-emerald-500/20 text-emerald-200 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <div className="font-bold text-[11px]">6-Month AI Production Ledger</div>
+                  <div className="text-[9px] text-emerald-400/70">180-Day Database & Midnight EOD Settlement</div>
+                </div>
+              </button>
+
+              {/* Compliance Audit Report */}
               <button
                 onClick={() => {
                   setReportModalOpen(true);
@@ -308,6 +327,20 @@ export default function App() {
           {isSplitViewActive && (
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
           )}
+        </button>
+
+        {/* Dedicated 6-MONTH AI LEDGER & MIDNIGHT SETTLEMENT Quick Button */}
+        <button
+          onClick={() => {
+            setEodModalOpen(true);
+            varunaVoice.speakCustom('Opening KG-D6 6-Month AI Production Ledger and Midnight Settlement.');
+          }}
+          className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-emerald-400/50 bg-reliance-deepnavy/95 hover:bg-emerald-950/40 text-emerald-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-cyan-glow"
+          title="Open 6-Month AI Production Ledger & 12:00 Midnight Settlement"
+        >
+          <Calendar className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+          <span>6-MO LEDGER &amp; EOD</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5" />
         </button>
       </div>
 
@@ -499,6 +532,9 @@ export default function App() {
       {/* ================= COMPLIANCE AUDIT REPORT MODAL ================= */}
       <ComplianceReportModal />
 
+      {/* ================= 6-MONTH AI PRODUCTION LEDGER & MIDNIGHT SETTLEMENT MODAL ================= */}
+      <MidnightSettlementModal />
+
       {/* ================= KG-D6 LIVE WEATHER & MARINE FORECAST SIDE PANEL ================= */}
       <KgD6WeatherSidePanel />
 
@@ -546,12 +582,15 @@ export default function App() {
             TARGET: <strong className="text-reliance-cyan">{selectedAssetId || 'KG-D6 MAIN'}</strong>
           </span>
           <span>
-            FREQ: <strong className="text-emerald-400">10.0 Hz</strong>
+            FREQ: <strong className="text-emerald-400">50.0 Hz (20ms)</strong>
           </span>
           <span>
             FPS: <strong className={fps >= 55 ? 'text-emerald-400' : 'text-amber-400'}>{fps}.0</strong>
           </span>
-          <span className="hidden sm:inline">
+          <span className="hidden sm:inline text-emerald-300">
+            6-MO DB: <strong className="text-emerald-400">180 DAYS SYNCED</strong>
+          </span>
+          <span className="hidden md:inline">
             GPU RASTER: <strong className="text-white">HARDWARE ACCEL</strong>
           </span>
         </div>

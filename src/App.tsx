@@ -125,59 +125,70 @@ export default function App() {
 
       {/* ================= TOP TACTICAL HUD (CLEAN & CONSOLIDATED) ================= */}
       <header className="absolute top-0 left-0 right-0 z-40 h-14 px-4 flex items-center justify-between pointer-events-none">
-        {/* Far Left: Consolidated SYSTEM TOOLS / COMMAND Dropdown Menu */}
-        <div className="relative pointer-events-auto">
-          <button
-            onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-reliance-cyan transition-all shadow-cyan-glow cursor-pointer"
-          >
-            <div className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
-            <span className="font-extrabold tracking-wider text-xs uppercase font-mono">
-              SYSTEM TOOLS
-            </span>
-            <ChevronDown
-              className={`w-3.5 h-3.5 text-reliance-cyan transition-transform duration-200 ${
-                isToolsDropdownOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {/* System Tools Consolidated Dropdown Menu */}
-          {isToolsDropdownOpen && (
-            <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-2.5 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1 flex justify-between items-center">
-                <span>TACTICAL OPERATIONS</span>
-                <span className="text-reliance-cyan font-extrabold">[CMD]</span>
-              </div>
-
-              {/* Command Dock Toggle */}
-              <button
-                onClick={() => {
-                  toggleCommandDock();
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-reliance-blue/30 text-white flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Zap className="w-4 h-4 text-reliance-cyan" />
-                <div>
-                  <div className="font-bold text-[11px]">Command Dock</div>
-                  <div className="text-[9px] text-reliance-textMuted">Open main technical tools & diagnostics</div>
-                </div>
-              </button>
-
-              {/* Jarvis Exploded View */}
-              <button
-                onClick={() => {
-                  setSplitViewActive(!isSplitViewActive);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
-                  isSplitViewActive
-                    ? 'bg-amber-500/20 text-amber-200 font-bold'
-                    : 'hover:bg-white/10 text-white'
+        {/* Far Left: Consolidated SYSTEM TOOLS / COMMAND Dropdown Menu & Quick EXPLODED VIEW */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsToolsDropdownOpen(!isToolsDropdownOpen);
+                setIsViewDropdownOpen(false);
+                setIsCommsDropdownOpen(false);
+              }}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-reliance-cyan transition-all shadow-cyan-glow cursor-pointer"
+            >
+              <div className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
+              <span className="font-extrabold tracking-wider text-xs uppercase font-mono">
+                SYSTEM TOOLS
+              </span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-reliance-cyan transition-transform duration-200 ${
+                  isToolsDropdownOpen ? 'rotate-180' : ''
                 }`}
-              >
-                <Layers className="w-4 h-4 text-amber-400" />
+              />
+            </button>
+
+            {/* System Tools Consolidated Dropdown Menu */}
+            {isToolsDropdownOpen && (
+              <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-2.5 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1 flex justify-between items-center">
+                  <span>TACTICAL OPERATIONS</span>
+                  <span className="text-reliance-cyan font-extrabold">[CMD]</span>
+                </div>
+
+                {/* Command Dock Toggle */}
+                <button
+                  onClick={() => {
+                    toggleCommandDock();
+                    setIsToolsDropdownOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-reliance-blue/30 text-white flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Zap className="w-4 h-4 text-reliance-cyan" />
+                  <div>
+                    <div className="font-bold text-[11px]">Command Dock</div>
+                    <div className="text-[9px] text-reliance-textMuted">Open main technical tools & diagnostics</div>
+                  </div>
+                </button>
+
+                {/* Jarvis Exploded View */}
+                <button
+                  onClick={() => {
+                    const nextState = !isSplitViewActive;
+                    setSplitViewActive(nextState);
+                    setIsToolsDropdownOpen(false);
+                    if (nextState) {
+                      varunaVoice.speakCustom('Exploded modular view engaged.');
+                    } else {
+                      varunaVoice.speakCustom('Subsea rig assembly restored.');
+                    }
+                  }}
+                  className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
+                    isSplitViewActive
+                      ? 'bg-amber-500/20 text-amber-200 font-bold'
+                      : 'hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-amber-400" />
                 <div>
                   <div className="font-bold text-[11px]">
                     {isSplitViewActive ? 'Assemble Subsea Rig' : 'Jarvis Split Exploded View'}
@@ -273,6 +284,32 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Dedicated EXPLODED VIEW Quick Button */}
+        <button
+          onClick={() => {
+            const nextState = !isSplitViewActive;
+            setSplitViewActive(nextState);
+            if (nextState) {
+              varunaVoice.speakCustom('Exploded modular view engaged. All subsea and topside subsystems decoupled.');
+            } else {
+              varunaVoice.speakCustom('Subsea rig assembly restored.');
+            }
+          }}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border transition-all cursor-pointer font-mono text-xs font-extrabold tracking-wider uppercase ${
+            isSplitViewActive
+              ? 'border-amber-400 bg-amber-500/25 text-amber-300 shadow-amber-glow animate-pulse'
+              : 'border-reliance-cyan/40 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-white hover:text-amber-300 hover:border-amber-400/60 shadow-cyan-glow'
+          }`}
+          title="Toggle Exploded View to isolate and access all rig subsystems"
+        >
+          <Layers className={`w-3.5 h-3.5 ${isSplitViewActive ? 'text-amber-300' : 'text-amber-400'}`} />
+          <span>{isSplitViewActive ? 'ASSEMBLE RIG' : 'EXPLODED VIEW'}</span>
+          {isSplitViewActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
+          )}
+        </button>
+      </div>
 
         {/* Center Top: Geolocation Coordinates & Active Feed Badge */}
         <div className="hidden lg:flex items-center gap-3 px-4 py-1.5 rounded-full glass-panel border border-reliance-cyan/30 bg-reliance-deepnavy/90 text-xs font-mono shadow-dock pointer-events-auto">
@@ -474,8 +511,8 @@ export default function App() {
       {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
       <HolographicPartInspectionModal />
 
-      {/* ================= LEFT SIDEBAR FLOATING PANELS ================= */}
-      <div className="absolute top-16 bottom-10 left-4 z-40 w-76 sm:w-88 flex flex-col gap-3 overflow-y-auto pointer-events-auto pr-1 scrollbar-none">
+      {/* ================= LEFT SIDEBAR FLOATING PANELS (LEFT-MIDDLE POSITION WITH >0.5 INCH GAP) ================= */}
+      <div className="absolute top-[108px] bottom-10 left-4 z-30 w-76 sm:w-88 flex flex-col gap-3 overflow-y-auto pointer-events-auto pr-1 scrollbar-none">
         {/* Panel 1: Environmental Conditions & Tides */}
         <CurrentControlWidget />
 

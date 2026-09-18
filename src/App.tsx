@@ -511,17 +511,21 @@ export default function App() {
       {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
       <HolographicPartInspectionModal />
 
-      {/* ================= LEFT SIDEBAR FLOATING PANELS (LEFT-MIDDLE POSITION WITH >0.5 INCH GAP) ================= */}
-      <div className="absolute top-[108px] bottom-10 left-4 z-30 w-76 sm:w-88 flex flex-col gap-3 overflow-y-auto pointer-events-auto pr-1 scrollbar-none">
-        {/* Panel 1: Environmental Conditions & Tides */}
-        <CurrentControlWidget />
+      {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENTAL TAB & COLOR-CODE LEGEND ================= */}
+      {/* Positioned at bottom-left so the entire top-left under SYSTEM TOOLS is 100% clear and unobstructed */}
+      <div className="absolute bottom-10 left-4 z-30 flex items-end gap-3 pointer-events-auto max-w-[calc(100vw-360px)]">
+        {/* Left Side of Cluster: Environmental Conditions & Tides and Critical Anomalies */}
+        <div className="w-76 sm:w-84 flex flex-col gap-2 max-h-[calc(100vh-140px)] overflow-y-auto scrollbar-none">
+          {/* Panel 1: Environmental Conditions & Tides (Bottom Left) */}
+          <CurrentControlWidget />
 
-        {/* Panel 2: Critical Anomalies Monitor */}
-        <CriticalAnomaliesMonitor />
+          {/* Panel 2: Critical Anomalies Monitor */}
+          <CriticalAnomaliesMonitor />
+        </div>
+
+        {/* Right Side of Cluster: Color-Code Segregation Legend (Placed on the right side of Environmental Tab) */}
+        <ColorCodeLegend />
       </div>
-
-      {/* ================= COLOR-CODE SEGREGATION LEGEND ================= */}
-      <ColorCodeLegend />
 
       {/* ================= RIGHT SIDEBAR: SYSTEM TELEMETRY & PRODUCTION DATA ================= */}
       <TelemetryDrawer />

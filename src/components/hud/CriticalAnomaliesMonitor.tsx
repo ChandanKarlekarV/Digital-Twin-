@@ -19,6 +19,7 @@ import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 export const CriticalAnomaliesMonitor: React.FC = () => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
   const incidentPhase = useRigStore((s) => s.incidentPhase);
   const setEmergencyScenario = useRigStore((s) => s.setEmergencyScenario);
@@ -66,21 +67,24 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
   };
 
   return (
-    <div className="w-full glass-panel border border-rose-500/40 bg-rose-950/20 rounded-2xl p-3 shadow-red-glow backdrop-blur-xl text-white font-sans transition-all">
+    <div className="w-full glass-panel border border-rose-500/40 bg-rose-950/20 rounded-2xl p-2.5 shadow-red-glow backdrop-blur-xl text-white font-sans transition-all">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-500/30">
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center justify-between ${isExpanded ? 'pb-2 mb-2 border-b border-rose-500/30' : ''}`}>
+        <div
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2 cursor-pointer flex-1"
+        >
           <div className="p-1 rounded-lg bg-rose-500/20 text-rose-400 animate-pulse">
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div>
-            <h3 className="text-[11px] font-mono font-extrabold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
-              <span>CRITICAL ANOMALIES MONITOR</span>
+            <h3 className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
+              <span>CRITICAL ANOMALIES</span>
               {isIncidentActive && (
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
               )}
             </h3>
-            <div className="text-[9px] font-mono text-rose-200/70">
+            <div className="text-[8px] font-mono text-rose-200/70">
               {isIncidentActive ? (
                 <span className="text-rose-300 font-bold">
                   ACTIVE: {currentMeta?.shortLabel} (PHASE {incidentPhase}/4)
@@ -92,18 +96,27 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={toggleIncidentModal}
-          className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/40 text-[10px] font-mono text-rose-200 transition-all cursor-pointer flex items-center gap-1"
-          title="Open Full Incident Stepper Suite"
-        >
-          <Sliders className="w-3 h-3" />
-          <span>SUITE</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleIncidentModal}
+            className="px-1.5 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/40 text-[9px] font-mono text-rose-200 transition-all cursor-pointer flex items-center gap-1"
+            title="Open Full Incident Stepper Suite"
+          >
+            <Sliders className="w-2.5 h-2.5" />
+            <span>SUITE</span>
+          </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 rounded hover:bg-white/10 text-rose-300 cursor-pointer transition-all"
+          >
+            <RotateCcw className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* 3 Quick Alert Items */}
-      <div className="space-y-1.5">
+      {isExpanded && (
+        <div className="space-y-1.5 animate-in fade-in duration-150">
         {quickAlertItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -136,19 +149,20 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
             </button>
           );
         })}
-      </div>
 
-      {/* Action Footer if Active */}
-      {isIncidentActive && (
-        <div className="mt-2 pt-2 border-t border-rose-500/30 flex items-center gap-1.5">
-          <button
-            onClick={() => setEmergencyScenario('none')}
-            className="w-full py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-red-glow"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>RESET ESD TRIP</span>
-          </button>
-        </div>
+        {/* Action Footer if Active */}
+        {isIncidentActive && (
+          <div className="mt-2 pt-2 border-t border-rose-500/30 flex items-center gap-1.5">
+            <button
+              onClick={() => setEmergencyScenario('none')}
+              className="w-full py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-red-glow"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>RESET ESD TRIP</span>
+            </button>
+          </div>
+        )}
+      </div>
       )}
     </div>
   );

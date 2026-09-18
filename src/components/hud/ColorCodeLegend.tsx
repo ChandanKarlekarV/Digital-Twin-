@@ -38,8 +38,8 @@ export const ColorCodeLegend: React.FC = () => {
   };
 
   return (
-    <div className="hidden 2xl:block absolute bottom-12 left-[380px] z-30 font-mono text-xs animate-in fade-in duration-200">
-      <div className="w-68 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/92 rounded-2xl p-2.5 shadow-dock backdrop-blur-xl text-white">
+    <div className="hidden md:block font-mono text-xs animate-in fade-in duration-200 shrink-0">
+      <div className="w-56 lg:w-64 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/92 rounded-2xl p-2.5 shadow-dock backdrop-blur-xl text-white">
         {/* Header */}
         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-reliance-cyan/20">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-reliance-cyan uppercase tracking-wider">

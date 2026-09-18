@@ -95,7 +95,7 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           targetBounds: [14, 8, 14] as [number, number, number],
           camDistance: 16,
           label: 'CAP 437 HELIDECK SECTION',
-          wireColor: '#FFFFFF',
+          wireColor: '#00FF66',
         };
       case 'crane1':
         return {
@@ -103,8 +103,8 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           camPos: new THREE.Vector3(-28, 26, 12),
           targetBounds: [12, 18, 12] as [number, number, number],
           camDistance: 18,
-          label: 'PORT CRANE 1 PEDESTAL SECTION',
-          wireColor: '#FF6D00',
+          label: 'PORT CRANE 1 (LATTICE BOOM) SECTION',
+          wireColor: '#FF9900',
         };
       case 'crane2':
         return {
@@ -112,8 +112,8 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           camPos: new THREE.Vector3(28, 26, 12),
           targetBounds: [12, 18, 12] as [number, number, number],
           camDistance: 18,
-          label: 'STARBOARD CRANE 2 SECTION',
-          wireColor: '#FF9100',
+          label: 'STARBOARD CRANE 2 (PEDESTAL) SECTION',
+          wireColor: '#FF007F',
         };
       case 'upper_rig':
         return {
@@ -226,9 +226,11 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
             const colors = new Float32Array(count * 3);
 
             const cDimmed = new THREE.Color('#031526');
-            const cHelipadWhiteGlow = new THREE.Color('#FFFFFF');
-            const cCraneOrange = new THREE.Color('#FF6D00');
-            const cDerrickCyan = new THREE.Color('#00F5D4');
+            const cHelipadGreen = new THREE.Color('#00FF66');      // HELIPAD: Electric Green
+            const cCrane1Amber = new THREE.Color('#FF9900');       // CRANE 1: Amber Orange
+            const cCrane2Pink = new THREE.Color('#FF007F');        // CRANE 2: Fuchsia Pink
+            const cAccommodationViolet = new THREE.Color('#9933FF'); // ACCOMMODATION: Violet
+            const cDerrickCyan = new THREE.Color('#00FFFF');       // PROCESS / DERRICK: Bright Cyan
             const cMotorSky = new THREE.Color('#38BDF8');
 
             for (let i = 0; i < count; i += 3) {
@@ -244,20 +246,20 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
 
               let chosen = cDimmed;
 
-              if (type === 'helipad' && cy > 0.30 && distHelipad < 0.25) {
-                // VIBRANT PURE WHITE GLOW FOR HELIPAD ONLY
-                chosen = cHelipadWhiteGlow;
-              } else if (type === 'crane1' && cy > 0.18 && (cx < -0.10 || cz < -0.12)) {
-                // RADIANT ORANGE FOR CRANE 1
-                chosen = cCraneOrange;
-              } else if (type === 'crane2' && cy > 0.18 && (cx > 0.10 || cz > 0.12)) {
-                // RADIANT ORANGE FOR CRANE 2
-                chosen = cCraneOrange;
+              if (type === 'helipad' && cy > 0.28 && distHelipad < 0.28) {
+                // HELIPAD: Electric Green
+                chosen = cHelipadGreen;
+              } else if (type === 'crane1' && cy > 0.18 && (cx < -0.09 || (cz < -0.10 && cx < 0.05))) {
+                // CRANE 1 (LATTICE BOOM): Amber Orange
+                chosen = cCrane1Amber;
+              } else if (type === 'crane2' && cy > 0.18 && cx > 0.09 && cz < 0.15) {
+                // CRANE 2 (PEDESTAL): Fuchsia Pink
+                chosen = cCrane2Pink;
               } else if (type === 'upper_rig' && cy > 0.10 && distXZ < 0.22) {
-                // EMERALD CYAN FOR UPPER RIG DERRICK
+                // DERRICK MAST / PROCESS: Bright Cyan
                 chosen = cDerrickCyan;
               } else if (type === 'motor' && cy > 0.08 && cy < 0.28 && distXZ < 0.14) {
-                // SKY BLUE FOR TOP DRIVE MOTOR
+                // TOP DRIVE MOTOR
                 chosen = cMotorSky;
               }
 

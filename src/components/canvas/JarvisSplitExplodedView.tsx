@@ -28,41 +28,41 @@ interface SplitModuleDef {
 }
 
 const SPLIT_MODULES: SplitModuleDef[] = [
-  // 1. Upper Rig & Lattice Derrick
+  // 1. Upper Rig & Accommodation Quarters
   {
     id: 'upper_rig',
-    name: 'Topside Derrick Mast & Quarters',
+    name: 'Topside Derrick Mast & Accommodation',
     category: 'TOPSIDE STRUCTURE',
     offsetPos: [0, 24, 4],
     metrics: 'Load: 18,400 MT • Height: +65m',
-    color: '#00F5D4',
+    color: '#9933FF',
   },
-  // 2. Helipad
+  // 2. Helipad (Electric Green)
   {
     id: 'helipad',
     name: 'CAP 437 Offshore Helideck',
     category: 'AVIATION DECK',
     offsetPos: [18, 16, 14],
     metrics: 'Sikorsky S-92 • 12.8 MT SWL',
-    color: '#FACC15',
+    color: '#00FF66',
   },
-  // 3. Heavy Lift Crane 1
+  // 3. Heavy Lift Crane 1 (Amber Orange)
   {
     id: 'crane1',
-    name: 'Heavy-Lift Pedestal Crane 1 (Port)',
+    name: 'Crane 1 (Lattice Boom Port)',
     category: 'DECK CRANE',
     offsetPos: [-18, 15, 8],
     metrics: '65 MT SWL • Boom: 42m',
-    color: '#FF6D00',
+    color: '#FF9900',
   },
-  // 4. Auxiliary Crane 2
+  // 4. Auxiliary Crane 2 (Fuchsia Pink)
   {
     id: 'crane2',
-    name: 'Auxiliary Deck Crane 2 (Starboard)',
+    name: 'Crane 2 (Pedestal Starboard)',
     category: 'DECK CRANE',
     offsetPos: [18, 15, -8],
     metrics: '30 MT SWL • Boom: 28m',
-    color: '#FF9100',
+    color: '#FF007F',
   },
   // 5. Motor & Top Drive Skid
   {

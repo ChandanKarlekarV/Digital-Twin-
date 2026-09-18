@@ -122,22 +122,22 @@ export const CurrentControlWidget: React.FC = () => {
   };
 
   return (
-    <div className="absolute bottom-12 left-4 z-40 w-76 sm:w-88 glass-panel border border-reliance-cyan/35 bg-reliance-deepnavy/92 rounded-2xl shadow-dock backdrop-blur-xl text-white font-sans transition-all">
+    <div className="w-full glass-panel border border-reliance-cyan/35 bg-reliance-deepnavy/92 rounded-2xl shadow-dock backdrop-blur-xl text-white font-sans transition-all">
       {/* Header Bar */}
       <div className="flex items-center justify-between p-3 border-b border-reliance-cyan/20">
         <div className="flex items-center gap-2">
           <Waves className="w-4 h-4 text-reliance-cyan animate-pulse" />
           <div>
-            <h3 className="text-xs font-bold font-mono tracking-wider uppercase text-reliance-cyan flex items-center gap-1.5">
-              <span>WATER STREAM & TIDES</span>
+            <h3 className="text-[11px] font-bold font-mono tracking-wider uppercase text-reliance-cyan flex items-center gap-1.5">
+              <span>ENVIRONMENTAL CONDITIONS & TIDES</span>
             </h3>
-            <div className="text-[10px] font-mono text-reliance-textMuted flex items-center gap-2">
+            <div className="text-[9px] font-mono text-reliance-textMuted flex items-center gap-2">
               <span>
-                FLOW: <strong className="text-white">{currentDirectionLabel}</strong>
+                WIND: <strong className="text-white">{currentDirectionLabel}</strong>
               </span>
               <span>•</span>
               <span>
-                SPD: <strong className="text-emerald-400">{currentSpeedKnots.toFixed(1)} kt</strong>
+                FLOW: <strong className="text-emerald-400">{currentSpeedKnots.toFixed(1)} kt</strong>
               </span>
             </div>
           </div>

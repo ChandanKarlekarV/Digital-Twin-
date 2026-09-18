@@ -100,9 +100,9 @@ void main() {
   fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
   fresnel = pow(fresnel, 2.5) * 0.75 + 0.15;
 
-  // 2. Subsurface Scattering / Transparent Water Color
+  // 2. Subsurface Scattering / Single-Tone Dark Navy Water Color
   float heightFactor = clamp((vWaveHeight + 1.2) / 2.4, 0.0, 1.0);
-  vec3 waterBaseColor = mix(uDeepColor, uShallowColor, heightFactor);
+  vec3 waterBaseColor = mix(uDeepColor, uShallowColor, heightFactor * 0.35);
 
   // 3. Sun Specular Highlights
   vec3 lightDir = normalize(uSunDirection);
@@ -111,15 +111,15 @@ void main() {
   float specular = pow(NdotH, 96.0) * 1.5;
   vec3 specularColor = uSunColor * specular;
 
-  // 4. Subtle Crest Foam
-  float foamFactor = smoothstep(0.9, 1.5, vWaveHeight);
-  vec3 finalColor = mix(waterBaseColor, uFoamColor, foamFactor * 0.5);
+  // 4. Subtle Crest Wave Highlights
+  float foamFactor = smoothstep(0.95, 1.5, vWaveHeight);
+  vec3 finalColor = mix(waterBaseColor, uFoamColor, foamFactor * 0.3);
 
-  finalColor = mix(finalColor, uShallowColor * 1.4, fresnel * 0.4);
+  finalColor = mix(finalColor, uShallowColor * 1.1, fresnel * 0.3);
   finalColor += specularColor;
 
-  // Transparent Water: 0.52 opacity allows seeing submerged risers and columns clearly!
-  float opacity = uIsUnderwater > 0.5 ? 0.48 : 0.55;
+  // Transparent Water: Allows seeing submerged drill string and columns seamlessly in unified dark navy
+  float opacity = uIsUnderwater > 0.5 ? 0.40 : 0.45;
   gl_FragColor = vec4(finalColor, opacity);
 }
 `;
@@ -138,9 +138,9 @@ export function createOceanMaterial(): THREE.ShaderMaterial {
       uWaveB: { value: new THREE.Vector4(0.8, 0.6, 0.15, 28.0) },
       uWaveC: { value: new THREE.Vector4(-0.4, 0.9, 0.10, 16.0) },
       uWaveD: { value: new THREE.Vector4(0.3, -0.95, 0.06, 9.0) },
-      uDeepColor: { value: new THREE.Color('#002B49') },
-      uShallowColor: { value: new THREE.Color('#0077B6') },
-      uFoamColor: { value: new THREE.Color('#E0F7FA') },
+      uDeepColor: { value: new THREE.Color('#010C1E') },
+      uShallowColor: { value: new THREE.Color('#021838') },
+      uFoamColor: { value: new THREE.Color('#00E5FF') },
       uSunDirection: { value: new THREE.Vector3(60, 100, 50).normalize() },
       uSunColor: { value: new THREE.Color('#FFFFFF') },
       uCameraPosition: { value: new THREE.Vector3(0, 0, 0) },

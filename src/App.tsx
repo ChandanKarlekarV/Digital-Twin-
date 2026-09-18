@@ -8,6 +8,8 @@ import { PhysicsAuditModal } from './components/hud/PhysicsAuditModal';
 import { EmergencyIncidentPanel } from './components/hud/EmergencyIncidentPanel';
 import { VarunaVoiceIndicator } from './components/hud/VarunaVoiceIndicator';
 import { CurrentControlWidget } from './components/hud/CurrentControlWidget';
+import { CriticalAnomaliesMonitor } from './components/hud/CriticalAnomaliesMonitor';
+import { ColorCodeLegend } from './components/hud/ColorCodeLegend';
 import { IncidentControlManager } from './components/hud/IncidentControlManager';
 import { ElevenLabsConfigModal } from './components/hud/ElevenLabsConfigModal';
 import { HardwareLinkModal } from './components/hud/HardwareLinkModal';
@@ -31,8 +33,14 @@ import {
   Layers,
   Scissors,
   Video,
+  Volume2,
+  Mic,
+  Sliders,
+  RotateCcw,
+  Zap,
 } from 'lucide-react';
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
+import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
 
 export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
@@ -51,15 +59,20 @@ export default function App() {
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
   const isPipeSliced = useRigStore((s) => s.isPipeSliced);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
-  const isGestureCameraActive = useRigStore((s) => s.isGestureCameraActive);
+  const isVoiceCommanderActive = useRigStore((s) => s.isVoiceCommanderActive);
 
   const customObjFileName = useRigStore((s) => s.customObjFileName);
   const setCustomObjUrl = useRigStore((s) => s.setCustomObjUrl);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [fps, setFps] = useState<number>(60);
+  const [fps, setFps] = useState<number>(76);
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
+
+  // Dropdown States for Consolidated Top Navigation Bar
+  const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [isCommsDropdownOpen, setIsCommsDropdownOpen] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,163 +123,324 @@ export default function App() {
         onChange={handleFileUpload}
       />
 
-      {/* ================= TOP TACTICAL HUD ================= */}
+      {/* ================= TOP TACTICAL HUD (CLEAN & CONSOLIDATED) ================= */}
       <header className="absolute top-0 left-0 right-0 z-40 h-14 px-4 flex items-center justify-between pointer-events-none">
-        {/* Left: Command Dock Pill Trigger & Quick Action Modules */}
-        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
+        {/* Far Left: Consolidated SYSTEM TOOLS / COMMAND Dropdown Menu */}
+        <div className="relative pointer-events-auto">
           <button
-            onClick={toggleCommandDock}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/90 hover:bg-reliance-navy/90 transition-all shadow-cyan-glow cursor-pointer"
+            onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-reliance-cyan transition-all shadow-cyan-glow cursor-pointer"
           >
             <div className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
-            <span className="font-extrabold tracking-wider text-xs uppercase text-reliance-cyan">
-              COMMAND
+            <span className="font-extrabold tracking-wider text-xs uppercase font-mono">
+              SYSTEM TOOLS
             </span>
             <ChevronDown
               className={`w-3.5 h-3.5 text-reliance-cyan transition-transform duration-200 ${
-                isCommandDockOpen ? 'rotate-180' : ''
+                isToolsDropdownOpen ? 'rotate-180' : ''
               }`}
             />
           </button>
 
-          {/* Quick Anomaly Simulator Button */}
-          <button
-            onClick={toggleIncidentModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-reliance-red/40 text-[11px] font-mono text-rose-300 hover:bg-reliance-red/20 transition-all cursor-pointer shadow-red-glow"
-            title="Open Subsea Anomaly & Incident Suite (Pipe Choke, Drill Damage, Oil Overload, Squall)"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">ANOMALIES</span>
-          </button>
+          {/* System Tools Consolidated Dropdown Menu */}
+          {isToolsDropdownOpen && (
+            <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-2.5 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1 flex justify-between items-center">
+                <span>TACTICAL OPERATIONS</span>
+                <span className="text-reliance-cyan font-extrabold">[CMD]</span>
+              </div>
 
-          {/* Quick KG-D6 Weather Button */}
-          <button
-            onClick={toggleWeatherPanel}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-amber-400/40 text-[11px] font-mono text-amber-300 hover:bg-amber-400/20 transition-all cursor-pointer shadow-amber-glow"
-            title="Open KG-D6 Real-Time Weather & Marine Metocean Forecast"
-          >
-            <Wind className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">WEATHER</span>
-          </button>
+              {/* Command Dock Toggle */}
+              <button
+                onClick={() => {
+                  toggleCommandDock();
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-reliance-blue/30 text-white flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Zap className="w-4 h-4 text-reliance-cyan" />
+                <div>
+                  <div className="font-bold text-[11px]">Command Dock</div>
+                  <div className="text-[9px] text-reliance-textMuted">Open main technical tools & diagnostics</div>
+                </div>
+              </button>
 
-          {/* Quick Jarvis Split / Explode View Button */}
-          <button
-            onClick={() => setSplitViewActive(!isSplitViewActive)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border text-[11px] font-mono transition-all cursor-pointer ${
-              isSplitViewActive
-                ? 'bg-amber-500/30 border-amber-400 text-amber-200 shadow-amber-glow font-bold'
-                : 'border-amber-400/40 text-amber-300 hover:bg-amber-500/20'
-            }`}
-            title="Toggle Jarvis Holographic Exploded Split View"
-          >
-            <Layers className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden lg:inline">{isSplitViewActive ? 'ASSEMBLE' : 'JARVIS SPLIT'}</span>
-          </button>
+              {/* Jarvis Exploded View */}
+              <button
+                onClick={() => {
+                  setSplitViewActive(!isSplitViewActive);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
+                  isSplitViewActive
+                    ? 'bg-amber-500/20 text-amber-200 font-bold'
+                    : 'hover:bg-white/10 text-white'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-amber-400" />
+                <div>
+                  <div className="font-bold text-[11px]">
+                    {isSplitViewActive ? 'Assemble Subsea Rig' : 'Jarvis Split Exploded View'}
+                  </div>
+                  <div className="text-[9px] text-reliance-textMuted">Iron Man piece-by-piece disassembly</div>
+                </div>
+              </button>
 
-          {/* Quick Pipe 1 Slice Button */}
-          <button
-            onClick={() => setPipeSliced(!isPipeSliced)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border text-[11px] font-mono transition-all cursor-pointer ${
-              isPipeSliced
-                ? 'bg-reliance-cyan/30 border-reliance-cyan text-white shadow-cyan-glow font-bold'
-                : 'border-reliance-cyan/40 text-reliance-cyan hover:bg-reliance-blue/30'
-            }`}
-            title="Toggle Pipe 1 Axial Cross-Section Slice"
-          >
-            <Scissors className="w-3.5 h-3.5 text-reliance-cyan" />
-            <span className="hidden lg:inline">{isPipeSliced ? 'CLOSE SLICE' : 'SLICE PIPE 1'}</span>
-          </button>
+              {/* Slice Pipe 1 */}
+              <button
+                onClick={() => {
+                  setPipeSliced(!isPipeSliced);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
+                  isPipeSliced
+                    ? 'bg-reliance-cyan/20 text-reliance-cyan font-bold'
+                    : 'hover:bg-white/10 text-white'
+                }`}
+              >
+                <Scissors className="w-4 h-4 text-reliance-cyan" />
+                <div>
+                  <div className="font-bold text-[11px]">
+                    {isPipeSliced ? 'Close Cross-Section' : 'Slice Pipe 1 Cross-Section'}
+                  </div>
+                  <div className="text-[9px] text-reliance-textMuted">Expose internal multiphase fluid core</div>
+                </div>
+              </button>
 
-          {/* Quick ElevenLabs Voice Button */}
-          <button
-            onClick={() => setVoiceModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-purple-400/40 text-[11px] font-mono text-purple-300 hover:bg-purple-500/20 transition-all cursor-pointer"
-            title="Configure ElevenLabs Voice Synthesizer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span className="hidden md:inline">VOICE</span>
-          </button>
+              {/* Hardware Gateway */}
+              <button
+                onClick={() => {
+                  setHardwareModalOpen(true);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-emerald-500/20 text-emerald-200 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Cpu className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <div className="font-bold text-[11px]">Hardware SCADA Gateway</div>
+                  <div className="text-[9px] text-emerald-400/70">Serial USB / Modbus / Live WebSocket</div>
+                </div>
+              </button>
 
-          {/* Quick Hardware HAL Bridge Button */}
-          <button
-            onClick={() => setHardwareModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-emerald-400/40 text-[11px] font-mono text-emerald-300 hover:bg-emerald-500/20 transition-all cursor-pointer"
-            title="Configure Hardware Serial / SCADA Gateway"
-          >
-            <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden md:inline">HARDWARE</span>
-          </button>
+              {/* Audit Report */}
+              <button
+                onClick={() => {
+                  setReportModalOpen(true);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-white/10 text-white flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <FileCheck className="w-4 h-4 text-reliance-cyan" />
+                <div>
+                  <div className="font-bold text-[11px]">Compliance Audit Report</div>
+                  <div className="text-[9px] text-reliance-textMuted">Export DGH / ISO verification PDF & CSV</div>
+                </div>
+              </button>
 
-          {/* Quick Compliance Report Button */}
-          <button
-            onClick={() => setReportModalOpen(true)}
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg glass-panel border border-white/20 text-[11px] font-mono text-white hover:bg-white/10 transition-all cursor-pointer"
-            title="Export Official PDF/CSV Compliance Audit Report"
-          >
-            <FileCheck className="w-3.5 h-3.5 text-reliance-cyan" />
-            <span>AUDIT REPORT</span>
-          </button>
+              {/* Weather Panel */}
+              <button
+                onClick={() => {
+                  toggleWeatherPanel();
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-amber-500/20 text-amber-200 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Wind className="w-4 h-4 text-amber-400" />
+                <div>
+                  <div className="font-bold text-[11px]">KG-D6 Weather & Metocean</div>
+                  <div className="text-[9px] text-amber-400/70">Bay of Bengal marine radar forecast</div>
+                </div>
+              </button>
+
+              {/* Custom Model File Load */}
+              <div className="border-t border-white/10 pt-1 mt-1">
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setIsToolsDropdownOpen(false);
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/10 text-white/80 flex items-center justify-between text-[10px]"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-reliance-cyan" />
+                    <span>Import Custom .OBJ Rig</span>
+                  </span>
+                  <span className="text-[8px] text-reliance-textMuted truncate max-w-[80px]">
+                    {customObjFileName || 'untitled.obj'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Center: Live Coordinates, Depth & Active Camera */}
-        <div className="hidden xl:flex items-center gap-4 px-5 py-2 rounded-full glass-panel border border-reliance-cyan/25 text-xs font-mono">
-          <button
-            onClick={toggleWeatherPanel}
-            className="flex items-center gap-1.5 text-amber-300 hover:text-white transition-all cursor-pointer"
-            title="Click to Open KG-D6 Real-Time Weather & Marine Forecast"
-          >
+        {/* Center Top: Geolocation Coordinates & Active Feed Badge */}
+        <div className="hidden lg:flex items-center gap-3 px-4 py-1.5 rounded-full glass-panel border border-reliance-cyan/30 bg-reliance-deepnavy/90 text-xs font-mono shadow-dock pointer-events-auto">
+          <div className="flex items-center gap-1.5 text-amber-300 font-bold">
             <Compass className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-bold">16°18'00"N 82°20'00"E</span>
-          </button>
-          <div className="w-px h-3.5 bg-white/20" />
-          <div className="text-reliance-textMuted">
-            SEABED DEPTH: <span className="text-white font-bold">-2,040 m</span>
+            <span>16°19'00"N 82°20'00"E</span>
           </div>
-          <div className="w-px h-3.5 bg-white/20" />
-          <div className="flex items-center gap-2">
-            <Eye className="w-3.5 h-3.5 text-reliance-cyan" />
-            <span className="text-reliance-cyan uppercase font-bold text-[11px]">
-              {cameraViewMode.toUpperCase()} VIEW
-            </span>
+          <div className="w-px h-3 bg-white/20" />
+          <div className="flex items-center gap-1.5 text-reliance-cyan font-bold uppercase tracking-wider text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span>KG-D6 SUBSEA MANIFOLD | ACTIVE FEED</span>
+          </div>
+          <div className="w-px h-3 bg-white/20" />
+          <div className="text-reliance-textMuted text-[10px]">
+            SEABED DEPTH: <strong className="text-white">-2,040 m</strong>
           </div>
         </div>
 
-        {/* Right: Quick View Presets & Voice Indicator */}
-        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
-          <VarunaVoiceIndicator />
+        {/* Right Side: Consolidated Dropdowns (VIEW OPTIONS & VOICE & COMMS) */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* 1. VIEW OPTIONS DROPDOWN */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsViewDropdownOpen(!isViewDropdownOpen);
+                setIsCommsDropdownOpen(false);
+                setIsToolsDropdownOpen(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/90 hover:bg-reliance-navy text-xs font-mono text-white transition-all cursor-pointer shadow-cyan-glow"
+            >
+              <Eye className="w-3.5 h-3.5 text-reliance-cyan" />
+              <span className="font-bold hidden sm:inline uppercase">VIEW OPTIONS</span>
+              <ChevronDown
+                className={`w-3 h-3 text-reliance-cyan transition-transform duration-200 ${
+                  isViewDropdownOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
 
-          <div className="flex items-center p-1 rounded-xl glass-panel border border-reliance-cyan/20 text-xs font-mono">
-            <button
-              onClick={() => setCameraViewMode('topside')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${
-                cameraViewMode === 'topside'
-                  ? 'bg-reliance-blue text-white shadow-cyan-glow font-bold'
-                  : 'text-reliance-textMuted hover:text-white'
-              }`}
-            >
-              TOPSIDE
-            </button>
-            <button
-              onClick={() => setCameraViewMode('subsea')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${
-                cameraViewMode === 'subsea'
-                  ? 'bg-reliance-blue text-white shadow-cyan-glow font-bold'
-                  : 'text-reliance-textMuted hover:text-white'
-              }`}
-            >
-              DIVE SUBSEA
-            </button>
-            <button
-              onClick={() => setCameraViewMode('manifold')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${
-                cameraViewMode === 'manifold'
-                  ? 'bg-reliance-blue text-white shadow-cyan-glow font-bold'
-                  : 'text-reliance-textMuted hover:text-white'
-              }`}
-            >
-              SEABED
-            </button>
+            {isViewDropdownOpen && (
+              <div className="absolute top-full mt-2 right-0 w-52 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/98 p-1.5 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in duration-150">
+                <div className="px-2 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1">
+                  CAMERA PERSPECTIVE
+                </div>
+                <button
+                  onClick={() => {
+                    setCameraViewMode('topside');
+                    setIsViewDropdownOpen(false);
+                  }}
+                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
+                    cameraViewMode === 'topside'
+                      ? 'bg-reliance-blue text-white font-bold'
+                      : 'hover:bg-white/10 text-white/80'
+                  }`}
+                >
+                  <span>Topside Rig</span>
+                  <span className="text-[9px] opacity-60">+12m</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCameraViewMode('subsea');
+                    setIsViewDropdownOpen(false);
+                  }}
+                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
+                    cameraViewMode === 'subsea'
+                      ? 'bg-reliance-blue text-white font-bold'
+                      : 'hover:bg-white/10 text-white/80'
+                  }`}
+                >
+                  <span>Dive Subsea</span>
+                  <span className="text-[9px] opacity-60">-35m</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCameraViewMode('manifold');
+                    setIsViewDropdownOpen(false);
+                  }}
+                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
+                    cameraViewMode === 'manifold'
+                      ? 'bg-reliance-blue text-white font-bold'
+                      : 'hover:bg-white/10 text-white/80'
+                  }`}
+                >
+                  <span>Seabed Manifold</span>
+                  <span className="text-[9px] opacity-60">-1,020m</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCameraViewMode('drill');
+                    setIsViewDropdownOpen(false);
+                  }}
+                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between ${
+                    cameraViewMode === 'drill'
+                      ? 'bg-reliance-blue text-white font-bold'
+                      : 'hover:bg-white/10 text-white/80'
+                  }`}
+                >
+                  <span>Down View / Drill</span>
+                  <span className="text-[9px] opacity-60">-2,040m</span>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* 2. VOICE & COMMS DROPDOWN */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsCommsDropdownOpen(!isCommsDropdownOpen);
+                setIsViewDropdownOpen(false);
+                setIsToolsDropdownOpen(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-purple-400/40 bg-reliance-deepnavy/90 hover:bg-purple-900/30 text-xs font-mono text-purple-200 transition-all cursor-pointer"
+            >
+              <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+              <span className="font-bold hidden sm:inline uppercase">VOICE & COMMS</span>
+              <ChevronDown
+                className={`w-3 h-3 text-purple-400 transition-transform duration-200 ${
+                  isCommsDropdownOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {isCommsDropdownOpen && (
+              <div className="absolute top-full mt-2 right-0 w-64 rounded-xl glass-panel border border-purple-400/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in duration-150">
+                <div className="px-2 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1">
+                  VOICE SYNTHESIS & RECOGNITION
+                </div>
+
+                <button
+                  onClick={() => {
+                    jarvisVoiceCommander.toggle();
+                    setIsCommsDropdownOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg text-left hover:bg-white/10 text-white flex items-center justify-between mb-1"
+                >
+                  <span className="flex items-center gap-2">
+                    <Mic className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Jarvis Listener</span>
+                  </span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      isVoiceCommanderActive ? 'bg-purple-500/30 text-purple-200' : 'bg-white/10 text-white/50'
+                    }`}
+                  >
+                    {isVoiceCommanderActive ? 'ACTIVE' : 'MUTED'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setVoiceModalOpen(true);
+                    setIsCommsDropdownOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg text-left hover:bg-purple-500/20 text-purple-200 flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    <span>ElevenLabs AI Voice</span>
+                  </span>
+                  <span className="text-[9px] text-reliance-textMuted">CONFIGURE</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Varuna Voice Status Light */}
+          <VarunaVoiceIndicator />
         </div>
       </header>
 
@@ -300,14 +474,23 @@ export default function App() {
       {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
       <HolographicPartInspectionModal />
 
-      {/* ================= CLICK-TO-SLIDE TELEMETRY DRAWER ================= */}
+      {/* ================= LEFT SIDEBAR FLOATING PANELS ================= */}
+      <div className="absolute top-16 bottom-10 left-4 z-40 w-76 sm:w-88 flex flex-col gap-3 overflow-y-auto pointer-events-auto pr-1 scrollbar-none">
+        {/* Panel 1: Environmental Conditions & Tides */}
+        <CurrentControlWidget />
+
+        {/* Panel 2: Critical Anomalies Monitor */}
+        <CriticalAnomaliesMonitor />
+      </div>
+
+      {/* ================= COLOR-CODE SEGREGATION LEGEND ================= */}
+      <ColorCodeLegend />
+
+      {/* ================= RIGHT SIDEBAR: SYSTEM TELEMETRY & PRODUCTION DATA ================= */}
       <TelemetryDrawer />
 
       {/* ================= INTERACTIVE PHYSICS AUDIT MODAL ================= */}
       <PhysicsAuditModal />
-
-      {/* ================= WATER TIDES & FLOW POWER CONTROLLER ================= */}
-      <CurrentControlWidget />
 
       {/* ================= 3D VIEWPORT (Occupies 100% of Screen) ================= */}
       <main id="canvas-container" className="relative w-full h-full flex-1 overflow-hidden">
@@ -339,3 +522,4 @@ export default function App() {
     </div>
   );
 }
+

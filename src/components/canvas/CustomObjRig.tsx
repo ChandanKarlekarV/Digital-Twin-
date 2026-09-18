@@ -111,63 +111,55 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
         // Rotate by -90 deg so the carved rectangular box and drill face the FRONT (+Z)
         loadedObj.rotation.y = -Math.PI / 2;
 
-        // Holographic & Standard Component Color Palettes
-        const hPillars = new THREE.Color('#FF0055');
-        const hFootings = new THREE.Color('#FF9100');
-        const hCranes = new THREE.Color('#FF6D00');
-        const hPipes = new THREE.Color('#00E5FF');
-        const hDerrick = new THREE.Color('#00F5D4');
-        const hHelipadRing = new THREE.Color('#FACC15');
-        const hHelipadDeck = new THREE.Color('#0F172A');
-        const hDeck = new THREE.Color('#00B4D8');
-
-        const cRed = new THREE.Color('#ED1B24');
-        const cBrown = new THREE.Color('#795548');
-        const cOrange = new THREE.Color('#FF6B00');
-        const cPipeGrey = new THREE.Color('#94A3B8');
-        const cHelipadRing = new THREE.Color('#FACC15');
-        const cHelipadDeck = new THREE.Color('#1E293B');
-        const cDeck = new THREE.Color('#334155');
-        const cCasingGrey = new THREE.Color('#78909C');
+        // Exact Component Color Palettes (User Color-Code Specification)
+        const cHelipadGreen = new THREE.Color('#00FF66');      // HELIPAD: Electric Green
+        const cCrane1Amber = new THREE.Color('#FF9900');       // CRANE 1 (LATTICE BOOM): Amber Orange
+        const cCrane2Pink = new THREE.Color('#FF007F');        // CRANE 2 (PEDESTAL): Fuchsia Pink
+        const cAccommodationViolet = new THREE.Color('#9933FF'); // ACCOMMODATION MODULE: Violet
+        const cProcessPipesCyan = new THREE.Color('#00FFFF');  // INDUSTRIAL PIPE FITTING (PROCESS SYSTEMS): Bright Cyan
+        const cJackUpLegsTeal = new THREE.Color('#00B4D8');    // JACK-UP LEGS: Teal
+        const cMainDeckBlue = new THREE.Color('#1976D2');      // MAIN DECK STRUCTURE: Core Blue
+        const cSubseaAqua = new THREE.Color('#00D2FF');        // SUBSEA DRILL STRING: Aqua Blue
 
         // Initialize reusable Holographic materials
         const holoRigMat = createHolographicMaterial({
-          baseColor: '#00D4FF',
+          baseColor: '#1976D2',
           glowColor: '#00FFFF',
-          opacity: 0.88,
+          opacity: 0.90,
           scanlineFreq: 1.2,
           glowIntensity: 2.2,
           useVertexColor: true,
         });
         holoRigMatRef.current = holoRigMat;
 
-        // Static Outer Cylinder Casing
+        // Static Outer Cylinder Casing (Subsea Drill String Casing)
         const holoOuterCasingMat = createHolographicMaterial({
           baseColor: '#003366',
-          glowColor: '#00A3FF',
-          opacity: 0.55,
+          glowColor: '#00D2FF',
+          opacity: 0.65,
           scanlineFreq: 0.6,
-          glowIntensity: 1.4,
+          glowIntensity: 1.8,
           wireframe: false,
         });
         holoOuterCasingMatRef.current = holoOuterCasingMat;
 
-        // Inner Spinning Rotary Drill String Material
+        // Inner Spinning Rotary Drill String Material (Aqua Blue)
         const holoInnerDrillMat = createHolographicMaterial({
-          baseColor: '#00FFFF',
-          glowColor: '#0066FF',
+          baseColor: '#00D2FF',
+          glowColor: '#00F0FF',
           opacity: 0.95,
           scanlineFreq: 2.5,
           glowIntensity: 3.2,
         });
         holoInnerDrillMatRef.current = holoInnerDrillMat;
 
+        // Subsea Manifold & Gathering Hub
         const holoManifoldMat = createHolographicMaterial({
-          baseColor: '#00FFAA',
+          baseColor: '#00FFFF',
           glowColor: '#00E5FF',
-          opacity: 0.90,
+          opacity: 0.92,
           scanlineFreq: 1.5,
-          glowIntensity: 2.0,
+          glowIntensity: 2.4,
         });
         holoManifoldMatRef.current = holoManifoldMat;
 
@@ -182,16 +174,16 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
             if (name === 'pCube2') {
               mesh.visible = false;
             } else if (name === 'model_Mesh') {
-              // STATIC Outer Borehole Casing Cylinder
+              // SUBSEA DRILL STRING Casing Cylinder
               if (scannerMode === 'hologram') {
                 mesh.material = holoOuterCasingMat;
               } else {
                 mesh.material = new THREE.MeshStandardMaterial({
-                  color: cCasingGrey,
-                  roughness: 0.45,
-                  metalness: 0.6,
+                  color: '#00D2FF',
+                  roughness: 0.35,
+                  metalness: 0.7,
                   transparent: true,
-                  opacity: 0.65,
+                  opacity: 0.75,
                   side: THREE.DoubleSide,
                 });
               }
@@ -201,7 +193,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
                 mesh.material = holoManifoldMat;
               } else {
                 mesh.material = new THREE.MeshStandardMaterial({
-                  color: cPipeGrey,
+                  color: '#00FFFF',
                   roughness: 0.35,
                   metalness: 0.7,
                   side: THREE.DoubleSide,
@@ -213,7 +205,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
               const pos = geo.attributes.position;
               const count = pos.count;
               const colors = new Float32Array(count * 3);
-              const isHolo = scannerMode === 'hologram';
 
               for (let i = 0; i < count; i += 3) {
                 const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
@@ -224,43 +215,40 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
                 const cy = (y0 + y1 + y2) / 3;
                 const cz = (z0 + z1 + z2) / 3;
                 const distXZ = Math.sqrt(cx * cx + cz * cz);
+                const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
 
-                let chosen = isHolo ? hDeck : cDeck;
+                let chosen = cMainDeckBlue; // Default: MAIN DECK STRUCTURE (Core Blue)
 
-                if (cy < -0.03) {
-                  if (cy < -0.46) {
-                    if (distXZ < 0.08) {
-                      chosen = isHolo ? hPipes : cPipeGrey;
-                    } else {
-                      chosen = isHolo ? hFootings : cBrown;
-                    }
+                if (cy < 0.05) {
+                  // Below main deck: JACK-UP LEGS (Teal) or central Subsea riser conduits (Aqua Blue)
+                  if (distXZ < 0.06) {
+                    chosen = cSubseaAqua; // Central drill / riser path
                   } else {
-                    if (distXZ < 0.06) {
-                      chosen = isHolo ? hPipes : cPipeGrey;
-                    } else if (cy > -0.35 && cy < -0.15 && (Math.abs(cx) < 0.05 || Math.abs(cz) < 0.05)) {
-                      chosen = isHolo ? hPipes : cPipeGrey;
-                    } else {
-                      chosen = isHolo ? hPillars : cRed;
-                    }
+                    chosen = cJackUpLegsTeal; // JACK-UP LEGS: Teal
                   }
                 } else {
-                  const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
-                  if (cy > 0.30 && distHelipad < 0.25) {
-                    if (cy > 0.36 && distHelipad < 0.20) {
-                      chosen = isHolo ? hHelipadRing : cHelipadRing;
-                    } else {
-                      chosen = isHolo ? hHelipadDeck : cHelipadDeck;
-                    }
-                  } else if (cy > 0.12 && distXZ < 0.14) {
-                    chosen = isHolo ? hDerrick : cBrown;
-                  } else if (cy > 0.45 && distXZ < 0.18) {
-                    chosen = isHolo ? hDerrick : cBrown;
-                  } else if (cy > 0.20 && (Math.abs(cx) > 0.12 || Math.abs(cz) > 0.13)) {
-                    chosen = isHolo ? hCranes : cOrange;
-                  } else if (Math.abs(cy - 0.08) < 0.04 && distXZ < 0.22) {
-                    chosen = isHolo ? hPipes : cPipeGrey;
+                  // Topside Deck Subsystems
+                  if (cy > 0.28 && distHelipad < 0.28) {
+                    // HELIPAD: Electric Green
+                    chosen = cHelipadGreen;
+                  } else if (cy > 0.18 && (cx < -0.09 || (cz < -0.10 && cx < 0.05))) {
+                    // CRANE 1 (LATTICE BOOM): Amber Orange
+                    chosen = cCrane1Amber;
+                  } else if (cy > 0.18 && cx > 0.09 && cz < 0.15) {
+                    // CRANE 2 (PEDESTAL): Fuchsia Pink
+                    chosen = cCrane2Pink;
+                  } else if (cy > 0.08 && cy < 0.32 && cz > 0.12 && cx > -0.05 && distHelipad >= 0.28) {
+                    // ACCOMMODATION MODULE: Violet
+                    chosen = cAccommodationViolet;
+                  } else if (cy > 0.06 && cy < 0.30 && Math.abs(cx) <= 0.14 && Math.abs(cz) <= 0.14) {
+                    // INDUSTRIAL PIPE FITTING (PROCESS SYSTEMS): Bright Cyan
+                    chosen = cProcessPipesCyan;
+                  } else if (cy > 0.35 && distXZ < 0.14) {
+                    // Derrick mast crown: Bright Cyan
+                    chosen = cProcessPipesCyan;
                   } else {
-                    chosen = isHolo ? hDeck : cDeck;
+                    // MAIN DECK STRUCTURE: Core Blue
+                    chosen = cMainDeckBlue;
                   }
                 }
 
@@ -275,13 +263,13 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
               geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
               geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-              if (isHolo) {
+              if (scannerMode === 'hologram') {
                 mesh.material = holoRigMat;
               } else {
                 mesh.material = new THREE.MeshStandardMaterial({
                   vertexColors: true,
-                  roughness: 0.42,
-                  metalness: 0.4,
+                  roughness: 0.35,
+                  metalness: 0.6,
                   side: THREE.DoubleSide,
                 });
               }
@@ -465,16 +453,16 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           varunaVoice.speakDiagnostic('DRILL-SYSTEM');
         }}
       >
-        {/* Inner Spinning Drill Rod */}
+        {/* Inner Spinning Drill Rod (Aqua Blue) */}
         <mesh
           geometry={innerDrillRodGeo}
           position={[0, SEABED_WORLD_Y + wallCenterY, 0]}
           userData={{ isDrill: true }}
         >
           <meshStandardMaterial
-            color={isDrillIssue ? '#FF2200' : '#E0E6ED'}
-            emissive={isDrillIssue ? '#FF0000' : isHologram ? '#00FFFF' : '#00D4FF'}
-            emissiveIntensity={isDrillIssue ? 3.5 : isHologram ? 1.6 : 0.4}
+            color={isDrillIssue ? '#FF2200' : '#00D2FF'}
+            emissive={isDrillIssue ? '#FF0000' : '#00F0FF'}
+            emissiveIntensity={isDrillIssue ? 3.5 : 2.2}
             metalness={0.92}
             roughness={0.18}
           />
@@ -492,8 +480,8 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
                 <boxGeometry args={[0.25, 2.2, 0.25]} />
                 <meshStandardMaterial
                   color={isDrillIssue ? '#FF5500' : '#00FFFF'}
-                  emissive={isDrillIssue ? '#FF2200' : '#0088FF'}
-                  emissiveIntensity={isDrillIssue ? 3.0 : 1.4}
+                  emissive={isDrillIssue ? '#FF2200' : '#00D2FF'}
+                  emissiveIntensity={isDrillIssue ? 3.0 : 2.0}
                   metalness={0.85}
                   roughness={0.2}
                 />
@@ -502,15 +490,15 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
           </group>
         ))}
 
-        {/* Rotating Downhole PDC Cutting Drill Bit at Bottom (-98m) */}
+        {/* Rotating Downhole PDC Cutting Drill Bit at Bottom (-98m) (DRILL BIT: Fiery Red-Orange) */}
         <mesh position={[0, -98, 0]} userData={{ isDrill: true }}>
-          <coneGeometry args={[1.3, 3.2, 12]} />
+          <coneGeometry args={[1.4, 3.5, 16]} />
           <meshStandardMaterial
-            color={isDrillIssue ? '#FF0000' : '#FFD700'}
-            emissive={isDrillIssue ? '#FF3300' : isHologram ? '#00FFFF' : '#FFAA00'}
-            emissiveIntensity={isDrillIssue ? 4.5 : isHologram ? 1.8 : 0.5}
-            metalness={0.9}
-            roughness={0.2}
+            color="#FF3300"
+            emissive="#FF4500"
+            emissiveIntensity={3.8}
+            metalness={0.92}
+            roughness={0.15}
           />
         </mesh>
       </group>

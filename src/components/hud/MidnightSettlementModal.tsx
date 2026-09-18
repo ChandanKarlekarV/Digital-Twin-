@@ -30,6 +30,7 @@ export const MidnightSettlementModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'ledger' | 'anomalies' | 'analytics'>('ledger');
   const [searchTerm, setSearchTerm] = useState('');
+  const [timeHorizon, setTimeHorizon] = useState<'all' | '5weeks' | 'w1' | 'w2' | 'w3' | 'w4' | 'w5'>('all');
   const [dailyRecords, setDailyRecords] = useState<DailyProductionSummary[]>([]);
   const [analytics, setAnalytics] = useState<SixMonthAnalytics | null>(null);
   const [isSettling, setIsSettling] = useState(false);
@@ -62,16 +63,32 @@ export const MidnightSettlementModal: React.FC = () => {
     }, 600);
   };
 
-  // Filter records by search string
+  // Filter records by time horizon and search string
   const filteredRecords = useMemo(() => {
-    if (!searchTerm.trim()) return dailyRecords;
-    return dailyRecords.filter(
+    let records = dailyRecords;
+
+    if (timeHorizon === '5weeks') {
+      records = dailyRecords.slice(0, 35); // Most recent 35 days (5 weeks)
+    } else if (timeHorizon === 'w1') {
+      records = dailyRecords.slice(0, 7); // Week 1 (Last 7 days)
+    } else if (timeHorizon === 'w2') {
+      records = dailyRecords.slice(7, 14); // Week 2 (8-14 days ago)
+    } else if (timeHorizon === 'w3') {
+      records = dailyRecords.slice(14, 21); // Week 3 (15-21 days ago)
+    } else if (timeHorizon === 'w4') {
+      records = dailyRecords.slice(21, 28); // Week 4 (22-28 days ago)
+    } else if (timeHorizon === 'w5') {
+      records = dailyRecords.slice(28, 35); // Week 5 (29-35 days ago)
+    }
+
+    if (!searchTerm.trim()) return records;
+    return records.filter(
       (r) =>
         r.date_str.includes(searchTerm) ||
         r.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.hash_signature?.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [dailyRecords, searchTerm]);
+  }, [dailyRecords, timeHorizon, searchTerm]);
 
   // Export CSV
   const handleExportCsv = () => {
@@ -257,8 +274,8 @@ export const MidnightSettlementModal: React.FC = () => {
           </div>
         )}
 
-        {/* ================= TAB NAVIGATION & SEARCH ================= */}
-        <div className="flex items-center justify-between px-6 py-2.5 border-b border-reliance-cyan/15 bg-reliance-deepnavy font-mono text-xs">
+        {/* ================= TAB NAVIGATION & TIME HORIZON FILTERS ================= */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-6 py-2.5 border-b border-reliance-cyan/15 bg-reliance-deepnavy font-mono text-xs">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('ledger')}
@@ -269,7 +286,7 @@ export const MidnightSettlementModal: React.FC = () => {
               }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>180-Day Daily Ledger ({dailyRecords.length})</span>
+              <span>Production Ledger ({filteredRecords.length})</span>
             </button>
 
             <button
@@ -285,17 +302,43 @@ export const MidnightSettlementModal: React.FC = () => {
             </button>
           </div>
 
-          {/* Search Box */}
+          {/* Time Horizon Quick Filters & Search Box */}
           {activeTab === 'ledger' && (
-            <div className="relative w-64">
-              <Search className="w-3.5 h-3.5 text-reliance-textMuted absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search date, hash..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-reliance-navy/80 border border-reliance-cyan/30 text-white text-xs placeholder:text-reliance-textMuted/60 focus:outline-none focus:border-reliance-cyan font-mono"
-              />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-1">
+                {[
+                  { id: 'all', label: 'All 180D' },
+                  { id: '5weeks', label: '5 Wks' },
+                  { id: 'w1', label: 'Wk 1' },
+                  { id: 'w2', label: 'Wk 2' },
+                  { id: 'w3', label: 'Wk 3' },
+                  { id: 'w4', label: 'Wk 4' },
+                  { id: 'w5', label: 'Wk 5' },
+                ].map((tf) => (
+                  <button
+                    key={tf.id}
+                    onClick={() => setTimeHorizon(tf.id as any)}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                      timeHorizon === tf.id
+                        ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300 shadow-sm'
+                        : 'bg-reliance-navy/60 border-white/10 text-reliance-textMuted hover:text-white'
+                    }`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-44 sm:w-56">
+                <Search className="w-3.5 h-3.5 text-reliance-textMuted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search date, hash..."
+                  className="w-full pl-8 pr-3 py-1 rounded-xl bg-reliance-navy/80 border border-reliance-cyan/30 text-white text-[11px] placeholder:text-reliance-textMuted/60 focus:outline-none focus:border-reliance-cyan font-mono"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -303,66 +346,128 @@ export const MidnightSettlementModal: React.FC = () => {
         {/* ================= TAB CONTENT ================= */}
         <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
           {activeTab === 'ledger' && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left font-mono text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-reliance-cyan/30 text-[10px] text-reliance-cyan uppercase tracking-wider bg-reliance-navy/50">
-                    <th className="py-2.5 px-3">Date (Midnight 00:00)</th>
-                    <th className="py-2.5 px-3">Gross BPD</th>
-                    <th className="py-2.5 px-3">Water-Cut</th>
-                    <th className="py-2.5 px-3 text-emerald-300">Net Purified Oil</th>
-                    <th className="py-2.5 px-3">Gas (MMSCFD)</th>
-                    <th className="py-2.5 px-3">Avg Press / Temp</th>
-                    <th className="py-2.5 px-3">Drill ROP &amp; Footage</th>
-                    <th className="py-2.5 px-3">Revenue (₹ Cr)</th>
-                    <th className="py-2.5 px-3">DGH Seal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredRecords.map((r) => (
-                    <tr
-                      key={r.date_str}
-                      onClick={() => setSelectedRecord(r)}
-                      className={`hover:bg-reliance-blue/20 cursor-pointer transition-colors ${
-                        selectedRecord?.date_str === r.date_str ? 'bg-reliance-blue/30' : ''
-                      }`}
-                    >
-                      <td className="py-2.5 px-3 font-bold text-white flex items-center gap-1.5">
-                        <Clock className="w-3 h-3 text-reliance-cyan" />
-                        <span>{r.date_str}</span>
-                      </td>
-                      <td className="py-2.5 px-3 text-white/90">
-                        {r.gross_liquid_bpd.toLocaleString()}
-                      </td>
-                      <td className="py-2.5 px-3 text-blue-300 font-bold">
-                        {r.water_cut_avg_pct}%
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-extrabold shadow-sm">
-                          {r.purified_oil_bpd.toLocaleString()} BPD
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-white/80">
-                        {r.associated_gas_mmscfd}
-                      </td>
-                      <td className="py-2.5 px-3 text-reliance-textMuted">
-                        <span className="text-white">{r.avg_line_pressure_bar} bar</span> • {r.avg_temperature_c}°C
-                      </td>
-                      <td className="py-2.5 px-3 text-amber-300">
-                        {r.avg_drill_rop_mhr} m/h ({r.total_drilled_meters}m)
-                      </td>
-                      <td className="py-2.5 px-3 text-purple-300 font-bold">
-                        ₹{r.estimated_gross_value_inr} Cr
-                      </td>
-                      <td className="py-2.5 px-3 text-[10px] text-reliance-textMuted font-mono">
-                        <span className="px-1.5 py-0.5 rounded bg-white/10 text-reliance-cyan border border-white/10">
-                          {r.hash_signature}
-                        </span>
-                      </td>
+            <div className="space-y-3">
+              {/* Selected Day Expanded Diagnostic Card */}
+              {selectedRecord && (
+                <div className="p-3.5 rounded-2xl bg-reliance-navy/70 border border-reliance-cyan/40 shadow-dock font-mono text-xs">
+                  <div className="flex items-center justify-between border-b border-reliance-cyan/20 pb-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-reliance-cyan" />
+                      <span className="font-bold text-white text-sm">
+                        KG-D6 SETTLEMENT AUDIT: {selectedRecord.date_str} (00:00:00 Midnight)
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] border border-emerald-400/40 font-bold">
+                        {selectedRecord.status}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-reliance-cyan font-mono flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{selectedRecord.hash_signature}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-white/10">
+                      <div className="text-[9px] text-reliance-textMuted">GROSS EXTRACTED</div>
+                      <div className="font-bold text-white mt-0.5">{selectedRecord.gross_liquid_bpd.toLocaleString()} BPD</div>
+                      <div className="text-[8.5px] text-reliance-textMuted">{selectedRecord.gross_barrels_day.toLocaleString()} bbl/24h</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-emerald-500/30">
+                      <div className="text-[9px] text-emerald-300">NET PURIFIED OIL</div>
+                      <div className="font-bold text-emerald-300 mt-0.5">{selectedRecord.purified_oil_bpd.toLocaleString()} BPD</div>
+                      <div className="text-[8.5px] text-emerald-400/80">ASTM D1250: {selectedRecord.purity_compliance_pct}% Purity</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-blue-400/30">
+                      <div className="text-[9px] text-blue-300">PRODUCED WATER</div>
+                      <div className="font-bold text-blue-200 mt-0.5">{selectedRecord.produced_water_bpd.toLocaleString()} BPD</div>
+                      <div className="text-[8.5px] text-blue-300/80">WC: {selectedRecord.water_cut_avg_pct}%</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-white/10">
+                      <div className="text-[9px] text-reliance-textMuted">ASSOCIATED GAS</div>
+                      <div className="font-bold text-amber-200 mt-0.5">{selectedRecord.associated_gas_mmscfd} MMSCFD</div>
+                      <div className="text-[8.5px] text-reliance-textMuted">GOR: 480 SCF/bbl</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-white/10">
+                      <div className="text-[9px] text-reliance-textMuted">DRILLSTRING METRICS</div>
+                      <div className="font-bold text-white mt-0.5">{selectedRecord.total_drilled_meters} m Drilled</div>
+                      <div className="text-[8.5px] text-reliance-textMuted">ROP: {selectedRecord.avg_drill_rop_mhr} m/h • {selectedRecord.avg_drill_torque_knm} kNm</div>
+                    </div>
+
+                    <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-purple-400/30">
+                      <div className="text-[9px] text-purple-300">DAILY VALUATION</div>
+                      <div className="font-bold text-purple-200 mt-0.5">₹{selectedRecord.estimated_gross_value_inr} Cr</div>
+                      <div className="text-[8.5px] text-purple-300/80">${(selectedRecord.estimated_gross_value_usd / 1e6).toFixed(2)}M USD</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Ledger Records Table */}
+              <div className="overflow-x-auto border border-reliance-cyan/20 rounded-2xl bg-reliance-dark/90">
+                <table className="w-full text-left font-mono text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-reliance-cyan/30 text-[10px] text-reliance-cyan uppercase tracking-wider bg-reliance-navy/60 sticky top-0 z-10">
+                      <th className="py-2.5 px-3">Date (Midnight 00:00)</th>
+                      <th className="py-2.5 px-3">Gross BPD</th>
+                      <th className="py-2.5 px-3">Water-Cut</th>
+                      <th className="py-2.5 px-3 text-emerald-300">Net Purified Oil</th>
+                      <th className="py-2.5 px-3">Gas (MMSCFD)</th>
+                      <th className="py-2.5 px-3">Avg Press / Temp</th>
+                      <th className="py-2.5 px-3">Drill ROP &amp; Footage</th>
+                      <th className="py-2.5 px-3">Revenue (₹ Cr)</th>
+                      <th className="py-2.5 px-3">DGH Seal</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredRecords.map((r) => (
+                      <tr
+                        key={r.date_str}
+                        onClick={() => setSelectedRecord(r)}
+                        className={`hover:bg-reliance-blue/20 cursor-pointer transition-colors ${
+                          selectedRecord?.date_str === r.date_str ? 'bg-reliance-blue/30 border-l-2 border-reliance-cyan' : ''
+                        }`}
+                      >
+                        <td className="py-2.5 px-3 font-bold text-white flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 text-reliance-cyan" />
+                          <span>{r.date_str}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-white/90">
+                          {r.gross_liquid_bpd.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-blue-300 font-bold">
+                          {r.water_cut_avg_pct}%
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-extrabold shadow-sm">
+                            {r.purified_oil_bpd.toLocaleString()} BPD
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-white/80">
+                          {r.associated_gas_mmscfd}
+                        </td>
+                        <td className="py-2.5 px-3 text-reliance-textMuted">
+                          <span className="text-white">{r.avg_line_pressure_bar} bar</span> • {r.avg_temperature_c}°C
+                        </td>
+                        <td className="py-2.5 px-3 text-amber-300">
+                          {r.avg_drill_rop_mhr} m/h ({r.total_drilled_meters}m)
+                        </td>
+                        <td className="py-2.5 px-3 text-purple-300 font-bold">
+                          ₹{r.estimated_gross_value_inr} Cr
+                        </td>
+                        <td className="py-2.5 px-3 text-[10px] text-reliance-textMuted font-mono">
+                          <span className="px-1.5 py-0.5 rounded bg-white/10 text-reliance-cyan border border-white/10">
+                            {r.hash_signature}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

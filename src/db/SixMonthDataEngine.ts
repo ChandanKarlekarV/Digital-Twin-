@@ -127,9 +127,18 @@ export class SixMonthDataEngine {
         });
       }
 
-      // Hash signature for DGH compliance verification
+      // Safe hash signature generation for browser and Node.js environments
       const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgPressure}:${apiGravity}`;
-      const hashSig = `DGH-KG6-${Buffer.from(rawPayload).toString('base64').slice(0, 16)}`;
+      let hashSig = `DGH-KG6-${dateStr.replace(/-/g, '')}`;
+      try {
+        if (typeof btoa !== 'undefined') {
+          hashSig = `DGH-KG6-${btoa(rawPayload).slice(0, 16)}`;
+        } else if (typeof Buffer !== 'undefined') {
+          hashSig = `DGH-KG6-${Buffer.from(rawPayload).toString('base64').slice(0, 16)}`;
+        }
+      } catch {
+        hashSig = `DGH-KG6-${Math.abs(Math.sin(dayOffset * 99.7)).toString(36).substring(2, 18).toUpperCase()}`;
+      }
 
       summaries.push({
         id: totalDays - dayOffset,
@@ -166,6 +175,26 @@ export class SixMonthDataEngine {
     this.aiAnomalies = anomalies;
     this.isInitialized = true;
     return summaries;
+  }
+
+  /**
+   * Filter daily summaries for the past N weeks (e.g. 4 or 5 weeks = 28 or 35 days)
+   */
+  public getPastWeeks(weeks = 5): DailyProductionSummary[] {
+    const days = weeks * 7;
+    const summaries = this.getDailySummaries();
+    return summaries.slice(-days);
+  }
+
+  /**
+   * Filter daily summaries for a specific week (week 1 = most recent 7 days, week 2 = 8-14 days ago, etc.)
+   */
+  public getSpecificWeek(weekNum: number): DailyProductionSummary[] {
+    const summaries = this.getDailySummaries();
+    const total = summaries.length;
+    const endIdx = total - (weekNum - 1) * 7;
+    const startIdx = Math.max(0, endIdx - 7);
+    return summaries.slice(startIdx, endIdx);
   }
 
   /**

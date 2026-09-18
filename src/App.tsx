@@ -45,6 +45,9 @@ import {
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
 import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
 
+import { telemetryDb } from './db/TelemetryDatabase';
+import { sixMonthDataEngine } from './db/SixMonthDataEngine';
+
 export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
@@ -88,10 +91,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Start the 10 Hz physical sensor engine & database seeder
+    // 1. Immediately seed 6-month & 5-week historical production databases
+    sixMonthDataEngine.generateSixMonthHistory();
+    telemetryDb.seedSixMonthHistory().catch(console.error);
+
+    // 2. Start the 50.0 Hz physical sensor engine
     telemetryEmitter.start();
 
-    // Start 10-second continuous dynamic tide & metocean phase cycling
+    // 3. Start 10-second continuous dynamic tide & metocean phase cycling
     dynamicTideEngine.start();
 
     // Rolling FPS calculation

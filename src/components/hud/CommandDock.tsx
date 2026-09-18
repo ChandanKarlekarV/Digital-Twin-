@@ -18,6 +18,8 @@ import {
   Wrench,
   Sliders,
   Wind,
+  Calendar,
+  Database,
 } from 'lucide-react';
 import {
   useRigStore,
@@ -57,6 +59,7 @@ export const CommandDock: React.FC = () => {
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
+  const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
 
   const currentFlowPower = useRigStore((s) => s.currentFlowPower);
   const setCurrentFlowPower = useRigStore((s) => s.setCurrentFlowPower);
@@ -373,6 +376,18 @@ export const CommandDock: React.FC = () => {
 
         {/* 5. MODALS & SYSTEM INTEGRATIONS */}
         <div className="pt-2 border-t border-reliance-cyan/20 grid grid-cols-2 gap-2">
+          {/* Dedicated 6-Month Database Button */}
+          <button
+            onClick={() => {
+              setEodModalOpen(true);
+              setCommandDockOpen(false);
+            }}
+            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 hover:from-emerald-600/50 hover:to-cyan-600/50 text-xs font-mono text-emerald-200 border border-emerald-400/50 transition-all cursor-pointer shadow-emerald-glow font-bold"
+          >
+            <Calendar className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span>6-Month AI Production Ledger &amp; Database</span>
+          </button>
+
           <button
             onClick={() => {
               togglePhysicsModal();

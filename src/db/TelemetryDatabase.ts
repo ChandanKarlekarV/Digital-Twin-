@@ -54,7 +54,8 @@ class TelemetryDatabaseService {
   }
 
   /**
-   * Seed the database with 6 months (180 days) of realistic KG-D6 baseline production history.
+   * Seed the database with 5 weeks (35 days) of 15-minute granular time-series telemetry
+   * plus 6 months (180 days) of daily production settlements.
    * Total Block Production: ~120,000 BPD nominal oil/condensate mix across subsea & topside nodes.
    */
   public async seedSixMonthHistory(): Promise<number> {
@@ -63,14 +64,14 @@ class TelemetryDatabaseService {
     // Also populate 6-month daily settlement summaries
     sixMonthDataEngine.generateSixMonthHistory();
 
-    if (this.inMemoryRecords.length > 500) {
+    if (this.inMemoryRecords.length >= 10000) {
       return this.inMemoryRecords.length;
     }
 
     const now = Date.now();
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    const startTime = now - sevenDaysMs;
-    const stepIntervalMs = 5 * 60 * 1000; // 5-minute telemetry intervals
+    const thirtyFiveDaysMs = 35 * 24 * 60 * 60 * 1000; // 5 full weeks (35 days)
+    const startTime = now - thirtyFiveDaysMs;
+    const stepIntervalMs = 15 * 60 * 1000; // 15-minute high-fidelity intervals
 
     const assets = [
       { id: 'RISER-ALPHA', share: 0.35, baseP: 242.0, baseT: 52.0 },
@@ -150,6 +151,25 @@ class TelemetryDatabaseService {
 
   public async seedSevenDayHistory(): Promise<number> {
     return this.seedSixMonthHistory();
+  }
+
+  /**
+   * Query records for the past N weeks (e.g. 5 weeks = 35 days)
+   */
+  public queryPastWeeks(assetId: string | null, weeks = 5): TelemetryRecord[] {
+    const now = Date.now();
+    const start = now - weeks * 7 * 24 * 3600 * 1000;
+    return this.queryRange(assetId, start, now);
+  }
+
+  /**
+   * Query records for a specific week (week 1 = past 7 days, week 2 = 8-14 days ago, etc.)
+   */
+  public querySpecificWeek(assetId: string | null, weekNum: number): TelemetryRecord[] {
+    const now = Date.now();
+    const end = now - (weekNum - 1) * 7 * 24 * 3600 * 1000;
+    const start = end - 7 * 24 * 3600 * 1000;
+    return this.queryRange(assetId, start, end);
   }
 
   private async persistToIndexedDB(records: TelemetryRecord[]): Promise<void> {

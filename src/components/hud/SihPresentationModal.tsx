@@ -265,180 +265,63 @@ export const SihPresentationModal: React.FC = () => {
               </div>
             )}
 
-            {/* ================= SLIDE 3: TECHNICAL APPROACH (WORKFLOW & CONNECTIONS) ================= */}
+            {/* ================= SLIDE 3: TECHNICAL APPROACH (WORKFLOW & ARCHITECTURE) ================= */}
             {currentSlide === 3 && (
               <div className="flex-1 flex flex-col justify-start py-0.5 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-1.5">
                   <h2 className="text-lg sm:text-xl font-black text-blue-900 uppercase tracking-tight">
                     TECHNICAL APPROACH &amp; ARCHITECTURE WORKFLOW
                   </h2>
                   <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-full border border-blue-200">
-                    5-STAGE INTERCONNECTED PIPELINE
+                    5-STAGE STENCIL BLUEPRINT WORKFLOW
                   </span>
                 </div>
 
-                {/* 5-STAGE CONNECTED WORKFLOW CARDS */}
-                <div className="grid grid-cols-5 gap-2 mb-2.5">
-                  {/* Stage 1 */}
-                  <div className="p-2 rounded-xl bg-blue-50/80 border border-blue-200 flex flex-col justify-between text-[11px] relative shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-mono text-[9px] font-bold">
-                          STAGE 01
-                        </span>
-                        <span className="text-[8px] font-bold text-slate-500 uppercase">Acquisition</span>
-                      </div>
-                      <div className="font-extrabold text-blue-950 text-[10px] leading-tight mb-1">
-                        EDGE SENSORS &amp; SCADA
-                      </div>
-                      <ul className="text-[9px] text-slate-600 space-y-0.5">
-                        <li>• Subsea X-Mas Tree Gauges</li>
-                        <li>• PDC Drill Core Sensors</li>
-                        <li>• Topside MPFM Coriolis</li>
-                        <li>• 50.0 Hz (20ms) Stream</li>
-                      </ul>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-blue-200/60 text-center font-mono text-[8px] font-extrabold text-blue-700">
-                      Modbus / OPC-UA ➔
-                    </div>
-                  </div>
-
-                  {/* Stage 2 */}
-                  <div className="p-2 rounded-xl bg-emerald-50/80 border border-emerald-200 flex flex-col justify-between text-[11px] relative shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-mono text-[9px] font-bold">
-                          STAGE 02
-                        </span>
-                        <span className="text-[8px] font-bold text-slate-500 uppercase">Conditioning</span>
-                      </div>
-                      <div className="font-extrabold text-emerald-950 text-[10px] leading-tight mb-1">
-                        DENOISING &amp; INGESTION
-                      </div>
-                      <ul className="text-[9px] text-slate-600 space-y-0.5">
-                        <li>• 1D Kalman Noise Filter</li>
-                        <li>• Recursive Bayesian State</li>
-                        <li>• Multi-Rate Synchronizer</li>
-                        <li>• 180-Day Buffer Ledger</li>
-                      </ul>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-emerald-200/60 text-center font-mono text-[8px] font-extrabold text-emerald-700">
-                      Filtered State ➔
-                    </div>
-                  </div>
-
-                  {/* Stage 3 */}
-                  <div className="p-2 rounded-xl bg-amber-50/80 border border-amber-200 flex flex-col justify-between text-[11px] relative shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white font-mono text-[9px] font-bold">
-                          STAGE 03
-                        </span>
-                        <span className="text-[8px] font-bold text-slate-500 uppercase">Physics &amp; AI</span>
-                      </div>
-                      <div className="font-extrabold text-amber-950 text-[10px] leading-tight mb-1">
-                        HYBRID PHYSICS &amp; AI
-                      </div>
-                      <ul className="text-[9px] text-slate-600 space-y-0.5">
-                        <li>• Darcy-Weisbach Fluid Drop</li>
-                        <li>• ASTM D1250 Net Oil Solver</li>
-                        <li>• BS&amp;W Water-Cut Cut</li>
-                        <li>• XGBoost Stick-Slip AI</li>
-                      </ul>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-amber-200/60 text-center font-mono text-[8px] font-extrabold text-amber-700">
-                      Physics Solutes ➔
-                    </div>
-                  </div>
-
-                  {/* Stage 4 */}
-                  <div className="p-2 rounded-xl bg-purple-50/80 border border-purple-200 flex flex-col justify-between text-[11px] relative shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono text-[9px] font-bold">
-                          STAGE 04
-                        </span>
-                        <span className="text-[8px] font-bold text-slate-500 uppercase">3D Spatial</span>
-                      </div>
-                      <div className="font-extrabold text-purple-950 text-[10px] leading-tight mb-1">
-                        3D SPATIAL TWIN &amp; HCI
-                      </div>
-                      <ul className="text-[9px] text-slate-600 space-y-0.5">
-                        <li>• Three.js WebGL 3D Platform</li>
-                        <li>• 360° Orbit &amp; Explode View</li>
-                        <li>• Dynamic Riser Flow Vectors</li>
-                        <li>• MediaPipe &amp; Jarvis Voice</li>
-                      </ul>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-purple-200/60 text-center font-mono text-[8px] font-extrabold text-purple-700">
-                      Supervisory ➔
-                    </div>
-                  </div>
-
-                  {/* Stage 5 */}
-                  <div className="p-2 rounded-xl bg-pink-50/80 border border-pink-200 flex flex-col justify-between text-[11px] relative shadow-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-pink-600 text-white font-mono text-[9px] font-bold">
-                          STAGE 05
-                        </span>
-                        <span className="text-[8px] font-bold text-slate-500 uppercase">Governance</span>
-                      </div>
-                      <div className="font-extrabold text-pink-950 text-[10px] leading-tight mb-1">
-                        MIDNIGHT SETTLEMENT
-                      </div>
-                      <ul className="text-[9px] text-slate-600 space-y-0.5">
-                        <li>• Auto 12:00 AM EOD Audit</li>
-                        <li>• Gross vs Net Barrels Total</li>
-                        <li>• DGH Regulatory Ledger</li>
-                        <li>• Closed-Loop Interlock</li>
-                      </ul>
-                    </div>
-                    <div className="mt-1 pt-1 border-t border-pink-200/60 text-center font-mono text-[8px] font-extrabold text-pink-700">
-                      Closed-Loop ✔
-                    </div>
-                  </div>
+                {/* STENCIL WORKFLOW DIAGRAM IMAGE (FEATURED PROMINENTLY) */}
+                <div className="rounded-xl overflow-hidden border border-slate-200 bg-white p-1 mb-2.5 shadow-sm">
+                  <img
+                    src="/presentation/workflow_diagram_stencil.jpg"
+                    alt="VARUNA-AI 5-Stage System Architecture &amp; Workflow Diagram"
+                    className="w-full h-44 sm:h-52 object-contain bg-white rounded-lg"
+                  />
                 </div>
 
-                {/* BOTTOM HALF: TECH MATRIX (LEFT) + RIG VISUALS (RIGHT) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
-                  {/* Left Box: Core Tech Stack & Protocol Connections */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs flex flex-col justify-between">
+                {/* BOTTOM HALF: TECH MATRIX & PROTOCOLS (LEFT) + RIG VISUALS (RIGHT) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                  {/* Left 2 Cols: Core Tech Stack & Communication Protocols */}
+                  <div className="sm:col-span-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex flex-col justify-between">
                     <div>
-                      <div className="font-extrabold text-blue-900 text-xs mb-1.5 flex items-center gap-1.5">
+                      <div className="font-extrabold text-blue-900 text-xs mb-1 flex items-center gap-1.5">
                         <Cpu className="w-3.5 h-3.5 text-blue-600" />
-                        <span>CORE TECH STACK &amp; PROTOCOL CONNECTIONS</span>
+                        <span>CORE TECH STACK &amp; COMMUNICATION PROTOCOLS</span>
                       </div>
                       <ul className="space-y-1 text-slate-700 text-[11px]">
                         <li>
-                          • <strong className="text-slate-900">Edge SCADA Protocols:</strong> Modbus RTU/TCP, OPC-UA, WITSML, Serial USB WebGateway (50Hz / 20ms).
+                          • <strong className="text-slate-900">Stage 1 (Edge SCADA):</strong> Modbus RTU/TCP, OPC-UA, WITSML, Serial USB Gateway (50Hz / 20ms).
                         </li>
                         <li>
-                          • <strong className="text-slate-900">Physics &amp; Standards:</strong> ASTM D1250 / API MPMS 11.1 (CTL/CPL), Darcy-Weisbach multiphase pressure gradients.
+                          • <strong className="text-slate-900">Stage 2 (Denoising):</strong> 1D Kalman recursive state estimator + 180-day local ledger (&lt;0.1ms query).
                         </li>
                         <li>
-                          • <strong className="text-slate-900">AI &amp; Estimators:</strong> Discrete 1D Kalman state estimators, XGBoost stick-slip classifiers.
+                          • <strong className="text-slate-900">Stage 3 (Physics &amp; AI):</strong> Darcy-Weisbach hydraulics, ASTM D1250 / API MPMS 11.1 net oil solver, XGBoost AI.
                         </li>
                         <li>
-                          • <strong className="text-slate-900">3D Spatial Interface:</strong> Three.js / WebGL with 360° orbit, explode view, MediaPipe hands &amp; Jarvis voice.
-                        </li>
-                        <li>
-                          • <strong className="text-slate-900">Storage &amp; Settlement:</strong> 180-day local time-series ledger with automated 12:00 Midnight DGH audit.
+                          • <strong className="text-slate-900">Stage 4 &amp; 5 (Twin &amp; Audit):</strong> Three.js WebGL 3D spatial twin with gestures/voice + automated 12:00 AM DGH audit.
                         </li>
                       </ul>
                     </div>
                   </div>
 
-                  {/* Right Box: Rig Showcase Images */}
-                  <div className="grid grid-cols-2 gap-2 h-full">
-                    <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 flex flex-col shadow-xs">
+                  {/* Right Col: Rig Showcase Images */}
+                  <div className="grid grid-cols-2 gap-1.5 h-full">
+                    <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-950 flex flex-col shadow-xs">
                       <img
                         src="/presentation/rig_diorama_colored_1789147250513.jpg"
                         alt="Offshore Rig Diorama"
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 flex flex-col shadow-xs">
+                    <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-950 flex flex-col shadow-xs">
                       <img
                         src="/presentation/hologram_digital_twin_1789148609789.jpg"
                         alt="3D Holographic Cyber Twin"

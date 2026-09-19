@@ -219,97 +219,266 @@ async function generateSihPresentation() {
   }
 
   // ==========================================
-  // SLIDE 3: TECHNICAL APPROACH (CONCISE & ARCHITECTURE)
+  // SLIDE 3: TECHNICAL APPROACH (WORKFLOW & CONNECTIONS PIPELINE)
   // ==========================================
   {
     const slide3 = pptx.addSlide();
     slide3.background = { color: 'FFFFFF' };
-    addSihHeader(slide3, 'TECHNICAL APPROACH', 3);
+    addSihHeader(slide3, 'TECHNICAL APPROACH & ARCHITECTURE WORKFLOW', 3);
 
-    // Left Side: Technologies & Methodology
-    slide3.addText('Technologies to be used:', {
+    // 5-STAGE CONNECTED WORKFLOW PIPELINE ACROSS THE TOP
+    const stageWidth = 2.26;
+    const stageHeight = 2.75;
+    const startX = 0.6;
+    const gapX = 0.22;
+    const posY = 1.35;
+
+    const stages = [
+      {
+        num: '01',
+        title: 'EDGE SENSORS & SCADA',
+        subtitle: 'Data Acquisition',
+        color: '1E3A8A',
+        bg: 'EFF6FF',
+        border: 'BFDBFE',
+        badgeColor: '2563EB',
+        items: [
+          '• Subsea X-Mas Tree Gauges (P, T)',
+          '• PDC Drill Core (WOB, Torque)',
+          '• Topside MPFM Coriolis Meters',
+          '• 50.0 Hz (20ms) Telemetry Stream',
+        ],
+        connText: 'Modbus / OPC-UA / WITSML ➔',
+      },
+      {
+        num: '02',
+        title: 'DENOISING & INGESTION',
+        subtitle: 'Signal Conditioning',
+        color: '065F46',
+        bg: 'F0FDF4',
+        border: 'BBF7D0',
+        badgeColor: '059669',
+        items: [
+          '• 1D Kalman Noise Filtering',
+          '• Recursive Bayesian Estimator',
+          '• Multi-Rate Synchronizer',
+          '• 180-Day Time-Series Ledger',
+        ],
+        connText: 'Filtered State Stream ➔',
+      },
+      {
+        num: '03',
+        title: 'HYBRID PHYSICS & AI',
+        subtitle: 'Analytical Processing',
+        color: '78350F',
+        bg: 'FFFBEB',
+        border: 'FDE68A',
+        badgeColor: 'D97706',
+        items: [
+          '• Darcy-Weisbach Hydraulics',
+          '• ASTM D1250 Net Oil Solver',
+          '• BS&W Water-Cut Deconvolution',
+          '• XGBoost Stick-Slip Detector',
+        ],
+        connText: 'Physics Solutes & Vectors ➔',
+      },
+      {
+        num: '04',
+        title: '3D SPATIAL TWIN & HCI',
+        subtitle: 'Real-Time Visualization',
+        color: '4C1D95',
+        bg: 'FAF5FF',
+        border: 'E9D5FF',
+        badgeColor: '7C3AED',
+        items: [
+          '• Three.js / WebGL 3D Platform',
+          '• 360° Orbit & Explode View',
+          '• Subsea Riser & Flow Vectors',
+          '• MediaPipe Hands & Voice Copilot',
+        ],
+        connText: 'Supervisory Dispatch ➔',
+      },
+      {
+        num: '05',
+        title: 'MIDNIGHT SETTLEMENT',
+        subtitle: 'Governance & Action',
+        color: '831843',
+        bg: 'FDF2F8',
+        border: 'FBCFE8',
+        badgeColor: 'DB2777',
+        items: [
+          '• Automated 12:00 AM EOD Audit',
+          '• Gross vs Net Barrels Accounting',
+          '• DGH Regulatory Compliance',
+          '• Closed-Loop Throttle Interlock',
+        ],
+        connText: 'Closed-Loop Actuation ✔',
+      },
+    ];
+
+    stages.forEach((st, idx) => {
+      const curX = startX + idx * (stageWidth + gapX);
+
+      // Card Background
+      slide3.addShape(pptx.ShapeType.roundRect, {
+        x: curX,
+        y: posY,
+        w: stageWidth,
+        h: stageHeight,
+        fill: { color: st.bg },
+        line: { color: st.border, width: 1.5 },
+        rectRadius: 0.08,
+      });
+
+      // Stage Number Pill
+      slide3.addShape(pptx.ShapeType.roundRect, {
+        x: curX + 0.1,
+        y: posY + 0.1,
+        w: 0.65,
+        h: 0.25,
+        fill: { color: st.badgeColor },
+        rectRadius: 0.05,
+      });
+
+      slide3.addText(`STAGE ${st.num}`, {
+        x: curX + 0.1,
+        y: posY + 0.1,
+        w: 0.65,
+        h: 0.25,
+        fontSize: 7.5,
+        fontFace: 'Arial',
+        bold: true,
+        color: 'FFFFFF',
+        align: 'center',
+        valign: 'middle',
+      });
+
+      // Subtitle
+      slide3.addText(st.subtitle.toUpperCase(), {
+        x: curX + 0.8,
+        y: posY + 0.12,
+        w: stageWidth - 0.9,
+        h: 0.22,
+        fontSize: 7,
+        fontFace: 'Arial',
+        bold: true,
+        color: '64748B',
+      });
+
+      // Main Title
+      slide3.addText(st.title, {
+        x: curX + 0.1,
+        y: posY + 0.38,
+        w: stageWidth - 0.2,
+        h: 0.42,
+        fontSize: 9.5,
+        fontFace: 'Arial',
+        bold: true,
+        color: st.color,
+      });
+
+      // Items / Bullets
+      slide3.addText(st.items.join('\n'), {
+        x: curX + 0.1,
+        y: posY + 0.82,
+        w: stageWidth - 0.2,
+        h: 1.45,
+        fontSize: 8,
+        fontFace: 'Calibri',
+        color: '334155',
+      });
+
+      // Connection indicator banner at bottom of card
+      slide3.addShape(pptx.ShapeType.rect, {
+        x: curX + 0.05,
+        y: posY + stageHeight - 0.38,
+        w: stageWidth - 0.1,
+        h: 0.3,
+        fill: { color: 'FFFFFF' },
+        line: { color: st.border, width: 1 },
+      });
+
+      slide3.addText(st.connText, {
+        x: curX + 0.05,
+        y: posY + stageHeight - 0.38,
+        w: stageWidth - 0.1,
+        h: 0.3,
+        fontSize: 7.5,
+        fontFace: 'Arial',
+        bold: true,
+        align: 'center',
+        valign: 'middle',
+        color: st.color,
+      });
+    });
+
+    // BOTTOM SECTION: TECH MATRIX (LEFT) + RIG VISUALS (RIGHT)
+    const bottomY = 4.25;
+    const bottomHeight = 2.45;
+
+    // Tech Stack Summary Box (Left)
+    slide3.addShape(pptx.ShapeType.roundRect, {
       x: 0.6,
-      y: 1.4,
-      w: 6.2,
-      h: 0.35,
-      fontSize: 13,
+      y: bottomY,
+      w: 6.4,
+      h: bottomHeight,
+      fill: { color: 'F8FAFC' },
+      line: { color: 'E2E8F0', width: 1 },
+      rectRadius: 0.08,
+    });
+
+    slide3.addText('CORE TECHNOLOGY STACK & PROTOCOL CONNECTIONS', {
+      x: 0.8,
+      y: bottomY + 0.1,
+      w: 6.0,
+      h: 0.28,
+      fontSize: 10.5,
       fontFace: 'Arial',
       bold: true,
-      color: '0F172A',
+      color: '1E3A8A',
     });
 
     slide3.addText([
-      { text: '• Edge & SCADA Hardware: ', options: { bold: true, fontSize: 11, color: '0F172A' } },
-      { text: 'Wellhead PLCs, MPFM Coriolis meters, PDC torque load cells, Serial USB / Modbus.\n', options: { fontSize: 11, color: '334155' } },
+      { text: '• Edge SCADA Protocols: ', options: { bold: true, fontSize: 9, color: '0F172A' } },
+      { text: 'OPC-UA, Modbus RTU/TCP, WITSML, Serial USB WebGateway (50Hz / 20ms).\n', options: { fontSize: 9, color: '334155' } },
 
-      { text: '• Physics Engines: ', options: { bold: true, fontSize: 11, color: '0F172A' } },
-      { text: 'ASTM D1250 / API MPMS 11.1, Darcy-Weisbach flow hydraulics, Coriolis resonant density.\n', options: { fontSize: 11, color: '334155' } },
+      { text: '• Physics & Standards: ', options: { bold: true, fontSize: 9, color: '0F172A' } },
+      { text: 'ASTM D1250 / API MPMS 11.1 (CTL/CPL), Darcy-Weisbach multiphase pressure gradients.\n', options: { fontSize: 9, color: '334155' } },
 
-      { text: '• AI & Signal Processing: ', options: { bold: true, fontSize: 11, color: '0F172A' } },
-      { text: '1D Kalman state estimators, XGBoost stick-slip anomaly classifiers.\n', options: { fontSize: 11, color: '334155' } },
+      { text: '• AI & Estimators: ', options: { bold: true, fontSize: 9, color: '0F172A' } },
+      { text: 'Discrete 1D Kalman state estimators, XGBoost stick-slip anomaly classifiers.\n', options: { fontSize: 9, color: '334155' } },
 
-      { text: '• 3D Spatial Interface: ', options: { bold: true, fontSize: 11, color: '0F172A' } },
-      { text: 'React Three Fiber / Three.js WebGL with real-time gesture & voice HUD.\n', options: { fontSize: 11, color: '334155' } },
+      { text: '• 3D Spatial Interface: ', options: { bold: true, fontSize: 9, color: '0F172A' } },
+      { text: 'Three.js / WebGL with 360° orbit, explode view, MediaPipe hands & Jarvis voice.\n', options: { fontSize: 9, color: '334155' } },
 
-      { text: '• Local Database Engine: ', options: { bold: true, fontSize: 11, color: '0F172A' } },
-      { text: 'IndexedDB & time-series binary search ledger (<0.1ms query latency).', options: { fontSize: 11, color: '334155' } },
+      { text: '• Storage & Settlement: ', options: { bold: true, fontSize: 9, color: '0F172A' } },
+      { text: '180-day local time-series ledger with automated 12:00 Midnight DGH regulatory audit.', options: { fontSize: 9, color: '334155' } },
     ], {
-      x: 0.6,
-      y: 1.8,
-      w: 6.2,
-      h: 2.3,
+      x: 0.8,
+      y: bottomY + 0.38,
+      w: 6.0,
+      h: 1.95,
       fontFace: 'Calibri',
     });
 
-    slide3.addText('Methodology and process for implementation:', {
-      x: 0.6,
-      y: 4.25,
-      w: 6.2,
-      h: 0.35,
-      fontSize: 13,
-      fontFace: 'Arial',
-      bold: true,
-      color: '0F172A',
-    });
-
-    slide3.addText([
-      { text: '1. Multi-Rate Ingestion: ', options: { bold: true, fontSize: 10.5, color: '0F172A' } },
-      { text: '50.0 Hz subsea telemetry stream fed into edge Kalman filters.\n', options: { fontSize: 10.5, color: '334155' } },
-
-      { text: '2. Physics Deconvolution: ', options: { bold: true, fontSize: 10.5, color: '0F172A' } },
-      { text: 'Equations solve multiphase cut and ASTM temperature/pressure corrections.\n', options: { fontSize: 10.5, color: '334155' } },
-
-      { text: '3. 3D Spatial Synchronization: ', options: { bold: true, fontSize: 10.5, color: '0F172A' } },
-      { text: 'WebGL digital twin renders animated flows, riser stresses, and PDC rotation.\n', options: { fontSize: 10.5, color: '334155' } },
-
-      { text: '4. Midnight EOD Settlement: ', options: { bold: true, fontSize: 10.5, color: '0F172A' } },
-      { text: 'Automated 12:00 AM daemon seals certified daily DGH compliance ledgers.', options: { fontSize: 10.5, color: '334155' } },
-    ], {
-      x: 0.6,
-      y: 4.65,
-      w: 6.2,
-      h: 2.1,
-      fontFace: 'Calibri',
-    });
-
-    // Right Side: 2 Rig Images
+    // Right Side: 2 Connected Rig Images
     if (fs.existsSync(imgRigDiorama)) {
       slide3.addImage({
         path: imgRigDiorama,
-        x: 7.1,
-        y: 1.4,
-        w: 5.6,
-        h: 2.6,
+        x: 7.2,
+        y: bottomY,
+        w: 2.7,
+        h: bottomHeight,
       });
     }
 
     if (fs.existsSync(imgHologram)) {
       slide3.addImage({
         path: imgHologram,
-        x: 7.1,
-        y: 4.15,
-        w: 5.6,
-        h: 2.6,
+        x: 10.05,
+        y: bottomY,
+        w: 2.7,
+        h: bottomHeight,
       });
     }
   }
@@ -508,11 +677,15 @@ async function generateSihPresentation() {
   const rootOutputPath = path.resolve('SIH2026_Digital_Twin_VARUNA_AI.pptx');
 
   await pptx.writeFile({ fileName: outputPath });
-  fs.copyFileSync(outputPath, rootOutputPath);
-
-  console.log(`✅ [SUCCESS] SIH 6-Page PowerPoint Presentation Generated:`);
-  console.log(`   └─ ${outputPath}`);
-  console.log(`   └─ ${rootOutputPath}`);
+  try {
+    fs.copyFileSync(outputPath, rootOutputPath);
+    console.log(`✅ [SUCCESS] SIH 6-Page PowerPoint Presentation Generated:`);
+    console.log(`   └─ ${outputPath}`);
+    console.log(`   └─ ${rootOutputPath}`);
+  } catch (err: any) {
+    console.log(`✅ [SUCCESS] SIH 6-Page PowerPoint Presentation Generated at: ${outputPath}`);
+    console.log(`ℹ️ [NOTE] Root copy deferred (file currently open in Microsoft PowerPoint). The public downloadable file is fully updated.`);
+  }
 }
 
 generateSihPresentation().catch(console.error);

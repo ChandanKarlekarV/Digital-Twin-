@@ -19,6 +19,7 @@ import { JarvisGestureVoiceHUD } from './components/hud/JarvisGestureVoiceHUD';
 import { JarvisPipeSliceModal } from './components/hud/JarvisPipeSliceModal';
 import { HolographicPartInspectionModal } from './components/hud/HolographicPartInspectionModal';
 import { MidnightSettlementModal } from './components/hud/MidnightSettlementModal';
+import { SihPresentationModal } from './components/hud/SihPresentationModal';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
 import {
   Compass,
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Cpu,
   FileCheck,
+  FileText,
   Wind,
   Layers,
   Scissors,
@@ -61,6 +63,7 @@ export default function App() {
   const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
   const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
+  const setSihModalOpen = useRigStore((s) => s.setSihModalOpen);
 
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
@@ -244,6 +247,21 @@ export default function App() {
                 </div>
               </button>
 
+              {/* SIH 6-Page Presentation Deck & Video Demo */}
+              <button
+                onClick={() => {
+                  setSihModalOpen(true);
+                  setIsToolsDropdownOpen(false);
+                }}
+                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-amber-500/20 text-amber-200 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-amber-400" />
+                <div>
+                  <div className="font-bold text-[11px]">SIH 6-Page Presentation Deck</div>
+                  <div className="text-[9px] text-amber-400/70">Official SIH26120 6-Slide Template &amp; Video Demo</div>
+                </div>
+              </button>
+
               {/* 6-Month AI Production Ledger & Midnight Settlement */}
               <button
                 onClick={() => {
@@ -255,7 +273,7 @@ export default function App() {
                 <Calendar className="w-4 h-4 text-emerald-400" />
                 <div>
                   <div className="font-bold text-[11px]">6-Month AI Production Ledger</div>
-                  <div className="text-[9px] text-emerald-400/70">180-Day Database & Midnight EOD Settlement</div>
+                  <div className="text-[9px] text-emerald-400/70">180-Day Database &amp; Midnight EOD Settlement</div>
                 </div>
               </button>
 
@@ -270,7 +288,7 @@ export default function App() {
                 <FileCheck className="w-4 h-4 text-reliance-cyan" />
                 <div>
                   <div className="font-bold text-[11px]">Compliance Audit Report</div>
-                  <div className="text-[9px] text-reliance-textMuted">Export DGH / ISO verification PDF & CSV</div>
+                  <div className="text-[9px] text-reliance-textMuted">Export DGH / ISO verification PDF &amp; CSV</div>
                 </div>
               </button>
 
@@ -284,7 +302,7 @@ export default function App() {
               >
                 <Wind className="w-4 h-4 text-amber-400" />
                 <div>
-                  <div className="font-bold text-[11px]">KG-D6 Weather & Metocean</div>
+                  <div className="font-bold text-[11px]">KG-D6 Weather &amp; Metocean</div>
                   <div className="text-[9px] text-amber-400/70">Bay of Bengal marine radar forecast</div>
                 </div>
               </button>
@@ -342,12 +360,26 @@ export default function App() {
             setEodModalOpen(true);
             varunaVoice.speakCustom('Opening KG-D6 6-Month AI Production Ledger and Midnight Settlement.');
           }}
-          className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-emerald-400/50 bg-reliance-deepnavy/95 hover:bg-emerald-950/40 text-emerald-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-cyan-glow"
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-emerald-400/50 bg-reliance-deepnavy/95 hover:bg-emerald-950/40 text-emerald-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-cyan-glow"
           title="Open 6-Month AI Production Ledger & 12:00 Midnight Settlement"
         >
           <Calendar className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
           <span>6-MO LEDGER &amp; EOD</span>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5" />
+        </button>
+
+        {/* Dedicated SIH 6-PAGE PPT Quick Button */}
+        <button
+          onClick={() => {
+            setSihModalOpen(true);
+            varunaVoice.speakCustom('Opening Smart India Hackathon 6-page presentation deck.');
+          }}
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-amber-400/60 bg-reliance-deepnavy/95 hover:bg-amber-950/40 text-amber-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-amber-glow"
+          title="Open Official SIH 6-Page Presentation Deck & Download PPTX"
+        >
+          <FileText className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+          <span>SIH 6-PAGE PPT</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
         </button>
       </div>
 
@@ -541,6 +573,9 @@ export default function App() {
 
       {/* ================= 6-MONTH AI PRODUCTION LEDGER & MIDNIGHT SETTLEMENT MODAL ================= */}
       <MidnightSettlementModal />
+
+      {/* ================= SIH 6-PAGE PRESENTATION & VIDEO DEMO MODAL ================= */}
+      <SihPresentationModal />
 
       {/* ================= KG-D6 LIVE WEATHER & MARINE FORECAST SIDE PANEL ================= */}
       <KgD6WeatherSidePanel />

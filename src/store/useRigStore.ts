@@ -496,6 +496,10 @@ interface RigState {
   setEodModalOpen: (open: boolean) => void;
   toggleEodModal: () => void;
 
+  isSihModalOpen: boolean;
+  setSihModalOpen: (open: boolean) => void;
+  toggleSihModal: () => void;
+
   isTelemetryDrawerOpen: boolean;
   setTelemetryDrawerOpen: (open: boolean) => void;
   toggleTelemetryDrawer: () => void;
@@ -757,6 +761,10 @@ export const useRigStore = create<RigState>((set, get) => ({
   isEodModalOpen: false,
   setEodModalOpen: (open) => set({ isEodModalOpen: open }),
   toggleEodModal: () => set((s) => ({ isEodModalOpen: !s.isEodModalOpen })),
+
+  isSihModalOpen: false,
+  setSihModalOpen: (open) => set({ isSihModalOpen: open }),
+  toggleSihModal: () => set((s) => ({ isSihModalOpen: !s.isSihModalOpen })),
 
   isTelemetryDrawerOpen: true,
   setTelemetryDrawerOpen: (open) => set({ isTelemetryDrawerOpen: open }),

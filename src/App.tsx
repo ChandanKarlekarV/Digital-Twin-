@@ -580,16 +580,13 @@ export default function App() {
       {/* ================= KG-D6 LIVE WEATHER & MARINE FORECAST SIDE PANEL ================= */}
       <KgD6WeatherSidePanel />
 
-      {/* ================= JARVIS FLOATING GESTURE CAMERA & VOICE HUD ================= */}
-      <JarvisGestureVoiceHUD />
-
       {/* ================= JARVIS FULL-SCREEN PIPE 1 SLICE INSPECTION MODAL ================= */}
       <JarvisPipeSliceModal />
 
       {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
       <HolographicPartInspectionModal />
 
-      {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENTAL TAB & COLOR-CODE LEGEND ================= */}
+      {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENTAL TAB, COLOR-CODE LEGEND & GESTURE/VOICE HUD ================= */}
       {/* Positioned at bottom-left so the entire top-left under SYSTEM TOOLS is 100% clear and unobstructed */}
       <div className="absolute bottom-10 left-4 z-30 flex items-end gap-3 pointer-events-auto max-w-[calc(100vw-360px)]">
         {/* Left Side of Cluster: Environmental Conditions & Tides and Critical Anomalies */}
@@ -601,8 +598,11 @@ export default function App() {
           <CriticalAnomaliesMonitor />
         </div>
 
-        {/* Right Side of Cluster: Color-Code Segregation Legend (Placed on the right side of Environmental Tab) */}
+        {/* Middle of Cluster: Color-Code Segregation Legend */}
         <ColorCodeLegend />
+
+        {/* Right of Cluster: Jarvis Gesture Camera & Varuna Voice HUD */}
+        <JarvisGestureVoiceHUD />
       </div>
 
       {/* ================= RIGHT SIDEBAR: SYSTEM TELEMETRY & PRODUCTION DATA ================= */}

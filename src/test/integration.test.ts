@@ -197,41 +197,145 @@ async function runEndToEndVerification() {
   useRigStore.getState().setEmergencyScenario('none', 1);
   assert(useRigStore.getState().emergencyScenario === 'none', 'ESD Reset & Operational Normalization', 'ESD successfully reset to All Systems Nominal');
 
-  // TEST 14: Jarvis Voice Commands
-  console.log('\n--- TEST GROUP 13: JARVIS VOICE COMMANDER & 3D INTERACTION ---');
-  useRigStore.getState().executeVoiceCommand('pipe 1');
+  // TEST 14: Varuna Voice Wake-Word Protocol & 28-Command Matrix
+  console.log('\n--- TEST GROUP 13: VARUNA AI WAKE-WORD ARCHITECTURE & COMMANDS ---');
+  // 1. Passive state test: Random chatter while asleep should NOT trigger commands
+  useRigStore.getState().sleepVaruna();
+  useRigStore.getState().closeHoloModal();
+  useRigStore.getState().executeVoiceCommand('open pipe 1');
+  assert(
+    useRigStore.getState().isVarunaAwake === false && useRigStore.getState().activeHoloModal === null,
+    'Varuna Asleep Silence & Passive Gating (Zero Accidental Execution)',
+    'Random phrases without "Varuna" wake word correctly ignored while AI is asleep'
+  );
+
+  // 2. Wake word alone: "Varuna" wakes up AI and sets 10s active window
+  useRigStore.getState().executeVoiceCommand('varuna');
+  assert(
+    useRigStore.getState().isVarunaAwake === true && useRigStore.getState().varunaWakeExpiry > Date.now(),
+    'Varuna Wake Word Detection & 10s Active Listening Window',
+    'AI woke up upon hearing "Varuna" and prepared for subsequent commands'
+  );
+
+  // 3. Command in active window: "open pipe 1"
+  useRigStore.getState().executeVoiceCommand('open pipe 1');
   assert(
     useRigStore.getState().cameraViewMode === 'pipe1' && useRigStore.getState().activeHoloModal === 'pipe1',
-    'Jarvis Voice: "Pipe 1" Camera Lock & Hologram Modal',
-    'Camera locked to Pipe 1 and opened holographic inspection box'
+    'Varuna Active Window Command: "open pipe 1"',
+    'Camera locked to Pipe 1 and opened holographic cross-section inspection box'
   );
 
-  useRigStore.getState().executeVoiceCommand('drill');
-  assert(
-    useRigStore.getState().cameraViewMode === 'drill' && useRigStore.getState().activeHoloModal === 'drill',
-    'Jarvis Voice: "Drill" PDC Bit & Rotary Hologram',
-    'Camera locked to Drill string and opened drill inspection deck'
-  );
-
-  useRigStore.getState().executeVoiceCommand('helipad');
+  // 4. One-breath wake word + command: "varuna open helipad view"
+  useRigStore.getState().sleepVaruna();
+  useRigStore.getState().executeVoiceCommand('varuna open helipad view');
   assert(
     useRigStore.getState().cameraViewMode === 'helipad' && useRigStore.getState().activeHoloModal === 'helipad',
-    'Jarvis Voice: "Helipad" CAP 437 Aviation Deck',
+    'Varuna One-Breath: "varuna open helipad view" CAP 437 Deck',
     'Opened CAP 437 offshore helideck telemetry box'
   );
 
-  useRigStore.getState().executeVoiceCommand('split');
+  // 5. One-breath: "varuna open crane 1 view"
+  useRigStore.getState().executeVoiceCommand('varuna open crane 1 view');
   assert(
-    useRigStore.getState().isSplitViewActive === true && useRigStore.getState().cameraViewMode === 'split',
-    'Jarvis Voice: "Split" Iron Man 12-Module Exploded Assembly',
-    'Subsea digital twin exploded into 12 decoupled floating modules'
+    useRigStore.getState().cameraViewMode === 'crane1' && useRigStore.getState().activeHoloModal === 'crane1',
+    'Varuna One-Breath: "varuna open crane 1 view" Lattice Boom',
+    'Opened Port Crane 1 (Lattice Boom) diagnostics deck'
   );
 
-  useRigStore.getState().executeVoiceCommand('assemble');
+  // 6. One-breath: "varuna open accommodation module"
+  useRigStore.getState().executeVoiceCommand('varuna open accommodation module');
+  assert(
+    useRigStore.getState().cameraViewMode === 'accommodation' && useRigStore.getState().activeHoloModal === 'accommodation',
+    'Varuna One-Breath: "varuna open accommodation module"',
+    'Opened Living Quarters & Habitation HVAC diagnostics'
+  );
+
+  // 7. One-breath: "varuna open industrial pipe fitting"
+  useRigStore.getState().executeVoiceCommand('varuna open industrial pipe fitting');
+  assert(
+    useRigStore.getState().cameraViewMode === 'industrial_pipes' && useRigStore.getState().activeHoloModal === 'industrial_pipes',
+    'Varuna One-Breath: "varuna open industrial pipe fitting"',
+    'Opened Topside Industrial Process Piping & Manifold deck'
+  );
+
+  // 8. One-breath: "varuna open jack-up legs"
+  useRigStore.getState().executeVoiceCommand('varuna open jack-up legs');
+  assert(
+    useRigStore.getState().cameraViewMode === 'jackup_legs' && useRigStore.getState().activeHoloModal === 'jackup_legs',
+    'Varuna One-Breath: "varuna open jack-up legs"',
+    'Opened Hydrostatic Stability Columns & Jack-Up Pontoons deck'
+  );
+
+  // 9. One-breath: "varuna open subsea drill string"
+  useRigStore.getState().executeVoiceCommand('varuna open subsea drill string');
+  assert(
+    useRigStore.getState().cameraViewMode === 'drill_string' && useRigStore.getState().activeHoloModal === 'drill_string',
+    'Varuna One-Breath: "varuna open subsea drill string"',
+    'Opened Rotary Drill String & Casing mechanics deck'
+  );
+
+  // 10. One-breath: "varuna open drill bit"
+  useRigStore.getState().executeVoiceCommand('varuna open drill bit');
+  assert(
+    useRigStore.getState().cameraViewMode === 'drill_bit' && useRigStore.getState().activeHoloModal === 'drill_bit',
+    'Varuna One-Breath: "varuna open drill bit"',
+    'Opened PDC Diamond Cutter Bit inspection deck'
+  );
+
+  // 11. One-breath: "varuna open main deck structure"
+  useRigStore.getState().executeVoiceCommand('varuna open main deck structure');
+  assert(
+    useRigStore.getState().cameraViewMode === 'main_deck' && useRigStore.getState().activeHoloModal === 'main_deck',
+    'Varuna One-Breath: "varuna open main deck structure"',
+    'Opened Main Deck Structural Load & Deflection deck'
+  );
+
+  // 12. One-breath: "varuna open command dock"
+  useRigStore.getState().executeVoiceCommand('varuna open command dock');
+  assert(
+    useRigStore.getState().isCommandDockOpen === true,
+    'Varuna One-Breath: "varuna open command dock"',
+    'Command dock opened successfully'
+  );
+
+  // 13. One-breath: "varuna open hardware SCADA gateway"
+  useRigStore.getState().executeVoiceCommand('varuna open hardware SCADA gateway');
+  assert(
+    useRigStore.getState().isHardwareModalOpen === true,
+    'Varuna One-Breath: "varuna open hardware SCADA gateway"',
+    'Hardware SCADA Gateway modal opened successfully'
+  );
+
+  // 14. One-breath: "varuna open open ppt"
+  useRigStore.getState().executeVoiceCommand('varuna open open ppt');
+  assert(
+    useRigStore.getState().isSihModalOpen === true,
+    'Varuna One-Breath: "varuna open open ppt"',
+    'Smart India Hackathon 6-Page Presentation deck opened successfully'
+  );
+
+  // 15. One-breath: "varuna tell latex report"
+  useRigStore.getState().executeVoiceCommand('varuna tell latex report');
+  assert(
+    useRigStore.getState().isPhysicsModalOpen === true,
+    'Varuna One-Breath: "varuna tell latex report"',
+    'Physical Governing Equations & LaTeX audit modal opened'
+  );
+
+  // 16. One-breath: "varuna open jarvis view"
+  useRigStore.getState().executeVoiceCommand('varuna open jarvis view');
+  assert(
+    useRigStore.getState().isSplitViewActive === true && useRigStore.getState().cameraViewMode === 'split',
+    'Varuna One-Breath: "varuna open jarvis view"',
+    'Exploded 12-module assembly view active'
+  );
+
+  // 17. One-breath: "varuna assemble"
+  useRigStore.getState().executeVoiceCommand('varuna assemble');
   assert(
     useRigStore.getState().isSplitViewActive === false && useRigStore.getState().cameraViewMode === 'free',
-    'Jarvis Voice: "Assemble" Subsea Assembly Re-convergence',
-    'Exploded assembly re-converged and camera reset to free orbit'
+    'Varuna One-Breath: "varuna assemble"',
+    'Subsea digital twin reassembled successfully'
   );
 
   console.log('\n================================================================');
@@ -240,3 +344,4 @@ async function runEndToEndVerification() {
 }
 
 runEndToEndVerification().catch(console.error);
+

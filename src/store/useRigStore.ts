@@ -17,10 +17,16 @@ export type CameraViewMode =
   | 'pipe9'
   | 'pipe1_slice'
   | 'drill'
+  | 'drill_string'
+  | 'drill_bit'
   | 'motor'
   | 'helipad'
   | 'crane1'
   | 'crane2'
+  | 'accommodation'
+  | 'industrial_pipes'
+  | 'jackup_legs'
+  | 'main_deck'
   | 'upper_rig'
   | 'well1'
   | 'well2'
@@ -44,10 +50,16 @@ export type HolographicComponentType =
   | 'pipe8'
   | 'pipe9'
   | 'drill'
+  | 'drill_string'
+  | 'drill_bit'
   | 'motor'
   | 'helipad'
   | 'crane1'
   | 'crane2'
+  | 'accommodation'
+  | 'industrial_pipes'
+  | 'jackup_legs'
+  | 'main_deck'
   | 'upper_rig'
   | 'well1'
   | 'well2'
@@ -533,8 +545,10 @@ interface RigState {
     confidence?: number
   ) => void;
 
-  // Jarvis Voice Commander
+  // Jarvis Voice Commander & Varuna Wake-Word Architecture
   isVoiceCommanderActive: boolean;
+  isVarunaAwake: boolean;
+  varunaWakeExpiry: number;
   lastVoiceCommand: string | null;
   voiceTranscript: string | null;
   isListeningSpeech: boolean;
@@ -542,6 +556,8 @@ interface RigState {
   setLastVoiceCommand: (cmd: string | null) => void;
   setVoiceTranscript: (transcript: string | null) => void;
   setIsListeningSpeech: (listening: boolean) => void;
+  wakeVaruna: () => void;
+  sleepVaruna: () => void;
   executeVoiceCommand: (command: string) => void;
 
   // Jarvis Exploded / Split View & Pipe Slicing
@@ -649,7 +665,7 @@ export const useRigStore = create<RigState>((set, get) => ({
   tidePhase: 'flood',
   tidePhaseIndex: 0,
   isDynamicTideCycling: true,
-  dynamicTideSecondsRemaining: 10,
+  dynamicTideSecondsRemaining: 60,
 
   setCurrentFlowPower: (power) => {
     let speed = 2.4;
@@ -806,8 +822,10 @@ export const useRigStore = create<RigState>((set, get) => ({
   setGestureDetected: (gesture, confidence = 1.0) =>
     set({ gestureDetected: gesture, gestureConfidence: confidence }),
 
-  // Jarvis Voice Commander
+  // Jarvis / Varuna Voice Commander & Wake-Word Architecture
   isVoiceCommanderActive: true,
+  isVarunaAwake: false,
+  varunaWakeExpiry: 0,
   lastVoiceCommand: null,
   voiceTranscript: null,
   isListeningSpeech: false,
@@ -815,6 +833,16 @@ export const useRigStore = create<RigState>((set, get) => ({
   setLastVoiceCommand: (cmd) => set({ lastVoiceCommand: cmd }),
   setVoiceTranscript: (transcript) => set({ voiceTranscript: transcript }),
   setIsListeningSpeech: (listening) => set({ isListeningSpeech: listening }),
+
+  wakeVaruna: () => {
+    const expiry = Date.now() + 10000; // 10 second active listening window
+    set({ isVarunaAwake: true, varunaWakeExpiry: expiry });
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      varunaVoice.speakCustom('Give me the command');
+    });
+  },
+
+  sleepVaruna: () => set({ isVarunaAwake: false, varunaWakeExpiry: 0 }),
 
   // Jarvis Exploded / Split View & Pipe Slicing
   isSplitViewActive: false,
@@ -871,11 +899,201 @@ export const useRigStore = create<RigState>((set, get) => ({
     });
   },
 
+  /**
+   * VARUNA-AI Voice Command Execution Pipeline
+   * Strict Wake Word Protocol:
+   * 1. If asleep, remains silent and passive until "Varuna" is spoken.
+   * 2. If user says "Varuna", AI wakes up, replies: "Give me the command", and opens 10-second window.
+   * 3. If user says "Varuna open [command]" in one breath, executes immediately and confirms.
+   * 4. Supports all 28+ commands requested.
+   */
   executeVoiceCommand: (rawCommand: string) => {
-    const cmd = rawCommand.toLowerCase().trim();
+    const rawLower = rawCommand.toLowerCase().trim();
     set({ lastVoiceCommand: rawCommand });
 
-    // 1. PIPES 1 TO 9 MATCHING
+    // Detect Wake Word variations (Varuna, Varun, Verona, Viruna, Waruna, Baruna, Varna)
+    const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna)\b/i;
+    const hasWakeWord = wakeWordRegex.test(rawLower);
+
+    const now = Date.now();
+    const isCurrentlyAwake = get().isVarunaAwake && now < get().varunaWakeExpiry;
+
+    // If asleep and no wake word detected, stay silent and do not execute
+    if (!hasWakeWord && !isCurrentlyAwake) {
+      return;
+    }
+
+    // Strip wake word to extract the actual command
+    let cmd = rawLower.replace(wakeWordRegex, '').trim();
+
+    // Remove leading filler words like "please", "can you", "hey", "hello", "hi"
+    cmd = cmd.replace(/^(please|can you|could you|hey|hello|hi|ai|a\.i\.)\s+/i, '').trim();
+
+    // If user said ONLY "Varuna" (no actual command), wake up and speak "Give me the command"
+    if (!cmd || cmd === 'wake up' || cmd === 'online' || cmd === 'start' || cmd === 'hello' || cmd === 'hi') {
+      get().wakeVaruna();
+      return;
+    }
+
+    // Refresh wake window on active command
+    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000 });
+
+    // ==================== 28 VOICE COMMAND HANDLERS ====================
+
+    // 1 & 2. JARVIS VIEW / SPLIT VIEW
+    if (cmd.includes('jarvis view') || cmd.includes('split view') || cmd === 'open split' || cmd === 'split') {
+      set({
+        isSplitViewActive: true,
+        splitFactor: 1.0,
+        cameraViewMode: 'split',
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening Jarvis exploded split view. All 12 structural assemblies decoupled.');
+      });
+      return;
+    }
+
+    // 3. HELIPAD VIEW
+    if (cmd.includes('helipad') || cmd.includes('heli deck') || cmd.includes('helicopter')) {
+      set({
+        cameraViewMode: 'helipad',
+        selectedAssetId: 'HELIPAD-DECK',
+        activeHoloModal: 'helipad',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening CAP 437 offshore helipad holographic view.');
+      });
+      return;
+    }
+
+    // 4. CRANE 1 VIEW (LATTICE BOOM)
+    if (cmd.includes('crane 1') || cmd.includes('crane one') || cmd.includes('port crane')) {
+      set({
+        cameraViewMode: 'crane1',
+        selectedAssetId: 'CRANE-PORT',
+        activeHoloModal: 'crane1',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening Heavy-Lift Pedestal Crane 1 view.');
+      });
+      return;
+    }
+
+    // 5. CRANE 2 VIEW (PEDESTAL)
+    if (cmd.includes('crane 2') || cmd.includes('crane two') || cmd.includes('starboard crane')) {
+      set({
+        cameraViewMode: 'crane2',
+        selectedAssetId: 'CRANE-STARBOARD',
+        activeHoloModal: 'crane2',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening Auxiliary Deck Crane 2 view.');
+      });
+      return;
+    }
+
+    // 6. ACCOMMODATION MODULE
+    if (cmd.includes('accommodation') || cmd.includes('living quarters') || cmd.includes('quarters')) {
+      set({
+        cameraViewMode: 'accommodation',
+        selectedAssetId: 'ACCOMMODATION-MODULE',
+        activeHoloModal: 'accommodation',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening offshore accommodation module diagnostics.');
+      });
+      return;
+    }
+
+    // 7. INDUSTRIAL PIPE FITTING
+    if (cmd.includes('industrial pipe') || cmd.includes('industrial pipe fitting') || cmd.includes('pipe fitting') || cmd.includes('process piping')) {
+      set({
+        cameraViewMode: 'industrial_pipes',
+        selectedAssetId: 'INDUSTRIAL-PIPES',
+        activeHoloModal: 'industrial_pipes',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening industrial pipe fitting and valve manifold view.');
+      });
+      return;
+    }
+
+    // 8. JACK-UP LEGS
+    if (cmd.includes('jack-up legs') || cmd.includes('jack up legs') || cmd.includes('jackup legs') || cmd.includes('legs') || cmd.includes('stability columns')) {
+      set({
+        cameraViewMode: 'jackup_legs',
+        selectedAssetId: 'PILLAR-FOUNDATION',
+        activeHoloModal: 'jackup_legs',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening buoyant jack-up stability legs and foundation columns.');
+      });
+      return;
+    }
+
+    // 9. SUBSEA DRILL STRING
+    if (cmd.includes('subsea drill string') || cmd.includes('drill string')) {
+      set({
+        cameraViewMode: 'drill_string',
+        selectedAssetId: 'DRILL-SYSTEM',
+        activeHoloModal: 'drill_string',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening subsea rotary drill string mechanics.');
+      });
+      return;
+    }
+
+    // 10. DRILL BIT
+    if (cmd.includes('drill bit') || cmd.includes('cutter bit') || cmd.includes('pdc bit')) {
+      set({
+        cameraViewMode: 'drill_bit',
+        selectedAssetId: 'DRILL-SYSTEM',
+        activeHoloModal: 'drill_bit',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening PDC diamond cutter drill bit inspection deck.');
+      });
+      return;
+    }
+
+    // General drill command fallback
+    if (cmd.includes('drill') || cmd.includes('drilling')) {
+      set({
+        cameraViewMode: 'drill',
+        selectedAssetId: 'DRILL-SYSTEM',
+        activeHoloModal: 'drill',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening rotary drilling derrick and subsea drill system.');
+      });
+      return;
+    }
+
+    // 11. MAIN DECK STRUCTURE
+    if (cmd.includes('main deck') || cmd.includes('main deck structure') || cmd.includes('deck structure') || cmd.includes('platform deck')) {
+      set({
+        cameraViewMode: 'main_deck',
+        selectedAssetId: 'TOPSIDE-DRILL-RIG',
+        activeHoloModal: 'main_deck',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening platform main deck structure and topside quarters.');
+      });
+      return;
+    }
+
+    // 12-20. PIPES 1 TO 9 MATCHING
     for (let i = 1; i <= 9; i++) {
       const numWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
       const digitStr = `pipe ${i}`;
@@ -891,182 +1109,92 @@ export const useRigStore = create<RigState>((set, get) => ({
           isTelemetryDrawerOpen: true,
         });
         import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom(`Targeting Subsea Flowline Pipe ${i}. Opening holographic cross-section and telemetry box.`);
+          varunaVoice.speakCustom(`Opening Subsea Flowline Pipe ${i} holographic cross-section.`);
         });
         return;
       }
     }
 
-    // 2. DRILL & ROTARY STRING
-    if (cmd.includes('drill') || cmd.includes('drill bit') || cmd.includes('drill string') || cmd.includes('drilling')) {
-      set({
-        cameraViewMode: 'drill',
-        selectedAssetId: 'DRILL-SYSTEM',
-        activeHoloModal: 'drill',
-        isTelemetryDrawerOpen: true,
-      });
+    // 21. COMMAND DOCK
+    if (cmd.includes('command dock') || cmd.includes('dock') || cmd.includes('tools dock')) {
+      set({ isCommandDockOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Rotary Drill String and PDC Bit. Opening holographic drill mechanics deck.');
+        varunaVoice.speakCustom('Opening Tactical Command Dock.');
       });
       return;
     }
 
-    // 3. MOTOR & TOP DRIVE / MUD PUMPS
-    if (cmd.includes('motor') || cmd.includes('top drive') || cmd.includes('mud pump') || cmd.includes('drive')) {
-      set({
-        cameraViewMode: 'motor',
-        selectedAssetId: 'TOP-DRIVE-MOTOR',
-        activeHoloModal: 'motor',
-        isTelemetryDrawerOpen: true,
-      });
+    // 22. HARDWARE SCADA GATEWAY
+    if (cmd.includes('hardware scada gateway') || cmd.includes('hardware gateway') || cmd.includes('scada gateway') || cmd.includes('hardware')) {
+      set({ isHardwareModalOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting 1,200 Horsepower Top-Drive Induction Motor & Mud Pump VFD. Opening power diagnostics box.');
+        varunaVoice.speakCustom('Opening Hardware SCADA Gateway.');
       });
       return;
     }
 
-    // 4. HELIPAD / HELIDECK
-    if (cmd.includes('helipad') || cmd.includes('heli deck') || cmd.includes('helicopter') || cmd.includes('heli')) {
-      set({
-        cameraViewMode: 'helipad',
-        selectedAssetId: 'HELIPAD-DECK',
-        activeHoloModal: 'helipad',
-        isTelemetryDrawerOpen: true,
-      });
+    // 23. OPEN PPT / SIH PRESENTATION
+    if (cmd.includes('open ppt') || cmd.includes('open presentation') || cmd.includes('sih ppt') || cmd.includes('ppt') || cmd.includes('presentation')) {
+      set({ isSihModalOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting CAP 437 Offshore Helideck. Opening flight clearance & wind turbulence telemetry box.');
+        varunaVoice.speakCustom('Opening Smart India Hackathon 6-page presentation deck.');
       });
       return;
     }
 
-    // 5. CRANE 1 (HEAVY LIFT PORT CRANE)
-    if (cmd.includes('crane 1') || cmd.includes('crane one') || cmd.includes('port crane') || cmd.includes('heavy lift crane')) {
-      set({
-        cameraViewMode: 'crane1',
-        selectedAssetId: 'CRANE-PORT',
-        activeHoloModal: 'crane1',
-        isTelemetryDrawerOpen: true,
-      });
+    // 24. DATABASE
+    if (cmd.includes('database') || cmd.includes('data base') || cmd.includes('ledger') || cmd.includes('6 month') || cmd.includes('telemetry db')) {
+      set({ isTelemetryDrawerOpen: true, isEodModalOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Heavy-Lift Pedestal Crane 1. 65 Metric Ton SWL capacity loaded.');
+        varunaVoice.speakCustom('Opening 6-Month Time-Series Telemetry Database and Production Ledger.');
       });
       return;
     }
 
-    // 6. CRANE 2 (AUXILIARY STARBOARD CRANE)
-    if (cmd.includes('crane 2') || cmd.includes('crane two') || cmd.includes('starboard crane') || cmd.includes('crane')) {
-      set({
-        cameraViewMode: 'crane2',
-        selectedAssetId: 'CRANE-STARBOARD',
-        activeHoloModal: 'crane2',
-        isTelemetryDrawerOpen: true,
-      });
+    // 25. COMPLIANCE AUDIT REPORT
+    if (cmd.includes('compliance audit report') || cmd.includes('compliance report') || cmd.includes('audit report') || cmd.includes('compliance')) {
+      set({ isReportModalOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Auxiliary Deck Crane 2. Slew angle and boom radius active.');
+        varunaVoice.speakCustom('Opening DGH and ISO Regulatory Compliance Audit Report.');
       });
       return;
     }
 
-    // 7. UPPER PART OF THE RIG / DERRICK / TOPSIDE DECK
-    if (
-      cmd.includes('upper part') ||
-      cmd.includes('upper rig') ||
-      cmd.includes('topside deck') ||
-      cmd.includes('derrick') ||
-      cmd.includes('platform deck') ||
-      cmd.includes('upper')
-    ) {
-      set({
-        cameraViewMode: 'upper_rig',
-        selectedAssetId: 'TOPSIDE-DRILL-RIG',
-        activeHoloModal: 'upper_rig',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Topside Upper Rig Structure, Quarters, and Lattice Derrick Mast.');
-      });
-      return;
-    }
-
-    // 8. WELLS 1 TO 7 (INDIVIDUAL OR COLLECTIVE)
-    for (let w = 1; w <= 7; w++) {
-      const wellNumWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
-      if (cmd.includes(`well ${w}`) || cmd.includes(`well ${wellNumWords[w - 1]}`)) {
-        const wellKey = `well${w}` as HolographicComponentType;
-        set({
-          cameraViewMode: wellKey,
-          selectedAssetId: `WELL-${w}`,
-          activeHoloModal: wellKey,
-          isTelemetryDrawerOpen: true,
+    // 26. CURRENT WEATHER REPORT & FORECAST
+    if (cmd.includes('weather report') || cmd.includes('current weather') || cmd.includes('weather forecast') || cmd.includes('weather')) {
+      set({ isWeatherPanelOpen: true });
+      import('../services/KgD6WeatherService').then(({ KgD6WeatherService }) => {
+        KgD6WeatherService.getSpokenWeatherForecast().then((speech) => {
+          import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+            varunaVoice.speakCustom(speech);
+          });
         });
+      });
+      return;
+    }
+
+    // 27. WATER STATUS
+    if (cmd.includes('water status') || cmd.includes('ocean status') || cmd.includes('tide status') || cmd.includes('water current')) {
+      import('../physics/DynamicTideEngine').then(({ dynamicTideEngine }) => {
+        const speech = dynamicTideEngine.getWaterStatusSpeech();
         import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom(`Targeting Subsea Production Well ${w}. Opening Christmas Tree wellhead diagnostics box.`);
+          varunaVoice.speakCustom(speech);
         });
-        return;
-      }
-    }
-
-    if (cmd.includes('wells') || cmd.includes('the wells') || cmd.includes('wells 1-7') || cmd.includes('wellhead')) {
-      set({
-        cameraViewMode: 'wells1_7',
-        selectedAssetId: 'WELL-CLUSTER',
-        activeHoloModal: 'wells1_7',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Subsea Wells 1 through 7 Field Cluster. Opening 7-Wellhead diagnostics deck.');
       });
       return;
     }
 
-    // 9. SLICE IT / CROSS SECTION
-    if (
-      cmd.includes('slice it') ||
-      cmd.includes('slice pipe') ||
-      cmd.includes('cut pipe') ||
-      cmd.includes('cut a part') ||
-      cmd.includes('cross section') ||
-      cmd.includes('slice')
-    ) {
-      set({
-        isPipeSliced: true,
-        isPipeSliceModalOpen: true,
-        cameraViewMode: 'pipe1_slice',
-        selectedAssetId: 'RISER-ALPHA',
-      });
+    // 28. LATEX REPORT / PHYSICS REPORT
+    if (cmd.includes('latex report') || cmd.includes('latex') || cmd.includes('physics report') || cmd.includes('math report') || cmd.includes('equations')) {
+      set({ isPhysicsModalOpen: true });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Longitudinal pipe cut initiated. Opening full-screen cross-section inspection deck.');
+        varunaVoice.speakCustom('Displaying real-time LaTeX Mathematical and Physical Governing Equations Report.');
       });
       return;
     }
 
-    // 10. SPLIT / EXPLODE VIEW (IRON MAN SUIT DISASSEMBLY)
-    if (
-      cmd.includes('split') ||
-      cmd.includes('explode') ||
-      cmd.includes('disassemble') ||
-      cmd.includes('breakdown') ||
-      cmd.includes('separate parts')
-    ) {
-      set({
-        isSplitViewActive: true,
-        splitFactor: 1.0,
-        cameraViewMode: 'split',
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Executing Iron Man piece-by-piece disassembly protocol. All assemblies decoupled.');
-      });
-      return;
-    }
-
-    // 11. ASSEMBLE / REASSEMBLE
-    if (
-      cmd.includes('assemble') ||
-      cmd.includes('reassemble') ||
-      cmd.includes('merge') ||
-      cmd.includes('close split') ||
-      cmd.includes('put together')
-    ) {
+    // REASSEMBLE / ASSEMBLE RIG
+    if (cmd.includes('assemble') || cmd.includes('reassemble') || cmd.includes('merge') || cmd.includes('close split')) {
       set({
         isSplitViewActive: false,
         splitFactor: 0.0,
@@ -1081,58 +1209,69 @@ export const useRigStore = create<RigState>((set, get) => ({
       return;
     }
 
-    // 12. SPATIAL & HUD COMMANDS
-    if (cmd.includes('topside') || cmd.includes('deck')) {
-      set({ cameraViewMode: 'topside' });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Navigating to Topside Platform Deck.');
+    // SLICE PIPE
+    if (cmd.includes('slice it') || cmd.includes('slice pipe') || cmd.includes('cut pipe') || cmd.includes('cross section') || cmd.includes('slice')) {
+      set({
+        isPipeSliced: true,
+        isPipeSliceModalOpen: true,
+        cameraViewMode: 'pipe1_slice',
+        selectedAssetId: 'RISER-ALPHA',
       });
-    } else if (cmd.includes('subsea') || cmd.includes('dive')) {
-      set({ cameraViewMode: 'subsea' });
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Diving subsea to water column.');
+        varunaVoice.speakCustom('Longitudinal pipe cut initiated. Opening full-screen cross-section inspection deck.');
       });
-    } else if (cmd.includes('manifold') || cmd.includes('seabed')) {
-      set({ cameraViewMode: 'manifold' });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Targeting Seabed Gathering Manifold Hub at -1,020 meters.');
-      });
-    } else if (cmd.includes('weather') || cmd.includes('forecast')) {
-      set({ isWeatherPanelOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening KG-D6 Real-Time Metocean & Weather Forecast report.');
-      });
-    } else if (cmd.includes('storm') || cmd.includes('cyclone')) {
-      get().setCurrentFlowPower('storm');
-      get().setEmergencyScenario('weather_squall', 2);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Simulating Bay of Bengal Tropical Storm surge.');
-      });
-    } else if (cmd.includes('latex') || cmd.includes('audit') || cmd.includes('math')) {
-      set({ isPhysicsModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening real-time LaTeX physical derivations audit.');
-      });
-    } else if (cmd.includes('compliance') || cmd.includes('report') || cmd.includes('pdf')) {
-      set({ isReportModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening DGH / ISO Compliance Audit Report.');
-      });
-    } else if (cmd.includes('blockage') || cmd.includes('choke')) {
-      get().setEmergencyScenario('pipe_blockage', 2);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakIncidentAlert('pipe_blockage', 2);
-      });
-    } else if (cmd.includes('drill damage')) {
-      get().setEmergencyScenario('drill_damage', 2);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakIncidentAlert('drill_damage', 2);
-      });
-    } else {
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom(`Voice command received: ${rawCommand}`);
-      });
+      return;
     }
+
+    // MOTOR & TOP DRIVE
+    if (cmd.includes('motor') || cmd.includes('top drive') || cmd.includes('mud pump')) {
+      set({
+        cameraViewMode: 'motor',
+        selectedAssetId: 'TOP-DRIVE-MOTOR',
+        activeHoloModal: 'motor',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening 1,200 Horsepower Top-Drive Induction Motor diagnostics.');
+      });
+      return;
+    }
+
+    // WELLS 1 TO 7
+    for (let w = 1; w <= 7; w++) {
+      const wellNumWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+      if (cmd.includes(`well ${w}`) || cmd.includes(`well ${wellNumWords[w - 1]}`)) {
+        const wellKey = `well${w}` as HolographicComponentType;
+        set({
+          cameraViewMode: wellKey,
+          selectedAssetId: `WELL-${w}`,
+          activeHoloModal: wellKey,
+          isTelemetryDrawerOpen: true,
+        });
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom(`Opening Subsea Production Well ${w} Christmas Tree diagnostics.`);
+        });
+        return;
+      }
+    }
+
+    if (cmd.includes('wells') || cmd.includes('wells 1-7') || cmd.includes('wellhead cluster')) {
+      set({
+        cameraViewMode: 'wells1_7',
+        selectedAssetId: 'WELL-CLUSTER',
+        activeHoloModal: 'wells1_7',
+        isTelemetryDrawerOpen: true,
+      });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Opening Subsea Wells 1 through 7 Field Cluster diagnostics.');
+      });
+      return;
+    }
+
+    // GENERIC FALLBACK
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      varunaVoice.speakCustom(`Varuna received command: ${cmd}`);
+    });
   },
 
   voiceStatus: {

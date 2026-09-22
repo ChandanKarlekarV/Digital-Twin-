@@ -257,4 +257,23 @@ export class KgD6WeatherService {
       isLiveFetched: false,
     };
   }
+
+  /**
+   * Generates a spoken diagnostic weather and future forecast summary for Varuna Voice
+   */
+  public static async getSpokenWeatherForecast(): Promise<string> {
+    const report = await this.getLiveWeather();
+    const condition = report.cloudCoverPct > 60 ? 'mostly cloudy with scattered monsoon mist' : report.cloudCoverPct > 30 ? 'partly cloudy and clear' : 'sunny and clear';
+    
+    // Future forecast trend
+    const maxWave = Math.max(...report.forecast24h.map((f) => f.waveHeightM), 1.8);
+    const maxWind = Math.max(...report.forecast24h.map((f) => f.windSpeedKt), 24.0);
+    const hasRain = report.forecast24h.some((f) => f.precipitationMm > 2.0);
+
+    const futureOutlook = hasRain
+      ? `Upcoming 24-hour forecast: Expect afternoon monsoon squall showers with peak wave heights reaching ${maxWave.toFixed(1)} meters and wind gusts up to ${Math.round(maxWind)} knots. Sea state will transition to moderate swell.`
+      : `Upcoming 24-hour forecast: Sustained sunny to partly cloudy conditions with calm sea surface, maximum swell height of ${maxWave.toFixed(1)} meters, and steady trade winds of ${Math.round(maxWind)} knots. Optimal window for offshore crane operations and vessel offloading.`;
+
+    return `Bay of Bengal Metocean Report for KG-D6 Block. Current conditions: Air temperature is ${report.airTemperatureC} degrees Celsius, sea surface temperature is ${report.seaSurfaceTemperatureC} degrees. Wind is blowing at ${report.windSpeedKnots} knots from ${report.windDirectionLabel}. Significant wave height is ${report.significantWaveHeightM} meters, currently in ${report.seaStateClassification}. Skies are ${condition}. ${futureOutlook}`;
+  }
 }

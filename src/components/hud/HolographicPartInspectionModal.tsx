@@ -115,6 +115,60 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           label: 'STARBOARD CRANE 2 (PEDESTAL) SECTION',
           wireColor: '#FF007F',
         };
+      case 'accommodation':
+        return {
+          focalOffset: new THREE.Vector3(-10, 14, -8),
+          camPos: new THREE.Vector3(-22, 20, 6),
+          targetBounds: [14, 12, 14] as [number, number, number],
+          camDistance: 16,
+          label: 'ACCOMMODATION MODULE (LIVING QUARTERS)',
+          wireColor: '#9933FF',
+        };
+      case 'industrial_pipes':
+        return {
+          focalOffset: new THREE.Vector3(0, 10, 0),
+          camPos: new THREE.Vector3(12, 16, 14),
+          targetBounds: [16, 14, 16] as [number, number, number],
+          camDistance: 18,
+          label: 'INDUSTRIAL PROCESS PIPE FITTING & MANIFOLD',
+          wireColor: '#00FFFF',
+        };
+      case 'jackup_legs':
+        return {
+          focalOffset: new THREE.Vector3(0, -4, 0),
+          camPos: new THREE.Vector3(24, 6, 24),
+          targetBounds: [26, 20, 26] as [number, number, number],
+          camDistance: 28,
+          label: 'BUOYANT JACK-UP LEGS & FOUNDATION COLUMNS',
+          wireColor: '#00B4D8',
+        };
+      case 'drill_string':
+        return {
+          focalOffset: new THREE.Vector3(0, 0, 0),
+          camPos: new THREE.Vector3(8, 4, 14),
+          targetBounds: [10, 30, 10] as [number, number, number],
+          camDistance: 18,
+          label: 'SUBSEA DRILL STRING CONDUIT',
+          wireColor: '#00D2FF',
+        };
+      case 'drill_bit':
+        return {
+          focalOffset: new THREE.Vector3(0, -18, 0),
+          camPos: new THREE.Vector3(6, -14, 10),
+          targetBounds: [8, 10, 8] as [number, number, number],
+          camDistance: 12,
+          label: '8-1/2" PDC DIAMOND DRILL BIT HEAD',
+          wireColor: '#FF3300',
+        };
+      case 'main_deck':
+        return {
+          focalOffset: new THREE.Vector3(0, 12, 0),
+          camPos: new THREE.Vector3(0, 26, 22),
+          targetBounds: [24, 12, 24] as [number, number, number],
+          camDistance: 24,
+          label: 'PLATFORM MAIN DECK STRUCTURE',
+          wireColor: '#1976D2',
+        };
       case 'upper_rig':
         return {
           focalOffset: new THREE.Vector3(0, 22, 0),
@@ -195,12 +249,13 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
           if (name === 'pCube2') {
             mesh.visible = false;
           } else if (name === 'model_Mesh') {
-            // Drill casing
-            const isTarget = type === 'drill';
+            // Drill casing / drill bit / drill string
+            const isTarget = type === 'drill' || type === 'drill_string' || type === 'drill_bit';
+            const wireColor = type === 'drill_bit' ? '#FF3300' : type === 'drill_string' ? '#00D2FF' : '#00E5FF';
             mesh.material = new THREE.MeshStandardMaterial({
-              color: isTarget ? '#00E5FF' : '#001A33',
-              emissive: isTarget ? '#00FFFF' : '#001122',
-              emissiveIntensity: isTarget ? 3.0 : 0.1,
+              color: isTarget ? wireColor : '#001A33',
+              emissive: isTarget ? wireColor : '#001122',
+              emissiveIntensity: isTarget ? 3.2 : 0.1,
               wireframe: true,
               transparent: true,
               opacity: isTarget ? 0.95 : 0.1,
@@ -230,6 +285,9 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
             const cCrane1Amber = new THREE.Color('#FF9900');       // CRANE 1: Amber Orange
             const cCrane2Pink = new THREE.Color('#FF007F');        // CRANE 2: Fuchsia Pink
             const cAccommodationViolet = new THREE.Color('#9933FF'); // ACCOMMODATION: Violet
+            const cIndustrialPipesCyan = new THREE.Color('#00FFFF'); // INDUSTRIAL PIPES: Bright Cyan
+            const cJackupLegsTeal = new THREE.Color('#00B4D8');    // JACK-UP LEGS: Teal
+            const cMainDeckBlue = new THREE.Color('#1976D2');      // MAIN DECK: Core Blue
             const cDerrickCyan = new THREE.Color('#00FFFF');       // PROCESS / DERRICK: Bright Cyan
             const cMotorSky = new THREE.Color('#38BDF8');
 
@@ -247,19 +305,22 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
               let chosen = cDimmed;
 
               if (type === 'helipad' && cy > 0.28 && distHelipad < 0.28) {
-                // HELIPAD: Electric Green
                 chosen = cHelipadGreen;
               } else if (type === 'crane1' && cy > 0.18 && (cx < -0.09 || (cz < -0.10 && cx < 0.05))) {
-                // CRANE 1 (LATTICE BOOM): Amber Orange
                 chosen = cCrane1Amber;
               } else if (type === 'crane2' && cy > 0.18 && cx > 0.09 && cz < 0.15) {
-                // CRANE 2 (PEDESTAL): Fuchsia Pink
                 chosen = cCrane2Pink;
+              } else if (type === 'accommodation' && cy > 0.12 && cx < -0.06 && cz < 0.1) {
+                chosen = cAccommodationViolet;
+              } else if (type === 'industrial_pipes' && cy > 0.06 && cy < 0.22 && distXZ < 0.24) {
+                chosen = cIndustrialPipesCyan;
+              } else if (type === 'jackup_legs' && cy < 0.08) {
+                chosen = cJackupLegsTeal;
+              } else if (type === 'main_deck' && cy >= 0.06 && cy <= 0.16) {
+                chosen = cMainDeckBlue;
               } else if (type === 'upper_rig' && cy > 0.10 && distXZ < 0.22) {
-                // DERRICK MAST / PROCESS: Bright Cyan
                 chosen = cDerrickCyan;
               } else if (type === 'motor' && cy > 0.08 && cy < 0.28 && distXZ < 0.14) {
-                // TOP DRIVE MOTOR
                 chosen = cMotorSky;
               }
 
@@ -533,7 +594,47 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 2. DRILL
+    // 2. DRILL STRING & CASING CONDUIT
+    if (type === 'drill_string') {
+      return {
+        title: 'SUBSEA ROTARY DRILL STRING & RISER CASING CONDUIT',
+        tag: 'DRILL-STRING-5-7/8',
+        category: 'DOWNHOLE DRILLING CONDUIT',
+        spec: '5-7/8" S-135 High-Strength Drill Pipe • NC50 Tool Joints',
+        depth: '-35m to -2,040m Borehole Depth',
+        latex: '\\sigma_{\\text{tensile}} = \\frac{W_{\\text{string}} + F_{\\text{overpull}}}{A_{\\text{pipe}}} = 210.4\\text{ MPa} \\quad [\\text{SF} = 4.62]',
+        metrics: [
+          { label: 'DRILLSTRING LENGTH', val: '2,040 m (Active)', icon: Compass, color: 'text-cyan-400' },
+          { label: 'STRING WEIGHT (MUD)', val: '184 Metric Tons', icon: Anchor, color: 'text-amber-400' },
+          { label: 'TOP-DRIVE RPM', val: '42 RPM (Nominal)', icon: Disc, color: 'text-emerald-400' },
+          { label: 'ANNULAR VELOCITY', val: '1.42 m/s (Bingham)', icon: Activity, color: 'text-purple-400' },
+          { label: 'STANDPIPE PRESSURE', val: '295 bar (4,278 psi)', icon: Gauge, color: 'text-blue-400' },
+          { label: 'STICK-SLIP INDEX', val: '0.04 (Low Vibration)', icon: ShieldCheck, color: 'text-emerald-400' },
+        ],
+      };
+    }
+
+    // 3. DRILL BIT (PDC DIAMOND CUTTERS)
+    if (type === 'drill_bit') {
+      return {
+        title: '8-1/2" MATRIX-BODY PDC DIAMOND CUTTER DRILL BIT',
+        tag: 'PDC-BIT-8.5IN',
+        category: 'FORMATION EXCAVATION',
+        spec: '6-Blade Matrix Body • 16mm Premium Polycrystalline Diamond Cutters',
+        depth: '-2,040m Subterranean Bedrock',
+        latex: '\\text{MSE} = \\frac{\\text{WOB}}{A_b} + \\frac{120 \\pi \\cdot N \\cdot T}{A_b \\cdot \\text{ROP}} = 38.4\\text{ MPa}',
+        metrics: [
+          { label: 'BIT DIAMETER', val: '8.500" (215.9 mm)', icon: Disc, color: 'text-rose-400' },
+          { label: 'CUTTER COUNT', val: '48 PDC Cutters', icon: Zap, color: 'text-amber-400' },
+          { label: 'ROP (PENETRATION)', val: '14.5 m/hr (Bedrock)', icon: Activity, color: 'text-cyan-400' },
+          { label: 'WEIGHT ON BIT', val: '18.2 MT (Nominal)', icon: Gauge, color: 'text-emerald-400' },
+          { label: 'NOZZLE JET SPEED', val: '82 m/s (Mud Jet)', icon: Droplets, color: 'text-blue-400' },
+          { label: 'DULL GRADING', val: '1-1-NO-A-X-I-NO-TD', icon: ShieldCheck, color: 'text-emerald-400' },
+        ],
+      };
+    }
+
+    // 4. DRILL GENERAL
     if (type === 'drill') {
       return {
         title: 'ROTARY DRILL STRING & PDC DIAMOND BIT ASSEMBLY',
@@ -553,7 +654,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 3. MOTOR
+    // 5. MOTOR
     if (type === 'motor') {
       return {
         title: '1,200 HP TOP DRIVE INDUCTION MOTOR & MUD PUMP VFD',
@@ -573,7 +674,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 4. HELIPAD
+    // 6. HELIPAD
     if (type === 'helipad') {
       return {
         title: 'CAP 437 OFFSHORE HELIDECK & AVIATION PLATFORM',
@@ -593,7 +694,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 5. CRANE 1
+    // 7. CRANE 1
     if (type === 'crane1') {
       return {
         title: 'HEAVY-LIFT ELECTRO-HYDRAULIC PEDESTAL CRANE 1 (PORT)',
@@ -613,7 +714,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 6. CRANE 2
+    // 8. CRANE 2
     if (type === 'crane2') {
       return {
         title: 'AUXILIARY SUPPLY DECK CRANE 2 (STARBOARD)',
@@ -633,7 +734,87 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 7. UPPER RIG
+    // 9. ACCOMMODATION MODULE
+    if (type === 'accommodation') {
+      return {
+        title: 'OFFSHORE ACCOMMODATION MODULE & LIVING QUARTERS',
+        tag: 'ACCOMMODATION-D6',
+        category: 'HABITATION & HVAC',
+        spec: '120 POB Safe Haven • Blast-Resistant Class H-60 Division',
+        depth: 'Topside Quarters Deck (+24m ASL)',
+        latex: 'Q_{\\text{HVAC}} = \\dot{m} \\cdot C_p \\cdot \\Delta T + Q_{\\text{sensible}} = 450.8\\text{ kW}',
+        metrics: [
+          { label: 'POB CAPACITY', val: '120 Personnel On Board', icon: ShieldCheck, color: 'text-purple-400' },
+          { label: 'OVERPRESSURE HVAC', val: '50 Pa Positive Margin', icon: Gauge, color: 'text-cyan-400' },
+          { label: 'EMERGENCY SUPPORT', val: '96 hrs Self-Contained', icon: Zap, color: 'text-emerald-400' },
+          { label: 'GAS INGRESS DAMPER', val: 'SIL-3 AUTO ISOLATION', icon: Activity, color: 'text-amber-400' },
+          { label: 'FIRE RATING', val: 'Class H-60 Blast Proof', icon: ShieldCheck, color: 'text-rose-400' },
+          { label: 'AMBIENT TEMP', val: '22.5 °C Comfort Index', icon: Thermometer, color: 'text-blue-400' },
+        ],
+      };
+    }
+
+    // 10. INDUSTRIAL PROCESS PIPES
+    if (type === 'industrial_pipes') {
+      return {
+        title: 'INDUSTRIAL PROCESS PIPE FITTING & MANIFOLD FLANGES',
+        tag: 'PROCESS-PIPING-D6',
+        category: 'TOP-SIDE PROCESS PIPING',
+        spec: 'Class 2500# RTJ Duplex Stainless Steel 22Cr',
+        depth: 'Topside Mezzanine (+14m ASL)',
+        latex: '\\sigma_{\\text{hoop}} = \\frac{P \\cdot D}{2 \\cdot t \\cdot E} = 142.6\\text{ MPa} \\le 0.72 \\cdot \\sigma_{\\text{yield}}',
+        metrics: [
+          { label: 'DESIGN PRESSURE', val: '414 bar (6,000 psi)', icon: Gauge, color: 'text-cyan-400' },
+          { label: 'CORROSION CLAD', val: '3.0 mm Inconel 625', icon: ShieldCheck, color: 'text-emerald-400' },
+          { label: 'FLANGE RATING', val: 'ANSI Class 2500 RTJ', icon: Zap, color: 'text-amber-400' },
+          { label: 'GAS FLOW RATE', val: '8.5 MMSCMD Gas', icon: Droplets, color: 'text-purple-400' },
+          { label: 'WELD NDT CHECK', val: '100% RADIOGRAPHIC PASS', icon: ShieldCheck, color: 'text-blue-400' },
+          { label: 'VIBRATION RMS', val: '1.2 mm/s (ISO 10816)', icon: Activity, color: 'text-emerald-400' },
+        ],
+      };
+    }
+
+    // 11. JACK-UP LEGS & COLUMNS
+    if (type === 'jackup_legs') {
+      return {
+        title: 'BUOYANT JACK-UP LEGS & SUBMERGED FOUNDATION COLUMNS',
+        tag: 'STABILITY-COLUMNS-4X',
+        category: 'HYDROSTATIC STABILITY',
+        spec: '4x High-Tensile Steel Column Pontoons • 18,400 MT Net Buoyancy',
+        depth: 'Surface to -35m Keel Draft',
+        latex: '\\overline{GM} = KB + BM - KG = 3.42\\text{ m} > 1.0\\text{ m} \\quad [\\text{IMO Standard}]',
+        metrics: [
+          { label: 'METACENTRIC HEIGHT GM', val: '3.42 m (Positive)', icon: Anchor, color: 'text-cyan-400' },
+          { label: 'OPERATING DRAFT', val: '-21.0 m (Ballasted)', icon: Compass, color: 'text-blue-400' },
+          { label: 'MOORING TENSION', val: '4,250 kN Balanced', icon: Zap, color: 'text-amber-400' },
+          { label: 'BALLAST TRIM', val: '68.4% Seawater Level', icon: Droplets, color: 'text-emerald-400' },
+          { label: 'FATIGUE LIFE INDEX', val: '12.4% (25-Year Life)', icon: Activity, color: 'text-purple-400' },
+          { label: 'CATHODIC ANODES', val: 'OPTIMAL POLARIZATION', icon: ShieldCheck, color: 'text-emerald-400' },
+        ],
+      };
+    }
+
+    // 12. MAIN DECK STRUCTURE
+    if (type === 'main_deck') {
+      return {
+        title: 'PLATFORM MAIN DECK STRUCTURE & TOPSIDE PROCESS HUB',
+        tag: 'MAIN-DECK-LEVEL1',
+        category: 'PRIMARY LOAD BEARING DECK',
+        spec: 'High-Yield Structural Steel S355ML • Integrated Coffer Dam',
+        depth: 'Topside Main Deck (+12m ASL)',
+        latex: '\\sigma_{\\text{bending}} = \\frac{M \\cdot y}{I} = 98.2\\text{ MPa} \\le \\sigma_{\\text{allowable}} = 230\\text{ MPa}',
+        metrics: [
+          { label: 'TOTAL DECK AREA', val: '4,800 m² Dual Level', icon: Anchor, color: 'text-blue-400' },
+          { label: 'VARIABLE LOAD', val: '6,500 Metric Tons', icon: Gauge, color: 'text-amber-400' },
+          { label: 'DECK DEFLECTION', val: '12 mm (Span: 45m)', icon: Activity, color: 'text-emerald-400' },
+          { label: 'BLAST WALL RATING', val: '1.2 bar Overpressure', icon: ShieldCheck, color: 'text-rose-400' },
+          { label: 'ESCAPE ROUTE LIGHT', val: '100% UPS Powered', icon: Zap, color: 'text-cyan-400' },
+          { label: 'ENVIRONMENTAL DRAIN', val: 'ZERO SHEEN CLOSED LOOP', icon: Droplets, color: 'text-emerald-400' },
+        ],
+      };
+    }
+
+    // 13. UPPER RIG
     if (type === 'upper_rig') {
       return {
         title: 'TOPSIDE DERRICK MAST, PRODUCTION PROCESS & LIVING QUARTERS',
@@ -653,7 +834,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 8. WELLS 1-7
+    // 14. WELLS 1-7
     const wellNum = type.replace('well', '');
     const isSingleWell = !isNaN(Number(wellNum));
     const wellData: { [k: string]: { name: string; type: string; depth: string; press: string } } = {
@@ -701,11 +882,16 @@ export const HolographicPartInspectionModal: React.FC = () => {
     { id: 'pipe7', label: 'Pipe 7' },
     { id: 'pipe8', label: 'Pipe 8' },
     { id: 'pipe9', label: 'Pipe 9' },
-    { id: 'drill', label: 'Drill' },
-    { id: 'motor', label: 'Motor' },
     { id: 'helipad', label: 'Helipad' },
     { id: 'crane1', label: 'Crane 1' },
     { id: 'crane2', label: 'Crane 2' },
+    { id: 'accommodation', label: 'Accommodation' },
+    { id: 'industrial_pipes', label: 'Industrial Pipes' },
+    { id: 'jackup_legs', label: 'Jack-Up Legs' },
+    { id: 'drill_string', label: 'Drill String' },
+    { id: 'drill_bit', label: 'Drill Bit' },
+    { id: 'main_deck', label: 'Main Deck' },
+    { id: 'motor', label: 'Motor VFD' },
     { id: 'upper_rig', label: 'Upper Rig' },
     { id: 'wells1_7', label: 'Wells 1–7' },
   ];

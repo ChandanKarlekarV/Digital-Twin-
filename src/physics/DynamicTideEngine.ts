@@ -81,8 +81,15 @@ export const TIDE_PHASES_SCHEDULE: DynamicTidePhaseDefinition[] = [
 
 class DynamicTideEngine {
   private timerId: number | null = null;
+  private animTimerId: number | null = null;
   private secondsInCurrentPhase = 0;
-  private readonly PHASE_DURATION_SECONDS = 10;
+  private readonly PHASE_DURATION_SECONDS = 60; // 1 minute per tidal cycle phase
+
+  // Interpolation targets for smooth transition
+  private targetSpeedKnots = 2.6;
+  private targetDirectionDeg = 45;
+  private currentLerpedSpeed = 2.6;
+  private currentLerpedDirection = 45;
 
   public start(): void {
     if (this.timerId !== null) return;
@@ -95,12 +102,43 @@ class DynamicTideEngine {
     this.timerId = window.setInterval(() => {
       this.tick();
     }, 1000);
+
+    // Smooth continuous lerp loop (30 FPS) to prevent any sudden jumps
+    this.animTimerId = window.setInterval(() => {
+      this.smoothStep();
+    }, 33);
   }
 
   public stop(): void {
     if (this.timerId !== null) {
       clearInterval(this.timerId);
       this.timerId = null;
+    }
+    if (this.animTimerId !== null) {
+      clearInterval(this.animTimerId);
+      this.animTimerId = null;
+    }
+  }
+
+  private smoothStep(): void {
+    const store = useRigStore.getState();
+    if (!store.isDynamicTideCycling) return;
+
+    // Smoothly blend speed (lerp alpha 0.04)
+    const speedDelta = this.targetSpeedKnots - this.currentLerpedSpeed;
+    if (Math.abs(speedDelta) > 0.01) {
+      this.currentLerpedSpeed += speedDelta * 0.04;
+      useRigStore.setState({ currentSpeedKnots: Number(this.currentLerpedSpeed.toFixed(2)) });
+    }
+
+    // Smoothly blend angle across shortest circular arc
+    let angleDelta = ((this.targetDirectionDeg - this.currentLerpedDirection + 540) % 360) - 180;
+    if (Math.abs(angleDelta) > 0.1) {
+      this.currentLerpedDirection = (this.currentLerpedDirection + angleDelta * 0.03 + 360) % 360;
+      useRigStore.setState({
+        currentDirectionDeg: Math.round(this.currentLerpedDirection),
+        currentDirectionLabel: this.getCompassLabel(this.currentLerpedDirection),
+      });
     }
   }
 
@@ -125,17 +163,27 @@ class DynamicTideEngine {
   public applyPhase(phaseIndex: number): void {
     const phase = TIDE_PHASES_SCHEDULE[phaseIndex] || TIDE_PHASES_SCHEDULE[0];
     this.secondsInCurrentPhase = 0;
+    this.targetSpeedKnots = phase.speedKnots;
+    this.targetDirectionDeg = phase.directionDeg;
 
     useRigStore.setState({
       tidePhaseIndex: phaseIndex,
       tidePhase: phase.id,
       currentFlowPower: phase.power,
-      currentSpeedKnots: phase.speedKnots,
-      currentDirectionDeg: phase.directionDeg,
-      currentDirectionLabel: this.getCompassLabel(phase.directionDeg),
       metoceanCondition: phase.metocean,
       dynamicTideSecondsRemaining: this.PHASE_DURATION_SECONDS,
     });
+  }
+
+  /**
+   * Generates a spoken diagnostic report for "varuna tell me the water status"
+   */
+  public getWaterStatusSpeech(): string {
+    const store = useRigStore.getState();
+    const phase = TIDE_PHASES_SCHEDULE[store.tidePhaseIndex] || TIDE_PHASES_SCHEDULE[0];
+    const seabedPressureBar = Math.round(204 + (store.currentSpeedKnots * 1.8)); // Subsea hydrostatic + dynamic head at -2040m
+
+    return `Hydrodynamic water telemetry report: Current flow velocity is ${store.currentSpeedKnots.toFixed(1)} knots heading ${store.currentDirectionLabel}. Subsea seabed hydrostatic pressure is ${seabedPressureBar} bar at 2,040 meters depth. Ocean state is in ${phase.label}, with surface swell height at ${phase.swellHeightM} meters. Tidal cycle duration is set to 1 minute per phase with smooth hydrodynamic transitions active.`;
   }
 
   private getCompassLabel(deg: number): string {

@@ -61,20 +61,26 @@ class JarvisVoiceCommander {
           }
         }
 
-        const currentText = finalTranscript || interimTranscript;
+        const currentText = (finalTranscript || interimTranscript).trim();
         if (currentText) {
-          useRigStore.getState().setVoiceTranscript(currentText.trim());
+          useRigStore.getState().setVoiceTranscript(currentText);
         }
 
         if (finalTranscript) {
           const cleanCmd = finalTranscript.trim();
-          useRigStore.getState().executeVoiceCommand(cleanCmd);
+          if (cleanCmd) {
+            useRigStore.getState().executeVoiceCommand(cleanCmd);
+          }
         }
       };
 
       this.recognition.onerror = (event: any) => {
         if (event.error !== 'no-speech') {
           console.warn('Speech Recognition notice:', event.error);
+        }
+        // Auto-refresh transcript buffer on any audio or speech error
+        if (event.error === 'network' || event.error === 'audio-capture' || event.error === 'not-allowed') {
+          useRigStore.getState().setVoiceTranscript(null);
         }
       };
 

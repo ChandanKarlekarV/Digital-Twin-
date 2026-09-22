@@ -50,6 +50,22 @@ class JarvisGestureVisionEngine {
   private syntheticCanvas: HTMLCanvasElement | null = null;
   private syntheticCtx: CanvasRenderingContext2D | null = null;
 
+  // Deduplication & 60 FPS performance optimizations
+  private lastReportedGesture: RecognizedGesture = null;
+  private lastReportedConfidence = 0;
+  private lastProcessTime = 0;
+  private lastTrackingResult: GestureTrackingResult = {
+    gesture: null,
+    confidence: 0,
+    handX: 0.5,
+    handY: 0.5,
+    palmRadius: 0,
+    isPinching: false,
+    isTwoHanded: false,
+    landmarks: [],
+    fingerCount: 0,
+  };
+
   public async start(): Promise<boolean> {
     if (this.isRunning && (this.stream?.active || this.isSynthetic)) return true;
 
@@ -151,37 +167,45 @@ class JarvisGestureVisionEngine {
   }
 
   /**
-   * 4-Stage Resolution Fallback Ladder for Bulletproof Webcam Acquisition
+   * High-Efficiency Webcam Stream Acquisition Ladder (Prioritizing 720p 30/60fps for lowest latency)
    */
   private async acquireCameraStream(): Promise<MediaStream> {
-    // Stage 1: 1080p
+    // Stage 1: 720p 30-60 FPS (optimal for real-time webcams without decoding lag)
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 60 },
+        },
+        audio: false,
+      });
+    } catch (e1) {
+      console.warn('Stage 1 (720p) failed, trying Stage 2 (480p)...', e1);
+    }
+
+    // Stage 2: 480p (low CPU usage fallback)
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+      });
+    } catch (e2) {
+      console.warn('Stage 2 (480p) failed, trying Stage 3 (1080p)...', e2);
+    }
+
+    // Stage 3: 1080p fallback
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
-    } catch (e1) {
-      console.warn('Stage 1 (1080p) failed, trying Stage 2 (720p)...', e1);
-    }
-
-    // Stage 2: 720p
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
-    } catch (e2) {
-      console.warn('Stage 2 (720p) failed, trying Stage 3 (480p)...', e2);
-    }
-
-    // Stage 3: 480p
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
     } catch (e3) {
-      console.warn('Stage 3 (480p) failed, trying Stage 4 (generic video: true)...', e3);
+      console.warn('Stage 3 (1080p) failed, trying Stage 4 (unconstrained)...', e3);
     }
 
     // Stage 4: Plain boolean constraint
@@ -316,12 +340,15 @@ class JarvisGestureVisionEngine {
       fingerCount,
     };
 
-    useRigStore.getState().setGestureDetected(gesture, 0.96);
-    this.handleGestureAction(result);
+    this.lastTrackingResult = result;
 
-    if (this.videoElement) {
-      this.onFrameCallbacks.forEach((cb) => cb(result, this.videoElement!));
+    // Only dispatch to state store if gesture has changed (avoids 60 FPS render churn)
+    if (this.lastReportedGesture !== gesture) {
+      this.lastReportedGesture = gesture;
+      this.lastReportedConfidence = 0.96;
+      useRigStore.getState().setGestureDetected(gesture, 0.96);
     }
+    this.handleGestureAction(result);
   };
 
   /**
@@ -369,6 +396,20 @@ class JarvisGestureVisionEngine {
       }
       this.videoElement = null;
     }
+
+    this.lastReportedGesture = null;
+    this.lastReportedConfidence = 0;
+    this.lastTrackingResult = {
+      gesture: null,
+      confidence: 0,
+      handX: 0.5,
+      handY: 0.5,
+      palmRadius: 0,
+      isPinching: false,
+      isTwoHanded: false,
+      landmarks: [],
+      fingerCount: 0,
+    };
 
     const store = useRigStore.getState();
     store.setGestureCameraActive(false);
@@ -442,7 +483,13 @@ class JarvisGestureVisionEngine {
       fingerCount: gesture === 'PALM' ? 5 : gesture === 'PINCH' ? 2 : gesture === 'POINT' ? 1 : 10,
     };
 
-    useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+    this.lastTrackingResult = result;
+
+    if (this.lastReportedGesture !== result.gesture) {
+      this.lastReportedGesture = result.gesture;
+      this.lastReportedConfidence = result.confidence;
+      useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+    }
     this.handleGestureAction(result);
 
     // Call registered UI viewfinder callbacks with synthetic canvas image
@@ -463,43 +510,53 @@ class JarvisGestureVisionEngine {
   private processLoop = (): void => {
     if (!this.isRunning || !this.videoElement || !this.ctx || !this.canvasElement) return;
 
+    const now = performance.now();
+
     if (this.videoElement.readyState >= 2) {
-      if (this.mediaPipeHands && !this.isProcessingMediaPipe) {
-        this.isProcessingMediaPipe = true;
-        this.mediaPipeHands
-          .send({ image: this.videoElement })
-          .catch((err: any) => {
-            console.warn('MediaPipe send error:', err);
-          })
-          .finally(() => {
-            this.isProcessingMediaPipe = false;
-          });
-      }
+      // 1. Deliver viewfinder frames smoothly on every RAF tick (60+ FPS preview)
+      this.onFrameCallbacks.forEach((cb) => cb(this.lastTrackingResult, this.videoElement!));
 
-      // If MediaPipe is not available, process via CV Color-Space pipeline
-      if (!this.mediaPipeHands) {
-        const w = this.canvasElement.width;
-        const h = this.canvasElement.height;
+      // 2. Throttle heavy CV / MediaPipe processing to 30 FPS (~33ms) to eliminate CPU bottleneck
+      if (now - this.lastProcessTime >= 33) {
+        this.lastProcessTime = now;
 
-        // Draw mirrored video frame into low-res processing canvas
-        this.ctx.save();
-        this.ctx.scale(-1, 1);
-        this.ctx.drawImage(this.videoElement, -w, 0, w, h);
-        this.ctx.restore();
-
-        const imgData = this.ctx.getImageData(0, 0, w, h);
-        const result = this.analyzeFrame(imgData, w, h);
-
-        // Update state store
-        if (result.gesture) {
-          useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+        if (this.mediaPipeHands && !this.isProcessingMediaPipe) {
+          this.isProcessingMediaPipe = true;
+          this.mediaPipeHands
+            .send({ image: this.videoElement })
+            .catch((err: any) => {
+              console.warn('MediaPipe send error:', err);
+            })
+            .finally(() => {
+              this.isProcessingMediaPipe = false;
+            });
         }
 
-        // Handle gesture-driven 3D actions
-        this.handleGestureAction(result);
+        // If MediaPipe is not available, process via CV Color-Space pipeline
+        if (!this.mediaPipeHands) {
+          const w = this.canvasElement.width;
+          const h = this.canvasElement.height;
 
-        // Trigger UI overlays
-        this.onFrameCallbacks.forEach((cb) => cb(result, this.videoElement!));
+          // Draw mirrored video frame into low-res processing canvas
+          this.ctx.save();
+          this.ctx.scale(-1, 1);
+          this.ctx.drawImage(this.videoElement, -w, 0, w, h);
+          this.ctx.restore();
+
+          const imgData = this.ctx.getImageData(0, 0, w, h);
+          const result = this.analyzeFrame(imgData, w, h);
+          this.lastTrackingResult = result;
+
+          // Update state store only when gesture actually changes
+          if (this.lastReportedGesture !== result.gesture) {
+            this.lastReportedGesture = result.gesture;
+            this.lastReportedConfidence = result.confidence;
+            useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
+          }
+
+          // Handle gesture-driven 3D actions
+          this.handleGestureAction(result);
+        }
       }
     }
 

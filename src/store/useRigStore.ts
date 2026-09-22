@@ -819,8 +819,13 @@ export const useRigStore = create<RigState>((set, get) => ({
   setSyntheticCameraActive: (active) => set({ isSyntheticCameraActive: active }),
   setCameraPermissionState: (status) => set({ cameraPermissionState: status }),
   setCameraErrorMessage: (msg) => set({ cameraErrorMessage: msg }),
-  setGestureDetected: (gesture, confidence = 1.0) =>
-    set({ gestureDetected: gesture, gestureConfidence: confidence }),
+  setGestureDetected: (gesture, confidence = 1.0) => {
+    const prev = get();
+    if (prev.gestureDetected === gesture && Math.abs(prev.gestureConfidence - confidence) < 0.05) {
+      return;
+    }
+    set({ gestureDetected: gesture, gestureConfidence: confidence });
+  },
 
   // Jarvis / Varuna Voice Commander & Wake-Word Architecture
   isVoiceCommanderActive: true,
@@ -935,8 +940,8 @@ export const useRigStore = create<RigState>((set, get) => ({
       return;
     }
 
-    // Refresh wake window on active command
-    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000 });
+    // Refresh wake window on active command and clear transcript buffer
+    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000, voiceTranscript: null });
 
     // ==================== 28 VOICE COMMAND HANDLERS ====================
 
@@ -1268,9 +1273,25 @@ export const useRigStore = create<RigState>((set, get) => ({
       return;
     }
 
-    // GENERIC FALLBACK
+    // REPEAT / SAY AGAIN HANDLER
+    if (cmd.includes('repeat') || cmd.includes('say again') || cmd.includes('what did you say')) {
+      const last = get().voiceStatus.lastMessage;
+      set({ voiceTranscript: null });
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom(last || 'I am ready for your command.');
+      });
+      return;
+    }
+
+    // GENERIC UNRECOGNIZED COMMAND ERROR RECOVERY:
+    // Reset stuck transcript buffer, keep Varuna awake for 10s listening window, and ask "What did you mean? Could you repeat that again?"
+    set({
+      isVarunaAwake: true,
+      varunaWakeExpiry: Date.now() + 10000,
+      voiceTranscript: null,
+    });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      varunaVoice.speakCustom(`Varuna received command: ${cmd}`);
+      varunaVoice.speakCustom('What did you mean? Could you repeat that again?');
     });
   },
 

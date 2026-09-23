@@ -1097,7 +1097,7 @@ export const useRigStore = create<RigState>((set, get) => ({
     set({ lastVoiceCommand: rawCommand });
 
     // Detect Wake Word variations (Varuna, Varun, Verona, Viruna, Waruna, Baruna, Varna)
-    const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna)\b/i;
+    const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna|aruna|karuna|veruna|barun|varun a|varun ai|varuna ai|hey varuna|ok varuna)\b/i;
     const hasWakeWord = wakeWordRegex.test(rawLower);
 
     const now = Date.now();

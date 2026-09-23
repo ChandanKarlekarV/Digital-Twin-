@@ -389,17 +389,26 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
             </div>
 
             {/* Live Transcript / Speech Indicator */}
-            <div className="p-1.5 rounded-lg bg-black/60 border border-white/10 flex items-center gap-1.5">
-              <Mic
-                className={`w-3 h-3 shrink-0 ${
-                  isListeningSpeech ? 'text-purple-400 animate-pulse' : 'text-reliance-textMuted'
-                }`}
-              />
-              <div className={`truncate italic text-[9px] ${isVarunaAwake ? "text-emerald-300" : "text-white/40"}`}>
-                {isVarunaAwake
-                  ? (voiceTranscript ? `"${voiceTranscript}"` : '🎙️ Listening... say your command')
-                  : '💤 Say "Varuna" to activate...'}
+            <div className="p-1.5 rounded-lg bg-black/60 border border-white/10 flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <Mic
+                  className={`w-3 h-3 shrink-0 ${
+                    isListeningSpeech ? 'text-purple-400 animate-pulse' : 'text-reliance-textMuted'
+                  }`}
+                />
+                <div className={`truncate italic text-[9px] ${isVarunaAwake ? "text-emerald-300" : "text-white/40"}`}>
+                  {isVarunaAwake
+                    ? (voiceTranscript ? `"${voiceTranscript}"` : '🎙️ Listening... say your command')
+                    : '💤 Say "Varuna" to activate...'}
+                </div>
               </div>
+              <button
+                onClick={() => wakeVaruna()}
+                className="px-2 py-0.5 rounded bg-emerald-500/30 hover:bg-emerald-500/50 border border-emerald-400/50 text-emerald-200 text-[8px] font-bold cursor-pointer shrink-0 transition-all shadow-sm"
+                title="Click to awaken Varuna immediately"
+              >
+                🎙️ Wake Varuna
+              </button>
             </div>
 
             {/* Gesture Camera Viewfinder Box */}
@@ -554,13 +563,13 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
                   {/* Subsystem Index Quick Bar */}
                   <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1 text-[7.5px]">
-                    <span className="text-white/60">INDEX:</span>
+                    <span className="text-white/60 font-bold">1-5 FINGERS:</span>
                     {[
-                      { idx: 1, name: '1: Helipad' },
-                      { idx: 2, name: '2: Crane 1' },
-                      { idx: 3, name: '3: Crane 2' },
-                      { idx: 4, name: '4: Dock' },
-                      { idx: 5, name: '5: Quarters' },
+                      { idx: 1, name: '☝️ 1: Helipad' },
+                      { idx: 2, name: '✌️ 2: Crane 1' },
+                      { idx: 3, name: '🤟 3: Crane 2' },
+                      { idx: 4, name: '🖖 4: Dock' },
+                      { idx: 5, name: '🖐️ 5: Quarters' },
                     ].map((item) => (
                       <button
                         key={item.idx}

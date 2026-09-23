@@ -488,19 +488,23 @@ class JarvisGestureVisionEngine {
         deltaY = 0;
         switch (activeHand.fingerCount) {
           case 1:
-            gesture = 'INDEX_1'; // Helipad + Laser pointer
+            gesture = 'INDEX_1'; // 1 Finger: Helideck CAP 437 + Laser Pointer
             activeMode = 'INDEX_SELECT';
             break;
           case 2:
-            gesture = 'INDEX_2'; // Port Crane 1 Boom
+            gesture = 'INDEX_2'; // 2 Fingers: Port Crane 1 Boom
             activeMode = 'INDEX_SELECT';
             break;
           case 3:
-            gesture = 'INDEX_3'; // Starboard Crane 2
+            gesture = 'INDEX_3'; // 3 Fingers: Starboard Crane 2
             activeMode = 'INDEX_SELECT';
             break;
           case 4:
-            gesture = 'INDEX_4'; // Command Dock
+            gesture = 'INDEX_4'; // 4 Fingers: Tactical Command Dock
+            activeMode = 'INDEX_SELECT';
+            break;
+          case 5:
+            gesture = 'INDEX_5'; // 5 Fingers: Living Quarters / Accommodation
             activeMode = 'INDEX_SELECT';
             break;
           default:
@@ -673,10 +677,10 @@ class JarvisGestureVisionEngine {
       gesture = 'INDEX_3'; // 3 Fingers: Starboard Crane 2
     } else if (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended && !isThumbExtended) {
       gesture = 'INDEX_4'; // 4 Fingers: Tactical Command Dock
-    } else if (fingerCount >= 5 || (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended)) {
-      gesture = 'PALM';    // 5 Fingers / Open Palm: Move / Freeze
+    } else if (fingerCount >= 5 || (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended && isThumbExtended)) {
+      gesture = 'INDEX_5'; // 5 Fingers: Living Quarters (or Move if moving)
     } else {
-      gesture = fingerCount === 1 ? 'INDEX_1' : fingerCount === 2 ? 'INDEX_2' : fingerCount === 3 ? 'INDEX_3' : fingerCount === 4 ? 'INDEX_4' : 'PALM';
+      gesture = fingerCount === 1 ? 'INDEX_1' : fingerCount === 2 ? 'INDEX_2' : fingerCount === 3 ? 'INDEX_3' : fingerCount === 4 ? 'INDEX_4' : fingerCount === 5 ? 'INDEX_5' : 'PALM';
     }
 
     return {
@@ -731,7 +735,7 @@ class JarvisGestureVisionEngine {
     }
 
     // 4. Gesture 6: SUBSYSTEM INDEX SELECTION (Indexes 1 to 5)
-    if (res.gesture && res.gesture.startsWith('INDEX_')) {
+    if (res.gesture && (res.gesture.startsWith('INDEX_') || res.gesture === 'INDEX_5')) {
       if (this.sustainedGesture !== res.gesture) {
         this.sustainedGesture = res.gesture;
         this.sustainedGestureStartTime = now;

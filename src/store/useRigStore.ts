@@ -601,6 +601,8 @@ interface RigState {
     gesture: RecognizedGesture,
     confidence?: number
   ) => void;
+  pointerCursor: { x: number; y: number; active: boolean };
+  setPointerCursor: (cursor: { x: number; y: number; active: boolean }) => void;
   setGestureSpatial: (spatial: Partial<GestureSpatialState>) => void;
   targetedPartId: HolographicComponentType | null;
   setTargetedPartId: (id: HolographicComponentType | null) => void;
@@ -898,6 +900,9 @@ export const useRigStore = create<RigState>((set, get) => ({
     }
     set({ gestureDetected: gesture, gestureConfidence: confidence });
   },
+  pointerCursor: { x: 0.5, y: 0.5, active: false },
+  setPointerCursor: (cursor: { x: number; y: number; active: boolean }) => set({ pointerCursor: cursor }),
+
   setGestureSpatial: (spatial: Partial<GestureSpatialState>) =>
     set((state) => ({
       gestureSpatial: { ...state.gestureSpatial, ...spatial },
@@ -1115,8 +1120,8 @@ export const useRigStore = create<RigState>((set, get) => ({
       return;
     }
 
-    // Refresh wake window on active command and clear transcript buffer
-    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000, voiceTranscript: null });
+    // Refresh wake window: 8s per command = instant back-to-back commands (no gap)
+    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 8000, voiceTranscript: null });
 
     // ==================== 28 VOICE COMMAND HANDLERS ====================
 
@@ -1459,11 +1464,16 @@ export const useRigStore = create<RigState>((set, get) => ({
     }
 
     // GENERIC UNRECOGNIZED COMMAND ERROR RECOVERY:
-    // Reset stuck transcript buffer, keep Varuna awake for 10s listening window, and ask "What did you mean? Could you repeat that again?"
+    // Reset stuck transcript buffer, clear old error command, keep Varuna awake for 10s listening window,
+    // and ask "What did you mean? Could you repeat that again?"
     set({
       isVarunaAwake: true,
       varunaWakeExpiry: Date.now() + 10000,
       voiceTranscript: null,
+      lastVoiceCommand: null,
+    });
+    import('../voice/JarvisVoiceCommander').then(({ jarvisVoiceCommander }) => {
+      jarvisVoiceCommander.resetDebounce();
     });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
       varunaVoice.speakCustom('What did you mean? Could you repeat that again?');

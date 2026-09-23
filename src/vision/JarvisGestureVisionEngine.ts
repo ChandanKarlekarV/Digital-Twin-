@@ -374,6 +374,22 @@ class JarvisGestureVisionEngine {
     let midX = hand1Data.centroid.x;
     let midY = hand1Data.centroid.y;
 
+    // === SCREEN-SIDE ROLE ASSIGNMENT ===
+    // Left side of mirrored canvas (x < 0.5) = user's RIGHT hand = ZOOM controller
+    // Right side of mirrored canvas (x >= 0.5) = user's LEFT hand = ORBIT/pointer controller
+    const h1IsZoomHand = hand1Data.centroid.x < 0.5;
+    const zoomHand = h1IsZoomHand ? hand1Data : (hand2Data || hand1Data);
+    const orbitHand = h1IsZoomHand ? (hand2Data || hand1Data) : hand1Data;
+
+    // Export pointer cursor coords (ORBIT hand index fingertip when pointing)
+    const orbitHandData = h1IsZoomHand ? hand2Data : hand1Data;
+    if (orbitHandData && (orbitHandData as any)._isPoint) {
+      const idx = orbitHandData.indexTip;
+      useRigStore.getState().setPointerCursor({ x: idx.x, y: idx.y, active: true });
+    } else {
+      useRigStore.getState().setPointerCursor({ x: 0.5, y: 0.5, active: false });
+    }
+
     // Fast Right-to-Left Swipe Detection (Opens targeted / next subsystem view)
     // Note: in mirrored coords (1.0 - x), moving hand from right to left produces dH_x < -0.09
     const isSwipeLeft =
@@ -663,7 +679,9 @@ class JarvisGestureVisionEngine {
     if (isPinkyExtended) fingerCount++;
 
     const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
-    const isPinching = pinchDist < 0.058;
+    // FIX: strict pinch -- thumb must be bent downward (not pointing) to fire
+    const thumbBentInward = thumbTip.y > indexPip.y - 0.015;
+    const isPinching = pinchDist < 0.052 && thumbBentInward;
     const pinchDelta = prevPinchDist !== null ? pinchDist - prevPinchDist : 0;
     const isFist =
       !isIndexExtended &&
@@ -672,11 +690,19 @@ class JarvisGestureVisionEngine {
       !isPinkyExtended &&
       !isThumbExtended;
 
+    // NEW: Call Me (thumb+pinky) = zoom-in; Peace (index+middle) = zoom-out; Point (index only, thumb gap>0.09) = cursor
+    const isCallMe = isThumbExtended && isPinkyExtended && !isIndexExtended && !isMiddleExtended && !isRingExtended;
+    const isPeace = isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended && !isThumbExtended;
+    const thumbIndexGap = pinchDist;
+    const isPoint = isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended && thumbIndexGap > 0.09;
+
     let gesture: RecognizedGesture = 'PALM';
-    if (isPinching) gesture = 'PINCH';
-    else if (isFist) gesture = 'FIST';
+    if (isFist) gesture = 'FIST';
+    else if (isPinching) gesture = 'PINCH';
+    else if (isCallMe) gesture = 'INDEX_1';
+    else if (isPeace) gesture = 'INDEX_2';
+    else if (isPoint) gesture = 'POINT';
     else if (fingerCount === 1 && isIndexExtended) gesture = 'INDEX_1';
-    else if (fingerCount === 2 && isIndexExtended && isMiddleExtended) gesture = 'INDEX_2';
     else if (fingerCount === 3) gesture = 'INDEX_3';
     else if (fingerCount === 4) gesture = 'INDEX_4';
     else if (fingerCount >= 5) gesture = 'PALM';
@@ -694,7 +720,10 @@ class JarvisGestureVisionEngine {
       isFist,
       gesture,
       role: 'IDLE',
-    };
+      _isCallMe: isCallMe,
+      _isPeace: isPeace,
+      _isPoint: isPoint,
+    } as SingleHandData & { _isCallMe: boolean; _isPeace: boolean; _isPoint: boolean };
   }
 
   private handleGestureAction(res: GestureTrackingResult): void {

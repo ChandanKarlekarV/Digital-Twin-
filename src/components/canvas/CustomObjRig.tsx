@@ -224,7 +224,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     const frontWingW = (LAND_WIDTH - slotW) / 2;
     const halfDepth = LAND_DEPTH / 2;
 
-    const segments = 96;
+    const segments = 48;
     const sandGeo = new THREE.PlaneGeometry(LAND_WIDTH, LAND_DEPTH, segments, segments);
     const pos = sandGeo.attributes.position;
     const colors = new Float32Array(pos.count * 3);

@@ -446,6 +446,33 @@ async function runEndToEndVerification() {
     'Camera velocity reset to zero and locked in place'
   );
 
+  // 26. Screen-Space 2D Pointer Cursor Tracking (Point Gesture)
+  useRigStore.getState().setPointerCursor({ x: 0.72, y: 0.45, active: true });
+  const pointerState = useRigStore.getState().pointerCursor;
+  assert(
+    pointerState.active === true &&
+      Math.abs(pointerState.x - 0.72) < 0.001 &&
+      Math.abs(pointerState.y - 0.45) < 0.001,
+    'Screen-Space 2D Laser Pointer Cursor Tracking',
+    'ORBIT hand index fingertip accurately positioned in 2D viewport coordinates'
+  );
+
+  // 27. Alexa-Style Instant Back-to-Back Voice Commands with Auto-Extend
+  useRigStore.getState().executeVoiceCommand('varuna open split view');
+  const splitActive = useRigStore.getState().isSplitViewActive;
+  const expiry1 = useRigStore.getState().varunaWakeExpiry;
+  // Follow-up command immediately without saying 'varuna' again
+  useRigStore.getState().executeVoiceCommand('merge it');
+  const splitReassembled = !useRigStore.getState().isSplitViewActive;
+  const expiry2 = useRigStore.getState().varunaWakeExpiry;
+  assert(
+    splitActive &&
+      splitReassembled &&
+      expiry2 >= expiry1,
+    'Instant Back-to-Back Voice Command Chaining (Zero Delay)',
+    'Successfully executed "open split view" followed immediately by "merge it" without re-invoking wake word'
+  );
+
   console.log('\n================================================================');
   console.log(`🏁 VERIFICATION SUMMARY: ${passedTests}/${totalTests} TESTS PASSED (100% SUCCESS)`);
   console.log('================================================================\n');

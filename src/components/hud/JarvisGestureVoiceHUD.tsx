@@ -37,6 +37,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const isPipeSliced = useRigStore((s) => s.isPipeSliced);
   const targetedPartId = useRigStore((s) => s.targetedPartId);
+  const pointerCursor = useRigStore((s) => s.pointerCursor);
 
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
@@ -425,10 +426,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   isListeningSpeech ? 'text-purple-400 animate-pulse' : 'text-reliance-textMuted'
                 }`}
               />
-              <div className="truncate italic text-[9px] text-white/80">
-                {voiceTranscript
-                  ? `"${voiceTranscript}"`
-                  : 'Say: "Varuna open helipad", "Varuna open crane 1"...'}
+              <div className={`truncate italic text-[9px] ${isVarunaAwake ? "text-emerald-300" : "text-white/40"}`}>
+                {isVarunaAwake
+                  ? (voiceTranscript ? `"${voiceTranscript}"` : '🎙️ Listening... say your command')
+                  : '💤 Say "Varuna" to activate...'}
               </div>
             </div>
 
@@ -442,6 +443,21 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     height={140}
                     className="w-full h-full object-cover"
                   />
+
+                  {/* Holographic Laser Pointer Cursor (ORBIT hand index fingertip) */}
+                  {pointerCursor?.active && (
+                    <div
+                      className="absolute pointer-events-none z-10"
+                      style={{
+                        left: `${pointerCursor.x * 100}%`,
+                        top: `${pointerCursor.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="w-5 h-5 rounded-full border-2 border-cyan-400 opacity-90 absolute -translate-x-1/2 -translate-y-1/2" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-white absolute -translate-x-1/2 -translate-y-1/2" />
+                    </div>
+                  )}
 
                   {/* Active Dual-Hand & Gesture Detection Badges */}
                   <div className="absolute top-1 left-1 flex flex-col gap-0.5">
@@ -464,7 +480,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   {/* Mode & FPS info */}
                   <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/85 px-1.5 py-0.5 rounded border border-emerald-500/30">
                     {gestureSpatial?.activeMode === 'JARVIS_DECOUPLED_DUAL'
-                      ? '🤖 JARVIS: 1-HAND ZOOM + 1-HAND MOVE'
+                      ? '🤖 RIGHT=ZOOM (✌️🤙) | LEFT=ORBIT (👆🤚)'
                       : gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
                       ? '⚡ SIMULTANEOUS MOVE+ZOOM'
                       : isSyntheticCameraActive

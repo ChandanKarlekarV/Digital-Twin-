@@ -73,6 +73,35 @@ export type HolographicComponentType =
   | 'command_dock';
 export type ScannerMode = 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
+
+export type RecognizedGesture =
+  | 'PALM'
+  | 'PINCH'
+  | 'SPLIT'
+  | 'MERGE'
+  | 'MOVE'
+  | 'ZOOM_IN'
+  | 'ZOOM_OUT'
+  | 'INDEX_1'
+  | 'INDEX_2'
+  | 'INDEX_3'
+  | 'INDEX_4'
+  | 'INDEX_5'
+  | 'SLICE'
+  | 'POINT'
+  | 'FIST'
+  | null;
+
+export interface GestureSpatialState {
+  deltaX: number;
+  deltaY: number;
+  zoomDelta: number;
+  distance: number;
+  handsCount: number;
+  primaryHand: { x: number; y: number; fingerCount: number; isPinching?: boolean } | null;
+  secondaryHand: { x: number; y: number; fingerCount: number; isPinching?: boolean } | null;
+  activeMode: 'DUAL_MOVE_ZOOM' | 'ORBIT' | 'ZOOM' | 'SPLIT' | 'MERGE' | 'INDEX_SELECT' | 'IDLE';
+}
 export type EmergencyScenario =
   | 'none'
   | 'rupture'
@@ -531,21 +560,25 @@ interface RigState {
   openHoloModal: (comp: HolographicComponentType) => void;
   closeHoloModal: () => void;
 
+
   // Vision Gesture Technology
   isGestureCameraActive: boolean;
   isSyntheticCameraActive: boolean;
   cameraPermissionState: 'idle' | 'requesting' | 'active' | 'denied' | 'error';
   cameraErrorMessage: string | null;
-  gestureDetected: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null;
+  gestureDetected: RecognizedGesture;
   gestureConfidence: number;
+  gestureSpatial: GestureSpatialState;
   setGestureCameraActive: (active: boolean) => void;
   setSyntheticCameraActive: (active: boolean) => void;
   setCameraPermissionState: (status: 'idle' | 'requesting' | 'active' | 'denied' | 'error') => void;
   setCameraErrorMessage: (msg: string | null) => void;
   setGestureDetected: (
-    gesture: 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null,
+    gesture: RecognizedGesture,
     confidence?: number
   ) => void;
+  setGestureSpatial: (spatial: Partial<GestureSpatialState>) => void;
+  openSubsystemByIndex: (index: number) => void;
 
   // Jarvis Voice Commander & Varuna Wake-Word Architecture
   isVoiceCommanderActive: boolean;
@@ -817,6 +850,16 @@ export const useRigStore = create<RigState>((set, get) => ({
   cameraErrorMessage: null,
   gestureDetected: null,
   gestureConfidence: 0,
+  gestureSpatial: {
+    deltaX: 0,
+    deltaY: 0,
+    zoomDelta: 0,
+    distance: 0,
+    handsCount: 0,
+    primaryHand: null,
+    secondaryHand: null,
+    activeMode: 'IDLE',
+  },
   setGestureCameraActive: (active) => set({ isGestureCameraActive: active }),
   setSyntheticCameraActive: (active) => set({ isSyntheticCameraActive: active }),
   setCameraPermissionState: (status) => set({ cameraPermissionState: status }),
@@ -827,6 +870,62 @@ export const useRigStore = create<RigState>((set, get) => ({
       return;
     }
     set({ gestureDetected: gesture, gestureConfidence: confidence });
+  },
+  setGestureSpatial: (spatial) =>
+    set((state) => ({
+      gestureSpatial: { ...state.gestureSpatial, ...spatial },
+    })),
+  openSubsystemByIndex: (index: number) => {
+    const state = get();
+    switch (index) {
+      case 1:
+        // Index 1: Helipad
+        state.openHoloModal('helipad');
+        state.setCameraViewMode('helipad');
+        state.setSelectedAssetId('HELIDECK-CAP437');
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom('Subsystem index 1: Helideck CAP 437 holographic inspection opened.');
+        });
+        break;
+      case 2:
+        // Index 2: Crane 1
+        state.openHoloModal('crane1');
+        state.setCameraViewMode('crane1');
+        state.setSelectedAssetId('CRANE-PORT-BOOM');
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom('Subsystem index 2: Port Crane 1 lattice boom inspection opened.');
+        });
+        break;
+      case 3:
+        // Index 3: Crane 2
+        state.openHoloModal('crane2');
+        state.setCameraViewMode('crane2');
+        state.setSelectedAssetId('CRANE-STARBOARD-PEDESTAL');
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom('Subsystem index 3: Starboard Crane 2 pedestal inspection opened.');
+        });
+        break;
+      case 4:
+        // Index 4: Command Dock
+        state.openHoloModal('command_dock');
+        state.setCameraViewMode('command_dock');
+        state.setSelectedAssetId('COMMAND-DOCK-BRIDGE');
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom('Subsystem index 4: Tactical Command Dock opened.');
+        });
+        break;
+      case 5:
+        // Index 5: Accommodation & Main Deck
+        state.openHoloModal('accommodation');
+        state.setCameraViewMode('accommodation');
+        state.setSelectedAssetId('ACCOMMODATION-MODULE');
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+          varunaVoice.speakCustom('Subsystem index 5: Living quarters and main deck module opened.');
+        });
+        break;
+      default:
+        break;
+    }
   },
 
   // Jarvis / Varuna Voice Commander & Wake-Word Architecture

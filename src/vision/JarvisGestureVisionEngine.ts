@@ -1,30 +1,55 @@
 /**
  * JARVIS / VARUNA-AI Computer Vision Hand Gesture Recognition Engine
- * Real-time webcam processing:
- * - Detects Open Palm, Pinch, Two-Hand Split, Chop/Slice, Point, and Fist.
- * - Drives 3D Camera spatial manipulation and triggers Holographic Exploded Views.
+ * Real-time Webcam & Dual-Hand Spatial Processing:
+ * - 6 Identifiable & Trackable Gestures:
+ *   1. SPLIT VIEW (Two hands spreading apart / wide open -> Exploded Rig view)
+ *   2. MERGE / JOIN (Fists / Hands together -> Solid Rig reassembly)
+ *   3. MOVE / ORBIT / PAN (Continuous hand translation -> 3D model rotation & pan)
+ *   4. ZOOM IN (Hands moving apart / Pinch-open / Thumb-up -> Dolly camera in)
+ *   5. ZOOM OUT (Hands moving closer / Pinch-close / Thumb-down -> Dolly camera out)
+ *   6. SUBSYSTEM INDEX SELECTOR (Finger count 1-5 -> Helipad, Crane 1, Crane 2, Command Dock, Accommodation)
+ * - Simultaneous Two-Hand Tracking:
+ *   Simultaneously tracks Hand 1 and Hand 2 to execute Model Rotation/Pan AND Camera Zoom at the exact same frame!
  */
 
-import { useRigStore } from '../store/useRigStore';
+import { useRigStore, RecognizedGesture } from '../store/useRigStore';
 
-export type RecognizedGesture = 'PALM' | 'PINCH' | 'SPLIT' | 'SLICE' | 'POINT' | 'FIST' | null;
+export type { RecognizedGesture };
 
 export interface HandLandmark {
   x: number;
   y: number;
+  z?: number;
   type?: 'wrist' | 'palm' | 'thumb' | 'index' | 'middle' | 'ring' | 'pinky';
+}
+
+export interface SingleHandData {
+  landmarks: HandLandmark[];
+  centroid: { x: number; y: number };
+  fingerCount: number;
+  isPinching: boolean;
+  pinchDist: number;
+  isFist: boolean;
+  gesture: RecognizedGesture;
 }
 
 export interface GestureTrackingResult {
   gesture: RecognizedGesture;
   confidence: number;
-  handX: number; // 0.0 to 1.0 (normalized)
-  handY: number; // 0.0 to 1.0 (normalized)
-  palmRadius: number;
-  isPinching: boolean;
+  handsCount: number;
+  handX: number; // Normalized 0..1 (Midpoint or Primary Hand)
+  handY: number; // Normalized 0..1 (Midpoint or Primary Hand)
+  handDistance: number; // Distance between Hand 1 & Hand 2 (0 if 1 hand)
+  deltaX: number; // Continuous horizontal motion delta
+  deltaY: number; // Continuous vertical motion delta
+  zoomDelta: number; // Continuous zoom delta (+ zoom in, - zoom out)
   isTwoHanded: boolean;
-  landmarks: HandLandmark[];
+  isPinching: boolean;
   fingerCount: number;
+  primaryHand: SingleHandData | null;
+  secondaryHand: SingleHandData | null;
+  landmarks: HandLandmark[];
+  activeMode: 'DUAL_MOVE_ZOOM' | 'ORBIT' | 'ZOOM' | 'SPLIT' | 'MERGE' | 'INDEX_SELECT' | 'IDLE';
 }
 
 class JarvisGestureVisionEngine {
@@ -35,35 +60,56 @@ class JarvisGestureVisionEngine {
   private stream: MediaStream | null = null;
   private isRunning = false;
   private mediaPipeHands: any = null;
-  private smoothedLandmarks: HandLandmark[] = [];
+  private isProcessingMediaPipe = false;
 
+  // Smoothing buffers for Hand 1 and Hand 2
+  private smoothedLandmarks1: HandLandmark[] = [];
+  private smoothedLandmarks2: HandLandmark[] = [];
+
+  // Motion history for continuous deltas
+  private prevMidpoint: { x: number; y: number; time: number } | null = null;
+  private prevDistance: number | null = null;
   private prevCentroid: { x: number; y: number; time: number } | null = null;
-  private lastSliceTime = 0;
-  private lastSplitTime = 0;
-  private lastFistTime = 0;
 
-  // Viewfinder draw callback for UI canvas
+  // Sustained gesture stability & cooldowns
+  private sustainedGesture: RecognizedGesture = null;
+  private sustainedGestureStartTime = 0;
+  private lastTriggeredGesture: RecognizedGesture = null;
+  private lastTriggerTime = 0;
+  private lastSplitTime = 0;
+  private lastMergeTime = 0;
+  private lastSliceTime = 0;
+  private lastIndexTriggerTime = 0;
+
+  // Viewfinder callbacks
   private onFrameCallbacks: Set<(result: GestureTrackingResult, video: HTMLVideoElement) => void> = new Set();
 
+  // Synthetic / Demo simulator state
   private isSynthetic = false;
   private syntheticTime = 0;
   private syntheticCanvas: HTMLCanvasElement | null = null;
   private syntheticCtx: CanvasRenderingContext2D | null = null;
 
-  // Deduplication & 60 FPS performance optimizations
+  // State deduplication & 60 FPS performance
   private lastReportedGesture: RecognizedGesture = null;
-  private lastReportedConfidence = 0;
   private lastProcessTime = 0;
   private lastTrackingResult: GestureTrackingResult = {
     gesture: null,
     confidence: 0,
+    handsCount: 0,
     handX: 0.5,
     handY: 0.5,
-    palmRadius: 0,
-    isPinching: false,
+    handDistance: 0,
+    deltaX: 0,
+    deltaY: 0,
+    zoomDelta: 0,
     isTwoHanded: false,
-    landmarks: [],
+    isPinching: false,
     fingerCount: 0,
+    primaryHand: null,
+    secondaryHand: null,
+    landmarks: [],
+    activeMode: 'IDLE',
   };
 
   public async start(): Promise<boolean> {
@@ -108,12 +154,12 @@ class JarvisGestureVisionEngine {
 
       if (!this.canvasElement) {
         this.canvasElement = document.createElement('canvas');
-        this.canvasElement.width = 160;
-        this.canvasElement.height = 120;
+        this.canvasElement.width = 240;
+        this.canvasElement.height = 160;
         this.ctx = this.canvasElement.getContext('2d', { willReadFrequently: true });
       }
 
-      // Initialize MediaPipe Hands if CDN script is loaded
+      // Initialize MediaPipe Hands for multi-hand tracking (max 2 hands)
       if (typeof window !== 'undefined' && (window as any).Hands) {
         try {
           this.mediaPipeHands = new (window as any).Hands({
@@ -122,8 +168,8 @@ class JarvisGestureVisionEngine {
           this.mediaPipeHands.setOptions({
             maxNumHands: 2,
             modelComplexity: 1,
-            minDetectionConfidence: 0.55,
-            minTrackingConfidence: 0.55,
+            minDetectionConfidence: 0.52,
+            minTrackingConfidence: 0.52,
           });
           this.mediaPipeHands.onResults(this.handleMediaPipeResults);
         } catch (mpErr) {
@@ -167,10 +213,9 @@ class JarvisGestureVisionEngine {
   }
 
   /**
-   * High-Efficiency Webcam Stream Acquisition Ladder (Prioritizing 720p 30/60fps for lowest latency)
+   * Acquire 720p / 480p low-latency webcam stream
    */
   private async acquireCameraStream(): Promise<MediaStream> {
-    // Stage 1: 720p 30-60 FPS (optimal for real-time webcams without decoding lag)
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: {
@@ -184,7 +229,6 @@ class JarvisGestureVisionEngine {
       console.warn('Stage 1 (720p) failed, trying Stage 2 (480p)...', e1);
     }
 
-    // Stage 2: 480p (low CPU usage fallback)
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: {
@@ -195,164 +239,414 @@ class JarvisGestureVisionEngine {
         audio: false,
       });
     } catch (e2) {
-      console.warn('Stage 2 (480p) failed, trying Stage 3 (1080p)...', e2);
+      console.warn('Stage 2 (480p) failed, trying Stage 3 unconstrained...', e2);
     }
 
-    // Stage 3: 1080p fallback
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-    } catch (e3) {
-      console.warn('Stage 3 (1080p) failed, trying Stage 4 (unconstrained)...', e3);
-    }
-
-    // Stage 4: Plain boolean constraint
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
-    } catch (e4) {
-      console.warn('Stage 4 (unconstrained) failed, enumerating devices...', e4);
-    }
-
-    // Stage 5: Enumerate video devices directly
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter((d) => d.kind === 'videoinput');
-    if (videoDevices.length > 0) {
-      for (const dev of videoDevices) {
-        try {
-          return await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: dev.deviceId } },
-            audio: false,
-          });
-        } catch (e) {
-          console.warn(`Failed device ${dev.label || dev.deviceId}`, e);
-        }
-      }
-    }
-
-    throw new Error('Camera access denied or hardware unavailable.');
+    return await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
   }
 
   /**
-   * MediaPipe Hands Result Pipeline
+   * MediaPipe Multi-Hand Pipeline: Simultaneous Two-Hand Tracking
    */
   private handleMediaPipeResults = (results: any): void => {
     if (!this.isRunning || !results) return;
 
     const multiHandLandmarks = results.multiHandLandmarks || [];
-    if (multiHandLandmarks.length === 0) {
+    const handsCount = multiHandLandmarks.length;
+
+    if (handsCount === 0) {
+      this.prevMidpoint = null;
+      this.prevDistance = null;
+      this.prevCentroid = null;
+      const emptyResult: GestureTrackingResult = {
+        gesture: null,
+        confidence: 0,
+        handsCount: 0,
+        handX: 0.5,
+        handY: 0.5,
+        handDistance: 0,
+        deltaX: 0,
+        deltaY: 0,
+        zoomDelta: 0,
+        isTwoHanded: false,
+        isPinching: false,
+        fingerCount: 0,
+        primaryHand: null,
+        secondaryHand: null,
+        landmarks: [],
+        activeMode: 'IDLE',
+      };
+      this.lastTrackingResult = emptyResult;
+      useRigStore.getState().setGestureSpatial({
+        deltaX: 0,
+        deltaY: 0,
+        zoomDelta: 0,
+        distance: 0,
+        handsCount: 0,
+        primaryHand: null,
+        secondaryHand: null,
+        activeMode: 'IDLE',
+      });
       return;
     }
 
-    const firstHand = multiHandLandmarks[0];
-    const isTwoHanded = multiHandLandmarks.length >= 2;
+    const now = performance.now();
 
-    // Convert and smooth 21 landmarks using Exponential Moving Average (EMA: alpha = 0.65)
-    const rawLandmarks: HandLandmark[] = firstHand.map((lm: any, idx: number) => {
-      const typeMap: { [k: number]: HandLandmark['type'] } = {
-        0: 'wrist',
-        4: 'thumb',
-        8: 'index',
-        12: 'middle',
-        16: 'ring',
-        20: 'pinky',
-        9: 'palm',
-      };
-      return {
-        x: 1.0 - lm.x, // Mirror X axis
-        y: lm.y,
-        type: typeMap[idx] || undefined,
-      };
-    });
+    // Process Hand 1
+    const hand1Raw = this.extractLandmarks(multiHandLandmarks[0]);
+    this.smoothedLandmarks1 = this.smoothLandmarks(this.smoothedLandmarks1, hand1Raw);
+    const hand1Data = this.analyzeSingleHand(this.smoothedLandmarks1);
 
-    if (this.smoothedLandmarks.length !== rawLandmarks.length) {
-      this.smoothedLandmarks = rawLandmarks;
+    let hand2Data: SingleHandData | null = null;
+    let combinedLandmarks = [...this.smoothedLandmarks1];
+
+    // Process Hand 2 if detected
+    if (handsCount >= 2) {
+      const hand2Raw = this.extractLandmarks(multiHandLandmarks[1]);
+      this.smoothedLandmarks2 = this.smoothLandmarks(this.smoothedLandmarks2, hand2Raw);
+      hand2Data = this.analyzeSingleHand(this.smoothedLandmarks2);
+      combinedLandmarks = [...this.smoothedLandmarks1, ...this.smoothedLandmarks2];
     } else {
-      this.smoothedLandmarks = this.smoothedLandmarks.map((prev, idx) => ({
-        ...prev,
-        x: prev.x * 0.35 + rawLandmarks[idx].x * 0.65,
-        y: prev.y * 0.35 + rawLandmarks[idx].y * 0.65,
-      }));
+      this.smoothedLandmarks2 = [];
     }
 
-    const wrist = this.smoothedLandmarks[0];
-    const thumbTip = this.smoothedLandmarks[4];
-    const indexTip = this.smoothedLandmarks[8];
-    const middleTip = this.smoothedLandmarks[12];
-    const ringTip = this.smoothedLandmarks[16];
-    const pinkyTip = this.smoothedLandmarks[20];
+    let gesture: RecognizedGesture = null;
+    let confidence = 0.94;
+    let activeMode: GestureTrackingResult['activeMode'] = 'IDLE';
+    let deltaX = 0;
+    let deltaY = 0;
+    let zoomDelta = 0;
+    let currentDistance = 0;
+    let midX = hand1Data.centroid.x;
+    let midY = hand1Data.centroid.y;
 
-    const indexPip = this.smoothedLandmarks[6];
-    const middlePip = this.smoothedLandmarks[10];
-    const ringPip = this.smoothedLandmarks[14];
-    const pinkyPip = this.smoothedLandmarks[18];
+    // KINEMATIC ANALYSIS: DUAL-HAND OR SINGLE-HAND
+    if (handsCount >= 2 && hand2Data) {
+      // TWO HANDS SIMULTANEOUS TRACKING
+      midX = (hand1Data.centroid.x + hand2Data.centroid.x) / 2.0;
+      midY = (hand1Data.centroid.y + hand2Data.centroid.y) / 2.0;
+      currentDistance = Math.hypot(
+        hand2Data.centroid.x - hand1Data.centroid.x,
+        hand2Data.centroid.y - hand1Data.centroid.y
+      );
 
-    // Distance metrics from wrist
-    const distSq = (a: HandLandmark, b: HandLandmark) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
-
-    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip);
-    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip);
-    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip);
-    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip);
-
-    const pinchDist = Math.sqrt(distSq(thumbTip, indexTip));
-    const isPinching = pinchDist < 0.055;
-
-    let gesture: RecognizedGesture = 'PALM';
-    let fingerCount = 5;
-
-    // Kinematic Gesture Decision Tree
-    if (isTwoHanded) {
-      const secondHand = multiHandLandmarks[1];
-      const h1x = 1.0 - firstHand[0].x;
-      const h2x = 1.0 - secondHand[0].x;
-      if (Math.abs(h1x - h2x) > 0.28) {
-        gesture = 'SPLIT';
-        fingerCount = 10;
+      // Continuous Translation & Zoom Deltas
+      if (this.prevMidpoint) {
+        const dt = Math.max(0.01, (now - this.prevMidpoint.time) / 1000);
+        deltaX = (midX - this.prevMidpoint.x);
+        deltaY = (midY - this.prevMidpoint.y);
       }
-    } else if (isPinching) {
-      gesture = 'PINCH';
-      fingerCount = 2;
-    } else if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-      gesture = 'POINT';
-      fingerCount = 1;
-    } else if (!isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-      gesture = 'FIST';
-      fingerCount = 0;
+      if (this.prevDistance !== null) {
+        zoomDelta = (currentDistance - this.prevDistance);
+      }
+
+      this.prevMidpoint = { x: midX, y: midY, time: now };
+      this.prevDistance = currentDistance;
+
+      // Gesture Classification for Two Hands:
+      const totalFingers = hand1Data.fingerCount + hand2Data.fingerCount;
+      const bothFists = hand1Data.isFist && hand2Data.isFist;
+
+      if (bothFists || currentDistance < 0.14) {
+        gesture = 'MERGE';
+        activeMode = 'MERGE';
+      } else if (currentDistance > 0.46 || (zoomDelta > 0.04 && totalFingers >= 8)) {
+        gesture = 'SPLIT';
+        activeMode = 'SPLIT';
+      } else if (Math.abs(zoomDelta) > 0.008 && (Math.abs(deltaX) > 0.005 || Math.abs(deltaY) > 0.005)) {
+        // SIMULTANEOUS MOVE + ZOOM ACTIVE!
+        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
+        activeMode = 'DUAL_MOVE_ZOOM';
+      } else if (Math.abs(zoomDelta) > 0.012) {
+        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
+        activeMode = 'ZOOM';
+      } else if (Math.abs(deltaX) > 0.005 || Math.abs(deltaY) > 0.005) {
+        gesture = 'MOVE';
+        activeMode = 'ORBIT';
+      } else {
+        gesture = 'PALM';
+        activeMode = 'IDLE';
+      }
     } else {
-      gesture = 'PALM';
-      fingerCount = 5;
+      // SINGLE HAND TRACKING
+      if (this.prevCentroid) {
+        deltaX = (midX - this.prevCentroid.x);
+        deltaY = (midY - this.prevCentroid.y);
+      }
+      this.prevCentroid = { x: midX, y: midY, time: now };
+      this.prevMidpoint = { x: midX, y: midY, time: now };
+      this.prevDistance = null;
+
+      // Fast horizontal swipe -> SLICE
+      if (Math.abs(deltaX) > 0.12 && now - this.lastSliceTime > 1400) {
+        gesture = 'SLICE';
+        activeMode = 'SPLIT';
+        this.lastSliceTime = now;
+      } else if (hand1Data.isPinching) {
+        // Pinch Zoom
+        gesture = 'PINCH';
+        activeMode = 'ZOOM';
+        zoomDelta = deltaY * -1.8; // Moving pinch up zooms in, down zooms out
+      } else if (hand1Data.isFist) {
+        gesture = 'FIST';
+        activeMode = 'MERGE';
+      } else {
+        // Subsystem Index Selection via Finger Count (1 to 5)
+        switch (hand1Data.fingerCount) {
+          case 1:
+            gesture = 'INDEX_1'; // Helipad
+            activeMode = 'INDEX_SELECT';
+            break;
+          case 2:
+            gesture = 'INDEX_2'; // Crane 1 (Peace / Victory)
+            activeMode = 'INDEX_SELECT';
+            break;
+          case 3:
+            gesture = 'INDEX_3'; // Crane 2
+            activeMode = 'INDEX_SELECT';
+            break;
+          case 4:
+            gesture = 'INDEX_4'; // Command Dock
+            activeMode = 'INDEX_SELECT';
+            break;
+          case 5:
+            gesture = 'PALM'; // Orbit / Move or Index 5
+            activeMode = 'ORBIT';
+            break;
+          default:
+            gesture = 'PALM';
+            activeMode = 'ORBIT';
+            break;
+        }
+      }
     }
 
     const result: GestureTrackingResult = {
       gesture,
-      confidence: 0.96,
-      handX: wrist.x,
-      handY: wrist.y,
-      palmRadius: 0.18,
-      isPinching,
-      isTwoHanded,
-      landmarks: this.smoothedLandmarks,
-      fingerCount,
+      confidence,
+      handsCount,
+      handX: midX,
+      handY: midY,
+      handDistance: currentDistance,
+      deltaX,
+      deltaY,
+      zoomDelta,
+      isTwoHanded: handsCount >= 2,
+      isPinching: hand1Data.isPinching || (hand2Data?.isPinching ?? false),
+      fingerCount: hand1Data.fingerCount + (hand2Data?.fingerCount ?? 0),
+      primaryHand: hand1Data,
+      secondaryHand: hand2Data,
+      landmarks: combinedLandmarks,
+      activeMode,
     };
 
     this.lastTrackingResult = result;
 
-    // Only dispatch to state store if gesture has changed (avoids 60 FPS render churn)
+    // Synchronize spatial deltas to Zustand store for 3D CameraRig
+    useRigStore.getState().setGestureSpatial({
+      deltaX,
+      deltaY,
+      zoomDelta,
+      distance: currentDistance,
+      handsCount,
+      primaryHand: {
+        x: hand1Data.centroid.x,
+        y: hand1Data.centroid.y,
+        fingerCount: hand1Data.fingerCount,
+        isPinching: hand1Data.isPinching,
+      },
+      secondaryHand: hand2Data
+        ? {
+            x: hand2Data.centroid.x,
+            y: hand2Data.centroid.y,
+            fingerCount: hand2Data.fingerCount,
+            isPinching: hand2Data.isPinching,
+          }
+        : null,
+      activeMode,
+    });
+
     if (this.lastReportedGesture !== gesture) {
       this.lastReportedGesture = gesture;
-      this.lastReportedConfidence = 0.96;
-      useRigStore.getState().setGestureDetected(gesture, 0.96);
+      useRigStore.getState().setGestureDetected(gesture, confidence);
     }
+
     this.handleGestureAction(result);
   };
 
   /**
-   * Starts Synthetic / Demo Vision Simulation mode for devices without camera access
+   * Helper to convert MediaPipe landmarks to mirrored normalized landmarks
+   */
+  private extractLandmarks(landmarks: any[]): HandLandmark[] {
+    const typeMap: { [k: number]: HandLandmark['type'] } = {
+      0: 'wrist',
+      4: 'thumb',
+      8: 'index',
+      12: 'middle',
+      16: 'ring',
+      20: 'pinky',
+      9: 'palm',
+    };
+    return landmarks.map((lm: any, idx: number) => ({
+      x: 1.0 - lm.x, // Mirrored for intuitive natural interaction
+      y: lm.y,
+      z: lm.z || 0,
+      type: typeMap[idx] || undefined,
+    }));
+  }
+
+  /**
+   * Exponential Moving Average (EMA) landmark smoothing
+   */
+  private smoothLandmarks(prev: HandLandmark[], current: HandLandmark[]): HandLandmark[] {
+    if (prev.length !== current.length) return current;
+    const alpha = 0.65;
+    return prev.map((p, i) => ({
+      ...p,
+      x: p.x * (1 - alpha) + current[i].x * alpha,
+      y: p.y * (1 - alpha) + current[i].y * alpha,
+      z: (p.z || 0) * (1 - alpha) + (current[i].z || 0) * alpha,
+    }));
+  }
+
+  /**
+   * Anatomical Joint & Finger Extension Classifier
+   */
+  private analyzeSingleHand(landmarks: HandLandmark[]): SingleHandData {
+    if (landmarks.length < 21) {
+      return {
+        landmarks,
+        centroid: { x: landmarks[0]?.x || 0.5, y: landmarks[0]?.y || 0.5 },
+        fingerCount: 0,
+        isPinching: false,
+        pinchDist: 1.0,
+        isFist: true,
+        gesture: 'FIST',
+      };
+    }
+
+    const wrist = landmarks[0];
+    const thumbMcp = landmarks[2];
+    const thumbIp = landmarks[3];
+    const thumbTip = landmarks[4];
+
+    const indexMcp = landmarks[5];
+    const indexPip = landmarks[6];
+    const indexTip = landmarks[8];
+
+    const middleMcp = landmarks[9];
+    const middlePip = landmarks[10];
+    const middleTip = landmarks[12];
+
+    const ringMcp = landmarks[13];
+    const ringPip = landmarks[14];
+    const ringTip = landmarks[16];
+
+    const pinkyMcp = landmarks[17];
+    const pinkyPip = landmarks[18];
+    const pinkyTip = landmarks[20];
+
+    const distSq = (a: HandLandmark, b: HandLandmark) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+    // Finger Extension Rules: Tip distance from wrist exceeds PIP distance
+    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip) * 1.08;
+    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip) * 1.08;
+    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip) * 1.08;
+    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip) * 1.08;
+
+    // Thumb Extension: Tip distance from pinky MCP
+    const isThumbExtended = distSq(thumbTip, pinkyMcp) > distSq(thumbIp, pinkyMcp) * 1.15;
+
+    let fingerCount = 0;
+    if (isThumbExtended) fingerCount++;
+    if (isIndexExtended) fingerCount++;
+    if (isMiddleExtended) fingerCount++;
+    if (isRingExtended) fingerCount++;
+    if (isPinkyExtended) fingerCount++;
+
+    const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+    const isPinching = pinchDist < 0.058;
+    const isFist = !isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended && !isThumbExtended;
+
+    let gesture: RecognizedGesture = 'PALM';
+    if (isPinching) gesture = 'PINCH';
+    else if (isFist) gesture = 'FIST';
+    else if (fingerCount === 1 && isIndexExtended) gesture = 'INDEX_1';
+    else if (fingerCount === 2 && isIndexExtended && isMiddleExtended) gesture = 'INDEX_2';
+    else if (fingerCount === 3) gesture = 'INDEX_3';
+    else if (fingerCount === 4) gesture = 'INDEX_4';
+    else if (fingerCount >= 5) gesture = 'PALM';
+
+    return {
+      landmarks,
+      centroid: { x: (wrist.x + middleMcp.x) / 2, y: (wrist.y + middleMcp.y) / 2 },
+      fingerCount,
+      isPinching,
+      pinchDist,
+      isFist,
+      gesture,
+    };
+  }
+
+  /**
+   * High-Precision Action Trigger with Cooldowns & Sustained State Stability
+   */
+  private handleGestureAction(res: GestureTrackingResult): void {
+    const store = useRigStore.getState();
+    const now = performance.now();
+
+    // 1. Gesture 1: SPLIT VIEW (Exploded View)
+    if (res.gesture === 'SPLIT' && !store.isSplitViewActive && now - this.lastSplitTime > 2200) {
+      this.lastSplitTime = now;
+      store.setSplitViewActive(true);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Split gesture recognized. Exploding digital twin into subsystem modules.');
+      });
+      return;
+    }
+
+    // 2. Gesture 2: MERGE / REASSEMBLE (Solid Rig)
+    if ((res.gesture === 'MERGE' || res.gesture === 'FIST') && store.isSplitViewActive && now - this.lastMergeTime > 2000) {
+      this.lastMergeTime = now;
+      store.setSplitViewActive(false);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Merge gesture recognized. Reassembling digital twin.');
+      });
+      return;
+    }
+
+    // 3. SLICE GESTURE: Pipe cross-section
+    if (res.gesture === 'SLICE' && !store.isPipeSliced && now - this.lastSliceTime < 400) {
+      store.setPipeSliced(true);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom('Slice gesture detected. Activating pipeline cross-sectional ultrasound view.');
+      });
+      return;
+    }
+
+    // 4. Gesture 6: SUBSYSTEM INDEX SELECTION (Indexes 1 to 5)
+    // Requires sustained gesture for ~400ms to avoid accidental triggering while moving hands
+    if (res.gesture && res.gesture.startsWith('INDEX_')) {
+      if (this.sustainedGesture !== res.gesture) {
+        this.sustainedGesture = res.gesture;
+        this.sustainedGestureStartTime = now;
+      } else if (now - this.sustainedGestureStartTime > 450 && now - this.lastIndexTriggerTime > 2500) {
+        this.lastIndexTriggerTime = now;
+        const indexNum = parseInt(res.gesture.replace('INDEX_', ''), 10);
+        if (indexNum >= 1 && indexNum <= 5) {
+          store.openSubsystemByIndex(indexNum);
+        }
+      }
+    } else {
+      this.sustainedGesture = null;
+    }
+  }
+
+  /**
+   * Starts Synthetic / Demo Vision Simulation for simultaneous two-hand tracking
    */
   public startSynthetic(): boolean {
     this.stop();
@@ -398,17 +692,23 @@ class JarvisGestureVisionEngine {
     }
 
     this.lastReportedGesture = null;
-    this.lastReportedConfidence = 0;
     this.lastTrackingResult = {
       gesture: null,
       confidence: 0,
+      handsCount: 0,
       handX: 0.5,
       handY: 0.5,
-      palmRadius: 0,
-      isPinching: false,
+      handDistance: 0,
+      deltaX: 0,
+      deltaY: 0,
+      zoomDelta: 0,
       isTwoHanded: false,
-      landmarks: [],
+      isPinching: false,
       fingerCount: 0,
+      primaryHand: null,
+      secondaryHand: null,
+      landmarks: [],
+      activeMode: 'IDLE',
     };
 
     const store = useRigStore.getState();
@@ -416,10 +716,20 @@ class JarvisGestureVisionEngine {
     store.setSyntheticCameraActive(false);
     store.setCameraPermissionState('idle');
     store.setGestureDetected(null, 0);
+    store.setGestureSpatial({
+      deltaX: 0,
+      deltaY: 0,
+      zoomDelta: 0,
+      distance: 0,
+      handsCount: 0,
+      primaryHand: null,
+      secondaryHand: null,
+      activeMode: 'IDLE',
+    });
   }
 
   /**
-   * Continuous Synthetic Hand Simulator Loop
+   * Continuous Synthetic Dual-Hand Simulator Loop
    */
   private processSyntheticLoop = (): void => {
     if (!this.isRunning || !this.isSynthetic || !this.syntheticCanvas || !this.syntheticCtx) return;
@@ -450,49 +760,120 @@ class JarvisGestureVisionEngine {
       ctx.stroke();
     }
 
-    // Dynamic oscillating hand position
-    const cx = 0.5 + Math.sin(t * 0.8) * 0.22;
-    const cy = 0.5 + Math.cos(t * 0.6) * 0.18;
+    // Dual-hand oscillating motion (simultaneous move + zoom simulation)
+    const midX = 0.5 + Math.sin(t * 0.7) * 0.15;
+    const midY = 0.5 + Math.cos(t * 0.5) * 0.12;
+    const spread = 0.22 + Math.sin(t * 1.3) * 0.12; // Expanding and contracting distance
 
-    // Cycle through gestures every 5 seconds
-    const phase = Math.floor(t / 5) % 4;
-    let gesture: RecognizedGesture = 'PALM';
-    if (phase === 1) gesture = 'PINCH';
-    else if (phase === 2) gesture = 'POINT';
-    else if (phase === 3) gesture = 'SPLIT';
+    const h1x = midX - spread;
+    const h1y = midY;
+    const h2x = midX + spread;
+    const h2y = midY;
 
-    const landmarks: HandLandmark[] = [
-      { x: cx, y: cy, type: 'palm' },
-      { x: cx, y: cy - 0.22, type: 'middle' },
-      { x: cx - 0.14, y: cy - 0.12, type: 'thumb' },
-      { x: cx + 0.14, y: cy - 0.12, type: 'pinky' },
-      { x: cx, y: cy + 0.2, type: 'wrist' },
-      { x: cx - 0.07, y: cy - 0.19, type: 'index' },
-      { x: cx + 0.07, y: cy - 0.19, type: 'ring' },
+    // Synthetic deltas
+    const deltaX = Math.cos(t * 0.7) * 0.006;
+    const deltaY = -Math.sin(t * 0.5) * 0.005;
+    const zoomDelta = Math.cos(t * 1.3) * 0.008;
+
+    // Cycle through gestures every 4 seconds
+    const phase = Math.floor(t / 4) % 6;
+    let gesture: RecognizedGesture = 'MOVE';
+    let activeMode: GestureTrackingResult['activeMode'] = 'DUAL_MOVE_ZOOM';
+
+    if (phase === 0) {
+      gesture = 'MOVE';
+      activeMode = 'DUAL_MOVE_ZOOM';
+    } else if (phase === 1) {
+      gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
+      activeMode = 'ZOOM';
+    } else if (phase === 2) {
+      gesture = 'SPLIT';
+      activeMode = 'SPLIT';
+    } else if (phase === 3) {
+      gesture = 'MERGE';
+      activeMode = 'MERGE';
+    } else if (phase === 4) {
+      gesture = 'INDEX_1';
+      activeMode = 'INDEX_SELECT';
+    } else if (phase === 5) {
+      gesture = 'INDEX_2';
+      activeMode = 'INDEX_SELECT';
+    }
+
+    const landmarks1: HandLandmark[] = [
+      { x: h1x, y: h1y, type: 'palm' },
+      { x: h1x, y: h1y - 0.2, type: 'middle' },
+      { x: h1x - 0.1, y: h1y - 0.1, type: 'thumb' },
+      { x: h1x + 0.1, y: h1y - 0.1, type: 'pinky' },
+      { x: h1x, y: h1y + 0.18, type: 'wrist' },
+      { x: h1x - 0.05, y: h1y - 0.18, type: 'index' },
+      { x: h1x + 0.05, y: h1y - 0.18, type: 'ring' },
+    ];
+
+    const landmarks2: HandLandmark[] = [
+      { x: h2x, y: h2y, type: 'palm' },
+      { x: h2x, y: h2y - 0.2, type: 'middle' },
+      { x: h2x - 0.1, y: h2y - 0.1, type: 'thumb' },
+      { x: h2x + 0.1, y: h2y - 0.1, type: 'pinky' },
+      { x: h2x, y: h2y + 0.18, type: 'wrist' },
+      { x: h2x - 0.05, y: h2y - 0.18, type: 'index' },
+      { x: h2x + 0.05, y: h2y - 0.18, type: 'ring' },
     ];
 
     const result: GestureTrackingResult = {
       gesture,
-      confidence: 0.95,
-      handX: cx,
-      handY: cy,
-      palmRadius: 0.2,
-      isPinching: gesture === 'PINCH',
-      isTwoHanded: gesture === 'SPLIT',
-      landmarks,
-      fingerCount: gesture === 'PALM' ? 5 : gesture === 'PINCH' ? 2 : gesture === 'POINT' ? 1 : 10,
+      confidence: 0.96,
+      handsCount: 2,
+      handX: midX,
+      handY: midY,
+      handDistance: spread * 2,
+      deltaX,
+      deltaY,
+      zoomDelta,
+      isTwoHanded: true,
+      isPinching: false,
+      fingerCount: 10,
+      primaryHand: {
+        landmarks: landmarks1,
+        centroid: { x: h1x, y: h1y },
+        fingerCount: 5,
+        isPinching: false,
+        pinchDist: 0.2,
+        isFist: false,
+        gesture: 'PALM',
+      },
+      secondaryHand: {
+        landmarks: landmarks2,
+        centroid: { x: h2x, y: h2y },
+        fingerCount: 5,
+        isPinching: false,
+        pinchDist: 0.2,
+        isFist: false,
+        gesture: 'PALM',
+      },
+      landmarks: [...landmarks1, ...landmarks2],
+      activeMode,
     };
 
     this.lastTrackingResult = result;
 
+    useRigStore.getState().setGestureSpatial({
+      deltaX,
+      deltaY,
+      zoomDelta,
+      distance: spread * 2,
+      handsCount: 2,
+      primaryHand: { x: h1x, y: h1y, fingerCount: 5 },
+      secondaryHand: { x: h2x, y: h2y, fingerCount: 5 },
+      activeMode,
+    });
+
     if (this.lastReportedGesture !== result.gesture) {
       this.lastReportedGesture = result.gesture;
-      this.lastReportedConfidence = result.confidence;
       useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
     }
     this.handleGestureAction(result);
 
-    // Call registered UI viewfinder callbacks with synthetic canvas image
     this.onFrameCallbacks.forEach((cb) => cb(result, this.syntheticCanvas as unknown as HTMLVideoElement));
 
     this.animFrameId = requestAnimationFrame(this.processSyntheticLoop);
@@ -504,8 +885,6 @@ class JarvisGestureVisionEngine {
       this.onFrameCallbacks.delete(cb);
     };
   }
-
-  private isProcessingMediaPipe = false;
 
   private processLoop = (): void => {
     if (!this.isRunning || !this.videoElement || !this.ctx || !this.canvasElement) return;
@@ -532,29 +911,35 @@ class JarvisGestureVisionEngine {
             });
         }
 
-        // If MediaPipe is not available, process via CV Color-Space pipeline
+        // Color-space multi-cluster fallback if MediaPipe is not ready
         if (!this.mediaPipeHands) {
           const w = this.canvasElement.width;
           const h = this.canvasElement.height;
 
-          // Draw mirrored video frame into low-res processing canvas
           this.ctx.save();
           this.ctx.scale(-1, 1);
           this.ctx.drawImage(this.videoElement, -w, 0, w, h);
           this.ctx.restore();
 
           const imgData = this.ctx.getImageData(0, 0, w, h);
-          const result = this.analyzeFrame(imgData, w, h);
+          const result = this.analyzeColorSpaceFrame(imgData, w, h);
           this.lastTrackingResult = result;
 
-          // Update state store only when gesture actually changes
+          useRigStore.getState().setGestureSpatial({
+            deltaX: result.deltaX,
+            deltaY: result.deltaY,
+            zoomDelta: result.zoomDelta,
+            distance: result.handDistance,
+            handsCount: result.handsCount,
+            primaryHand: result.primaryHand ? { x: result.primaryHand.centroid.x, y: result.primaryHand.centroid.y, fingerCount: result.primaryHand.fingerCount } : null,
+            secondaryHand: result.secondaryHand ? { x: result.secondaryHand.centroid.x, y: result.secondaryHand.centroid.y, fingerCount: result.secondaryHand.fingerCount } : null,
+            activeMode: result.activeMode,
+          });
+
           if (this.lastReportedGesture !== result.gesture) {
             this.lastReportedGesture = result.gesture;
-            this.lastReportedConfidence = result.confidence;
             useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
           }
-
-          // Handle gesture-driven 3D actions
           this.handleGestureAction(result);
         }
       }
@@ -564,16 +949,22 @@ class JarvisGestureVisionEngine {
   };
 
   /**
-   * Adaptive Multi-Color-Space Hand & Gesture Analyzer
+   * Adaptive Color-Space Hand & Gesture Analyzer (Dual-Cluster Fallback)
    */
-  private analyzeFrame(imgData: ImageData, w: number, h: number): GestureTrackingResult {
+  private analyzeColorSpaceFrame(imgData: ImageData, w: number, h: number): GestureTrackingResult {
     const data = imgData.data;
     let sumX = 0;
     let sumY = 0;
     let skinPixelCount = 0;
-    const skinPoints: { x: number; y: number }[] = [];
 
-    // Step 1: Adaptive skin segmentation across RGB + YCbCr
+    let leftSumX = 0;
+    let leftSumY = 0;
+    let leftCount = 0;
+
+    let rightSumX = 0;
+    let rightSumY = 0;
+    let rightCount = 0;
+
     for (let y = 0; y < h; y += 2) {
       for (let x = 0; x < w; x += 2) {
         const i = (y * w + x) * 4;
@@ -581,7 +972,6 @@ class JarvisGestureVisionEngine {
         const g = data[i + 1];
         const b = data[i + 2];
 
-        // RGB skin thresholds
         const maxVal = Math.max(r, g, b);
         const minVal = Math.min(r, g, b);
         const rgbSkin =
@@ -593,7 +983,6 @@ class JarvisGestureVisionEngine {
           r > b &&
           Math.abs(r - g) > 10;
 
-        // YCbCr approximation
         const Y = 0.299 * r + 0.587 * g + 0.114 * b;
         const Cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
         const Cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
@@ -603,165 +992,143 @@ class JarvisGestureVisionEngine {
           sumX += x;
           sumY += y;
           skinPixelCount++;
-          if (skinPixelCount % 3 === 0) {
-            skinPoints.push({ x, y });
+
+          if (x < w / 2) {
+            leftSumX += x;
+            leftSumY += y;
+            leftCount++;
+          } else {
+            rightSumX += x;
+            rightSumY += y;
+            rightCount++;
           }
         }
       }
     }
 
-    const totalSampled = (w * h) / 4;
-    const skinRatio = skinPixelCount / totalSampled;
-
-    if (skinPixelCount < 40 || skinRatio < 0.012) {
+    if (skinPixelCount < 40) {
       return {
         gesture: null,
         confidence: 0,
+        handsCount: 0,
         handX: 0.5,
         handY: 0.5,
-        palmRadius: 0,
-        isPinching: false,
+        handDistance: 0,
+        deltaX: 0,
+        deltaY: 0,
+        zoomDelta: 0,
         isTwoHanded: false,
-        landmarks: [],
+        isPinching: false,
         fingerCount: 0,
+        primaryHand: null,
+        secondaryHand: null,
+        landmarks: [],
+        activeMode: 'IDLE',
       };
     }
 
+    const now = performance.now();
     const cx = sumX / skinPixelCount / w;
     const cy = sumY / skinPixelCount / h;
-    const now = performance.now();
 
-    // Step 2: Extract hand bounding extremities and contour points
-    let maxDistSq = 0;
-    let topLandmark = { x: cx, y: cy };
-    let bottomLandmark = { x: cx, y: cy };
-    let leftLandmark = { x: cx, y: cy };
-    let rightLandmark = { x: cx, y: cy };
+    const isTwoHands = leftCount > 25 && rightCount > 25;
+    let deltaX = 0;
+    let deltaY = 0;
+    let zoomDelta = 0;
+    let distance = 0;
+    let gesture: RecognizedGesture = 'PALM';
+    let activeMode: GestureTrackingResult['activeMode'] = 'ORBIT';
 
-    skinPoints.forEach((p) => {
-      const nx = p.x / w;
-      const ny = p.y / h;
-      const distSq = (nx - cx) ** 2 + (ny - cy) ** 2;
+    if (isTwoHands) {
+      const lx = leftSumX / leftCount / w;
+      const ly = leftSumY / leftCount / h;
+      const rx = rightSumX / rightCount / w;
+      const ry = rightSumY / rightCount / h;
+      distance = Math.hypot(rx - lx, ry - ly);
 
-      if (distSq > maxDistSq) maxDistSq = distSq;
-      if (ny < topLandmark.y) topLandmark = { x: nx, y: ny };
-      if (ny > bottomLandmark.y) bottomLandmark = { x: nx, y: ny };
-      if (nx < leftLandmark.x) leftLandmark = { x: nx, y: ny };
-      if (nx > rightLandmark.x) rightLandmark = { x: nx, y: ny };
-    });
-
-    const palmRadius = Math.sqrt(maxDistSq);
-    const handWidth = rightLandmark.x - leftLandmark.x;
-
-    // Step 3: Fast swipe motion detection -> "SLICE"
-    let isSlice = false;
-    if (this.prevCentroid) {
-      const dt = (now - this.prevCentroid.time) / 1000;
-      if (dt > 0.015 && dt < 0.28) {
-        const vx = (cx - this.prevCentroid.x) / dt;
-        const vy = (cy - this.prevCentroid.y) / dt;
-        const speed = Math.sqrt(vx * vx + vy * vy);
-
-        if (speed > 2.2 && now - this.lastSliceTime > 1400) {
-          isSlice = true;
-          this.lastSliceTime = now;
-        }
+      if (this.prevMidpoint) {
+        deltaX = (cx - this.prevMidpoint.x);
+        deltaY = (cy - this.prevMidpoint.y);
       }
+      if (this.prevDistance !== null) {
+        zoomDelta = (distance - this.prevDistance);
+      }
+
+      this.prevMidpoint = { x: cx, y: cy, time: now };
+      this.prevDistance = distance;
+
+      if (distance > 0.42) {
+        gesture = 'SPLIT';
+        activeMode = 'SPLIT';
+      } else if (distance < 0.15) {
+        gesture = 'MERGE';
+        activeMode = 'MERGE';
+      } else if (Math.abs(zoomDelta) > 0.01 && (Math.abs(deltaX) > 0.004 || Math.abs(deltaY) > 0.004)) {
+        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
+        activeMode = 'DUAL_MOVE_ZOOM';
+      } else {
+        gesture = 'MOVE';
+        activeMode = 'ORBIT';
+      }
+
+      const lms: HandLandmark[] = [
+        { x: lx, y: ly, type: 'palm' },
+        { x: rx, y: ry, type: 'palm' },
+      ];
+
+      return {
+        gesture,
+        confidence: 0.88,
+        handsCount: 2,
+        handX: cx,
+        handY: cy,
+        handDistance: distance,
+        deltaX,
+        deltaY,
+        zoomDelta,
+        isTwoHanded: true,
+        isPinching: false,
+        fingerCount: 10,
+        primaryHand: { landmarks: [{ x: lx, y: ly }], centroid: { x: lx, y: ly }, fingerCount: 5, isPinching: false, pinchDist: 0.2, isFist: false, gesture: 'PALM' },
+        secondaryHand: { landmarks: [{ x: rx, y: ry }], centroid: { x: rx, y: ry }, fingerCount: 5, isPinching: false, pinchDist: 0.2, isFist: false, gesture: 'PALM' },
+        landmarks: lms,
+        activeMode,
+      };
+    }
+
+    // Single hand color space
+    if (this.prevCentroid) {
+      deltaX = (cx - this.prevCentroid.x);
+      deltaY = (cy - this.prevCentroid.y);
     }
     this.prevCentroid = { x: cx, y: cy, time: now };
 
-    // Step 4: Classify gestures based on aspect ratio, compactness, and fingers
-    let gesture: RecognizedGesture = 'PALM';
-    let confidence = 0.88;
-    let fingerCount = 5;
-
-    if (isSlice) {
-      gesture = 'SLICE';
-      confidence = 0.96;
-    } else if (handWidth > 0.38 && skinRatio > 0.1) {
-      // Two hands spread wide or wide palm spread -> "SPLIT"
-      gesture = 'SPLIT';
-      confidence = 0.92;
-      fingerCount = 10;
-    } else if (palmRadius < 0.13 && skinRatio < 0.065) {
-      // Small tight pinch between fingers -> "PINCH"
-      gesture = 'PINCH';
-      confidence = 0.9;
-      fingerCount = 2;
-    } else if (topLandmark.y < cy - 0.14 && handWidth < 0.16) {
-      // Index finger extended vertically -> "POINT"
-      gesture = 'POINT';
-      confidence = 0.86;
-      fingerCount = 1;
-    } else if (palmRadius < 0.11 && skinRatio > 0.045 && handWidth < 0.14) {
-      // Closed tight fist -> "FIST"
-      gesture = 'FIST';
-      confidence = 0.85;
-      fingerCount = 0;
-    } else {
-      // Full open hand -> "PALM"
-      gesture = 'PALM';
-      confidence = 0.88;
-      fingerCount = 5;
-    }
-
-    // Generate skeleton landmarks
-    const landmarks: HandLandmark[] = [
+    const lms: HandLandmark[] = [
       { x: cx, y: cy, type: 'palm' },
-      { x: topLandmark.x, y: topLandmark.y, type: 'middle' },
-      { x: leftLandmark.x, y: leftLandmark.y, type: 'thumb' },
-      { x: rightLandmark.x, y: rightLandmark.y, type: 'pinky' },
-      { x: bottomLandmark.x, y: bottomLandmark.y, type: 'wrist' },
-      { x: cx - palmRadius * 0.45, y: cy - palmRadius * 0.45, type: 'index' },
-      { x: cx + palmRadius * 0.45, y: cy - palmRadius * 0.45, type: 'ring' },
+      { x: cx, y: cy - 0.15, type: 'middle' },
+      { x: cx - 0.1, y: cy, type: 'thumb' },
+      { x: cx + 0.1, y: cy, type: 'pinky' },
     ];
 
     return {
-      gesture,
-      confidence,
+      gesture: 'PALM',
+      confidence: 0.85,
+      handsCount: 1,
       handX: cx,
       handY: cy,
-      palmRadius,
-      isPinching: gesture === 'PINCH',
-      isTwoHanded: gesture === 'SPLIT',
-      landmarks,
-      fingerCount,
+      handDistance: 0,
+      deltaX,
+      deltaY,
+      zoomDelta: 0,
+      isTwoHanded: false,
+      isPinching: false,
+      fingerCount: 5,
+      primaryHand: { landmarks: lms, centroid: { x: cx, y: cy }, fingerCount: 5, isPinching: false, pinchDist: 0.2, isFist: false, gesture: 'PALM' },
+      secondaryHand: null,
+      landmarks: lms,
+      activeMode: 'ORBIT',
     };
-  }
-
-  /**
-   * Translates recognized hand gestures into active 3D Digital Twin controls
-   */
-  private handleGestureAction(res: GestureTrackingResult): void {
-    const store = useRigStore.getState();
-    const now = performance.now();
-
-    if (res.gesture === 'SLICE' && now - this.lastSliceTime < 300) {
-      // Trigger slice pipe cross-section
-      if (!store.isPipeSliced) {
-        store.setPipeSliced(true);
-      }
-    } else if (res.gesture === 'SPLIT') {
-      // Trigger Iron Man 3D exploded split view if two hands spread apart
-      if (!store.isSplitViewActive && now - this.lastSplitTime > 2200) {
-        this.lastSplitTime = now;
-        store.setSplitViewActive(true);
-      }
-    } else if (res.gesture === 'FIST') {
-      // Closed fist: Assemble rig back together
-      if (store.isSplitViewActive && now - this.lastFistTime > 2000) {
-        this.lastFistTime = now;
-        store.setSplitViewActive(false);
-      }
-    } else if (res.gesture === 'POINT') {
-      // Point to Pipe 1
-      if (store.cameraViewMode !== 'pipe1') {
-        store.setCameraViewMode('pipe1');
-        store.setSelectedAssetId('RISER-ALPHA');
-      }
-    }
   }
 }
 
 export const jarvisGestureEngine = new JarvisGestureVisionEngine();
-

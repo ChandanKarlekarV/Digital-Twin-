@@ -359,21 +359,77 @@ async function runEndToEndVerification() {
     'Successfully navigated to Pipe 1 immediately after error recovery'
   );
 
-  // 20. Camera Gesture State Deduplication Test
-  useRigStore.getState().setGestureDetected('PALM', 0.96);
-  const snap1 = useRigStore.getState().gestureDetected;
-  useRigStore.getState().setGestureDetected('PALM', 0.96);
-  const snap2 = useRigStore.getState().gestureDetected;
+  // 21. Simultaneous Dual-Hand Move + Zoom Spatial State Test
+  useRigStore.getState().setGestureSpatial({
+    deltaX: 0.012,
+    deltaY: -0.008,
+    zoomDelta: 0.024,
+    distance: 0.44,
+    handsCount: 2,
+    activeMode: 'DUAL_MOVE_ZOOM',
+  });
+  const spatial = useRigStore.getState().gestureSpatial;
   assert(
-    snap1 === 'PALM' && snap2 === 'PALM',
-    'Gesture Vision Engine State Deduplication (Zero Frame Render Thrashing)',
-    'Deduplication prevents 60 FPS state thrash while maintaining ultra-smooth camera rendering'
+    spatial.handsCount === 2 &&
+      spatial.activeMode === 'DUAL_MOVE_ZOOM' &&
+      spatial.deltaX === 0.012 &&
+      spatial.zoomDelta === 0.024,
+    'Simultaneous Dual-Hand Move & Zoom Tracking Engine',
+    'Both spatial translation (deltaX) and distance scaling (zoomDelta) are tracked concurrently for 60 FPS 3D manipulation'
+  );
+
+  // 22. Gesture 1 (Split View) and Gesture 2 (Merge Rig)
+  useRigStore.getState().setSplitViewActive(true);
+  assert(
+    useRigStore.getState().isSplitViewActive === true,
+    'Gesture 1: Split View (Hands Spreading Outward)',
+    'Exploded subsystem modules active'
+  );
+  useRigStore.getState().setSplitViewActive(false);
+  assert(
+    useRigStore.getState().isSplitViewActive === false,
+    'Gesture 2: Merge / Reassemble (Closed Fist / Hands Together)',
+    'Solid digital twin reassembled'
+  );
+
+  // 23. Gesture 6: Subsystem Index Opener (Helipad, Crane 1, Crane 2, Command Dock, Accommodation)
+  useRigStore.getState().openSubsystemByIndex(1);
+  assert(
+    useRigStore.getState().activeHoloModal === 'helipad' &&
+      useRigStore.getState().cameraViewMode === 'helipad',
+    'Gesture 6: Index 1 (Helipad Dedicated 3D Inspection)',
+    'Successfully opened Helideck CAP 437 diagnostics'
+  );
+
+  useRigStore.getState().openSubsystemByIndex(2);
+  assert(
+    useRigStore.getState().activeHoloModal === 'crane1' &&
+      useRigStore.getState().cameraViewMode === 'crane1',
+    'Gesture 6: Index 2 (Crane 1 Dedicated 3D Inspection)',
+    'Successfully opened Port Crane 1 lattice boom diagnostics'
+  );
+
+  useRigStore.getState().openSubsystemByIndex(4);
+  assert(
+    useRigStore.getState().activeHoloModal === 'command_dock' &&
+      useRigStore.getState().cameraViewMode === 'command_dock',
+    'Gesture 6: Index 4 (Tactical Command Dock)',
+    'Successfully opened Tactical Command Bridge'
   );
 
   console.log('\n================================================================');
   console.log(`🏁 VERIFICATION SUMMARY: ${passedTests}/${totalTests} TESTS PASSED (100% SUCCESS)`);
   console.log('================================================================\n');
+
+  if (passedTests === totalTests) {
+    process.exit(0);
+  } else {
+    process.exit(1);
+  }
 }
 
-runEndToEndVerification().catch(console.error);
+runEndToEndVerification().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 

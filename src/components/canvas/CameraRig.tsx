@@ -193,6 +193,50 @@ export const CameraRig: React.FC = () => {
 
   useFrame((_, delta) => {
     if (controlsRef.current) {
+      // 1. Gesture Vision Spatial Manipulation (Simultaneous Move & Zoom)
+      const isGestureActive = useRigStore.getState().isGestureCameraActive;
+      const gestureSpatial = useRigStore.getState().gestureSpatial;
+
+      if (isGestureActive && !isUserInteracting.current && gestureSpatial) {
+        const { deltaX, deltaY, zoomDelta } = gestureSpatial;
+        const hasMotion =
+          Math.abs(deltaX) > 0.001 || Math.abs(deltaY) > 0.001 || Math.abs(zoomDelta) > 0.001;
+
+        if (hasMotion) {
+          isTransitioning.current = false;
+          const target = controlsRef.current.target;
+          const offset = camera.position.clone().sub(target);
+
+          // Horizontal azimuth rotation (Move left/right)
+          if (Math.abs(deltaX) > 0.001) {
+            const rotX = -deltaX * 3.8;
+            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotX);
+          }
+
+          // Vertical polar tilt (Move up/down)
+          if (Math.abs(deltaY) > 0.001) {
+            const rotY = -deltaY * 3.0;
+            const right = new THREE.Vector3().crossVectors(offset, camera.up).normalize();
+            offset.applyAxisAngle(right, rotY);
+          }
+
+          // Simultaneous Dolly Zoom (Expand/Pinch hands)
+          if (Math.abs(zoomDelta) > 0.001) {
+            const currentDist = offset.length();
+            const newDist = THREE.MathUtils.clamp(
+              currentDist * (1.0 - zoomDelta * 3.5),
+              4.0,
+              350.0
+            );
+            offset.setLength(newDist);
+          }
+
+          camera.position.copy(target).add(offset);
+          targetCamPos.current.copy(camera.position);
+          targetLookAt.current.copy(target);
+        }
+      }
+
       // Prevent penetrating below bedrock bottom
       if (camera.position.y < -110) {
         camera.position.y = -110;

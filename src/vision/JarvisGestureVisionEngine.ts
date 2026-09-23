@@ -318,50 +318,71 @@ class JarvisGestureVisionEngine {
         secondaryHand: null,
         activeMode: 'IDLE',
       });
+      useRigStore.getState().setPointerCursor({ x: 0.5, y: 0.5, active: false });
       return;
     }
 
     const now = performance.now();
 
-    // 1. Process Hand 1
-    const hand1Raw = this.extractLandmarks(multiHandLandmarks[0]);
+    // 1. Sort hands deterministically by X position so Hand 1 is ALWAYS left-screen and Hand 2 is ALWAYS right-screen
+    let hand1Raw: HandLandmark[];
+    let hand2Raw: HandLandmark[] | null = null;
+
+    if (handsCount >= 2) {
+      const rawA = this.extractLandmarks(multiHandLandmarks[0]);
+      const rawB = this.extractLandmarks(multiHandLandmarks[1]);
+      if (rawA[0].x <= rawB[0].x) {
+        hand1Raw = rawA;
+        hand2Raw = rawB;
+      } else {
+        hand1Raw = rawB;
+        hand2Raw = rawA;
+      }
+    } else {
+      hand1Raw = this.extractLandmarks(multiHandLandmarks[0]);
+    }
+
+    // Process Hand 1
     this.smoothedLandmarks1 = this.smoothLandmarks(this.smoothedLandmarks1, hand1Raw);
-    const hand1Data = this.analyzeSingleHand(
-      this.smoothedLandmarks1,
-      this.prevPinchDist1
-    );
+    const hand1Data = this.analyzeSingleHand(this.smoothedLandmarks1, this.prevPinchDist1);
     const dH1_x = this.prevHand1Pos ? hand1Data.centroid.x - this.prevHand1Pos.x : 0;
     const dH1_y = this.prevHand1Pos ? hand1Data.centroid.y - this.prevHand1Pos.y : 0;
-    const dPinch1 = hand1Data.pinchDelta;
-
     this.prevHand1Pos = { x: hand1Data.centroid.x, y: hand1Data.centroid.y, time: now };
-    this.prevPinchDist1 = hand1Data.pinchDist;
 
-    // 2. Process Hand 2 if detected
+    // Process Hand 2 if detected
     let hand2Data: SingleHandData | null = null;
     let dH2_x = 0;
     let dH2_y = 0;
-    let dPinch2 = 0;
     let combinedLandmarks = [...this.smoothedLandmarks1];
 
-    if (handsCount >= 2) {
-      const hand2Raw = this.extractLandmarks(multiHandLandmarks[1]);
+    if (hand2Raw) {
       this.smoothedLandmarks2 = this.smoothLandmarks(this.smoothedLandmarks2, hand2Raw);
-      hand2Data = this.analyzeSingleHand(
-        this.smoothedLandmarks2,
-        this.prevPinchDist2
-      );
+      hand2Data = this.analyzeSingleHand(this.smoothedLandmarks2, this.prevPinchDist2);
       dH2_x = this.prevHand2Pos ? hand2Data.centroid.x - this.prevHand2Pos.x : 0;
       dH2_y = this.prevHand2Pos ? hand2Data.centroid.y - this.prevHand2Pos.y : 0;
-      dPinch2 = hand2Data.pinchDelta;
-
       this.prevHand2Pos = { x: hand2Data.centroid.x, y: hand2Data.centroid.y, time: now };
-      this.prevPinchDist2 = hand2Data.pinchDist;
       combinedLandmarks = [...this.smoothedLandmarks1, ...this.smoothedLandmarks2];
     } else {
       this.smoothedLandmarks2 = [];
       this.prevHand2Pos = null;
-      this.prevPinchDist2 = null;
+    }
+
+    // 2. 2D / 3D Laser Pointer Cursor: check if EITHER hand is pointing (INDEX_1 or _isPoint)
+    const pointingHand =
+      (hand1Data.gesture === 'INDEX_1' || (hand1Data as any)._isPoint)
+        ? hand1Data
+        : (hand2Data && (hand2Data.gesture === 'INDEX_1' || (hand2Data as any)._isPoint))
+          ? hand2Data
+          : null;
+
+    if (pointingHand) {
+      useRigStore.getState().setPointerCursor({
+        x: pointingHand.indexTip.x,
+        y: pointingHand.indexTip.y,
+        active: true,
+      });
+    } else {
+      useRigStore.getState().setPointerCursor({ x: 0.5, y: 0.5, active: false });
     }
 
     let gesture: RecognizedGesture = null;
@@ -369,38 +390,22 @@ class JarvisGestureVisionEngine {
     let activeMode: GestureTrackingResult['activeMode'] = 'IDLE';
     let deltaX = 0;
     let deltaY = 0;
-    let zoomDelta = 0;
+    const zoomDelta = 0; // ZERO ZOOM: completely disabled for now as requested
     let currentDistance = 0;
     let midX = hand1Data.centroid.x;
     let midY = hand1Data.centroid.y;
 
-    // === SCREEN-SIDE ROLE ASSIGNMENT ===
-    // Left side of mirrored canvas (x < 0.5) = user's RIGHT hand = ZOOM controller
-    // Right side of mirrored canvas (x >= 0.5) = user's LEFT hand = ORBIT/pointer controller
-    const h1IsZoomHand = hand1Data.centroid.x < 0.5;
-    const zoomHand = h1IsZoomHand ? hand1Data : (hand2Data || hand1Data);
-    const orbitHand = h1IsZoomHand ? (hand2Data || hand1Data) : hand1Data;
-
-    // Export pointer cursor coords (ORBIT hand index fingertip when pointing)
-    const orbitHandData = h1IsZoomHand ? hand2Data : hand1Data;
-    if (orbitHandData && (orbitHandData as any)._isPoint) {
-      const idx = orbitHandData.indexTip;
-      useRigStore.getState().setPointerCursor({ x: idx.x, y: idx.y, active: true });
-    } else {
-      useRigStore.getState().setPointerCursor({ x: 0.5, y: 0.5, active: false });
-    }
-
     // Fast Right-to-Left Swipe Detection (Opens targeted / next subsystem view)
-    // Note: in mirrored coords (1.0 - x), moving hand from right to left produces dH_x < -0.09
     const isSwipeLeft =
-      (dH1_x < -0.09 || dH2_x < -0.09) && now - this.lastSwipeLeftTime > 1400;
+      (dH1_x < -0.07 || (hand2Data && dH2_x < -0.07)) &&
+      now - this.lastSwipeLeftTime > 1200;
 
     if (isSwipeLeft) {
       gesture = 'SWIPE_LEFT';
       activeMode = 'INDEX_SELECT';
       this.lastSwipeLeftTime = now;
     }
-    // 3. KINEMATIC DUAL-HAND ASYMMETRIC / DECOUPLED MATRIX
+    // 3. DUAL-HAND INTERACTION
     else if (handsCount >= 2 && hand2Data) {
       midX = (hand1Data.centroid.x + hand2Data.centroid.x) / 2.0;
       midY = (hand1Data.centroid.y + hand2Data.centroid.y) / 2.0;
@@ -416,124 +421,91 @@ class JarvisGestureVisionEngine {
       const totalFingers = hand1Data.fingerCount + hand2Data.fingerCount;
       const bothFists = hand1Data.isFist && hand2Data.isFist;
 
-      // Discrete Macro Gestures (Split View / Merge Rig)
-      if (bothFists || currentDistance < 0.13) {
+      // 3.1. MERGE: Both fists or hands brought close together
+      if (bothFists || currentDistance < 0.16) {
         gesture = 'MERGE';
         activeMode = 'MERGE';
-        zoomDelta = 0;
-      } else if (currentDistance > 0.48 || (dDistance > 0.045 && totalFingers >= 8)) {
+        deltaX = 0;
+        deltaY = 0;
+      }
+      // 3.2. SPLIT: Both hands spread apart or moving apart with open hands
+      else if (currentDistance > 0.40 || (dDistance > 0.035 && totalFingers >= 6)) {
         gesture = 'SPLIT';
         activeMode = 'SPLIT';
-        zoomDelta = 0;
+        deltaX = 0;
+        deltaY = 0;
       }
-      // DECOUPLED CASE A: Hand 1 is Zooming (Pinch In/Out) & Hand 2 is Moving (Orbit (x,y))
-      else if (Math.abs(dPinch1) > 0.0022 || (hand1Data.isPinching && Math.abs(dPinch1) > 0.001)) {
-        hand1Data.role = 'ZOOM';
-        hand2Data.role = 'ORBIT';
-        activeMode = 'JARVIS_DECOUPLED_DUAL';
-
-        // Pinch out (dPinch1 > 0) -> Zoom In; Pinch in (dPinch1 < 0) -> Zoom Out
-        zoomDelta = dPinch1 * 3.8;
-        deltaX = Math.abs(dH2_x) > 0.0015 ? dH2_x : 0;
-        deltaY = Math.abs(dH2_y) > 0.0015 ? dH2_y : 0;
-        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
-      }
-      // DECOUPLED CASE B: Hand 2 is Zooming (Pinch In/Out) & Hand 1 is Moving (Orbit (x,y))
-      else if (Math.abs(dPinch2) > 0.0022 || (hand2Data.isPinching && Math.abs(dPinch2) > 0.001)) {
-        hand1Data.role = 'ORBIT';
-        hand2Data.role = 'ZOOM';
-        activeMode = 'JARVIS_DECOUPLED_DUAL';
-
-        zoomDelta = dPinch2 * 3.8;
-        deltaX = Math.abs(dH1_x) > 0.0015 ? dH1_x : 0;
-        deltaY = Math.abs(dH1_y) > 0.0015 ? dH1_y : 0;
-        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
-      }
-      // SYMMETRIC DUAL-HAND CASE: Both hands expanding apart / moving together
-      else if (Math.abs(dDistance) > 0.005) {
-        hand1Data.role = 'ZOOM';
-        hand2Data.role = 'ZOOM';
-        activeMode = Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
-
-        zoomDelta = dDistance * 3.0; // Spreading hands apart zooms in, bringing closer zooms out
+      // 3.3. DUAL-HAND MOVE / ORBIT: Hands translating across screen
+      else if (
+        Math.abs(dH1_x) > 0.0022 ||
+        Math.abs(dH1_y) > 0.0022 ||
+        Math.abs(dH2_x) > 0.0022 ||
+        Math.abs(dH2_y) > 0.0022
+      ) {
         deltaX = (dH1_x + dH2_x) / 2.0;
         deltaY = (dH1_y + dH2_y) / 2.0;
-        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
-      }
-      // PURE TRANSLATION CASE: Both hands moving together across frame
-      else if (Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003 || Math.abs(dH2_x) > 0.003 || Math.abs(dH2_y) > 0.003) {
-        hand1Data.role = 'ORBIT';
-        hand2Data.role = 'ORBIT';
-        activeMode = 'ORBIT';
-
-        deltaX = (dH1_x + dH2_x) / 2.0;
-        deltaY = (dH1_y + dH2_y) / 2.0;
-        zoomDelta = 0; // Freeze zoom
         gesture = 'MOVE';
-      } else {
-        // STEADY STATE: Zero drift, instant stop
+        activeMode = 'ORBIT';
+      }
+      // 3.4. PALM / FREEZE: Hands open and static
+      else {
         gesture = 'PALM';
         activeMode = 'IDLE';
         deltaX = 0;
         deltaY = 0;
-        zoomDelta = 0;
       }
-    } else {
-      // 4. SINGLE HAND INTERACTION (Simultaneous Pinch In/Out Zoom + Move)
-      midX = hand1Data.centroid.x;
-      midY = hand1Data.centroid.y;
+    }
+    // 4. SINGLE HAND INTERACTION (Works on EITHER hand)
+    else {
       this.prevDistance = null;
+      const activeHand = hand1Data;
+      const dH_x = dH1_x;
+      const dH_y = dH1_y;
 
-      if (Math.abs(dPinch1) > 0.0022 || hand1Data.isPinching) {
-        // Pinch In -> Zoom Out, Pinch Out -> Zoom In
-        zoomDelta = dPinch1 * 4.0;
-        deltaX = Math.abs(dH1_x) > 0.002 ? dH1_x : 0;
-        deltaY = Math.abs(dH1_y) > 0.002 ? dH1_y : 0;
-        hand1Data.role = 'ZOOM';
-        activeMode = Math.abs(deltaX) > 0.002 || Math.abs(deltaY) > 0.002 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
-        gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
-      } else if (hand1Data.isFist) {
+      if (activeHand.isFist) {
         gesture = 'FIST';
         activeMode = 'MERGE';
-        zoomDelta = 0;
         deltaX = 0;
         deltaY = 0;
-      } else if (Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003) {
-        deltaX = dH1_x;
-        deltaY = dH1_y;
-        zoomDelta = 0; // Pure translation with zero zoom drift
-        hand1Data.role = 'ORBIT';
-        activeMode = 'ORBIT';
-        gesture = 'MOVE';
+      } else if (activeHand.fingerCount >= 4 || activeHand.gesture === 'PALM') {
+        // 5 Fingers / Open Palm:
+        // If moving -> MOVE / ORBIT!
+        // If static -> PALM (Freeze camera with zero drift)
+        if (Math.abs(dH_x) > 0.0022 || Math.abs(dH_y) > 0.0022) {
+          gesture = 'MOVE';
+          activeMode = 'ORBIT';
+          deltaX = dH_x;
+          deltaY = dH_y;
+        } else {
+          gesture = 'PALM';
+          activeMode = 'IDLE';
+          deltaX = 0;
+          deltaY = 0;
+        }
       } else {
-        // Subsystem Index Selection via Finger Count (1 to 5)
-        zoomDelta = 0;
+        // Subsystem Index Selection via Finger Count (1 to 4)
         deltaX = 0;
         deltaY = 0;
-        switch (hand1Data.fingerCount) {
+        switch (activeHand.fingerCount) {
           case 1:
-            gesture = 'INDEX_1';
+            gesture = 'INDEX_1'; // Helipad + Laser pointer
             activeMode = 'INDEX_SELECT';
             break;
           case 2:
-            gesture = 'INDEX_2';
+            gesture = 'INDEX_2'; // Port Crane 1 Boom
             activeMode = 'INDEX_SELECT';
             break;
           case 3:
-            gesture = 'INDEX_3';
+            gesture = 'INDEX_3'; // Starboard Crane 2
             activeMode = 'INDEX_SELECT';
             break;
           case 4:
-            gesture = 'INDEX_4';
+            gesture = 'INDEX_4'; // Command Dock
             activeMode = 'INDEX_SELECT';
-            break;
-          case 5:
-            gesture = 'PALM';
-            activeMode = 'ORBIT';
             break;
           default:
             gesture = 'PALM';
-            activeMode = 'ORBIT';
+            activeMode = 'IDLE';
             break;
         }
       }
@@ -548,9 +520,9 @@ class JarvisGestureVisionEngine {
       handDistance: currentDistance,
       deltaX,
       deltaY,
-      zoomDelta,
+      zoomDelta: 0,
       isTwoHanded: handsCount >= 2,
-      isPinching: hand1Data.isPinching || (hand2Data?.isPinching ?? false),
+      isPinching: false,
       fingerCount: hand1Data.fingerCount + (hand2Data?.fingerCount ?? 0),
       primaryHand: hand1Data,
       secondaryHand: hand2Data,
@@ -564,25 +536,25 @@ class JarvisGestureVisionEngine {
     useRigStore.getState().setGestureSpatial({
       deltaX,
       deltaY,
-      zoomDelta,
+      zoomDelta: 0,
       distance: currentDistance,
       handsCount,
       primaryHand: {
         x: hand1Data.centroid.x,
         y: hand1Data.centroid.y,
         fingerCount: hand1Data.fingerCount,
-        isPinching: hand1Data.isPinching,
-        pinchDist: hand1Data.pinchDist,
-        role: hand1Data.role,
+        isPinching: false,
+        pinchDist: 1.0,
+        role: activeMode === 'ORBIT' ? 'ORBIT' : 'IDLE',
       },
       secondaryHand: hand2Data
         ? {
             x: hand2Data.centroid.x,
             y: hand2Data.centroid.y,
             fingerCount: hand2Data.fingerCount,
-            isPinching: hand2Data.isPinching,
-            pinchDist: hand2Data.pinchDist,
-            role: hand2Data.role,
+            isPinching: false,
+            pinchDist: 1.0,
+            role: activeMode === 'ORBIT' ? 'ORBIT' : 'IDLE',
           }
         : null,
       activeMode,
@@ -595,7 +567,6 @@ class JarvisGestureVisionEngine {
 
     this.handleGestureAction(result);
   };
-
   private extractLandmarks(landmarks: any[]): HandLandmark[] {
     const typeMap: { [k: number]: HandLandmark['type'] } = {
       0: 'wrist',
@@ -664,11 +635,11 @@ class JarvisGestureVisionEngine {
 
     const distSq = (a: HandLandmark, b: HandLandmark) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 
-    // Extension classification
-    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip) * 1.08;
-    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip) * 1.08;
-    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip) * 1.08;
-    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip) * 1.08;
+    // Extension classification with robust hysteresis
+    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip) * 1.12;
+    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip) * 1.12;
+    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip) * 1.12;
+    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip) * 1.12;
     const isThumbExtended = distSq(thumbTip, pinkyMcp) > distSq(thumbIp, pinkyMcp) * 1.15;
 
     let fingerCount = 0;
@@ -678,34 +649,35 @@ class JarvisGestureVisionEngine {
     if (isRingExtended) fingerCount++;
     if (isPinkyExtended) fingerCount++;
 
-    const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
-    // FIX: strict pinch -- thumb must be bent downward (not pointing) to fire
-    const thumbBentInward = thumbTip.y > indexPip.y - 0.015;
-    const isPinching = pinchDist < 0.052 && thumbBentInward;
-    const pinchDelta = prevPinchDist !== null ? pinchDist - prevPinchDist : 0;
     const isFist =
       !isIndexExtended &&
       !isMiddleExtended &&
       !isRingExtended &&
-      !isPinkyExtended &&
-      !isThumbExtended;
+      !isPinkyExtended;
 
-    // NEW: Call Me (thumb+pinky) = zoom-in; Peace (index+middle) = zoom-out; Point (index only, thumb gap>0.09) = cursor
-    const isCallMe = isThumbExtended && isPinkyExtended && !isIndexExtended && !isMiddleExtended && !isRingExtended;
-    const isPeace = isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended && !isThumbExtended;
-    const thumbIndexGap = pinchDist;
-    const isPoint = isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended && thumbIndexGap > 0.09;
+    const isPoint =
+      isIndexExtended &&
+      !isMiddleExtended &&
+      !isRingExtended &&
+      !isPinkyExtended;
 
+    // Pure gesture classification without zoom interference
     let gesture: RecognizedGesture = 'PALM';
-    if (isFist) gesture = 'FIST';
-    else if (isPinching) gesture = 'PINCH';
-    else if (isCallMe) gesture = 'INDEX_1';
-    else if (isPeace) gesture = 'INDEX_2';
-    else if (isPoint) gesture = 'POINT';
-    else if (fingerCount === 1 && isIndexExtended) gesture = 'INDEX_1';
-    else if (fingerCount === 3) gesture = 'INDEX_3';
-    else if (fingerCount === 4) gesture = 'INDEX_4';
-    else if (fingerCount >= 5) gesture = 'PALM';
+    if (isFist) {
+      gesture = 'FIST';
+    } else if (isPoint || (fingerCount === 1 && isIndexExtended)) {
+      gesture = 'INDEX_1'; // 1 Finger: Helideck & Laser Pointer
+    } else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+      gesture = 'INDEX_2'; // 2 Fingers: Port Crane 1 Boom
+    } else if (isIndexExtended && isMiddleExtended && isRingExtended && !isPinkyExtended) {
+      gesture = 'INDEX_3'; // 3 Fingers: Starboard Crane 2
+    } else if (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended && !isThumbExtended) {
+      gesture = 'INDEX_4'; // 4 Fingers: Tactical Command Dock
+    } else if (fingerCount >= 5 || (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended)) {
+      gesture = 'PALM';    // 5 Fingers / Open Palm: Move / Freeze
+    } else {
+      gesture = fingerCount === 1 ? 'INDEX_1' : fingerCount === 2 ? 'INDEX_2' : fingerCount === 3 ? 'INDEX_3' : fingerCount === 4 ? 'INDEX_4' : 'PALM';
+    }
 
     return {
       landmarks,
@@ -714,16 +686,14 @@ class JarvisGestureVisionEngine {
       indexTip,
       centroid: { x: (wrist.x + middleMcp.x) / 2, y: (wrist.y + middleMcp.y) / 2 },
       fingerCount,
-      isPinching,
-      pinchDist,
-      pinchDelta,
+      isPinching: false,
+      pinchDist: 1.0,
+      pinchDelta: 0,
       isFist,
       gesture,
       role: 'IDLE',
-      _isCallMe: isCallMe,
-      _isPeace: isPeace,
       _isPoint: isPoint,
-    } as SingleHandData & { _isCallMe: boolean; _isPeace: boolean; _isPoint: boolean };
+    } as SingleHandData & { _isPoint: boolean };
   }
 
   private handleGestureAction(res: GestureTrackingResult): void {
@@ -891,43 +861,47 @@ class JarvisGestureVisionEngine {
       ctx.stroke();
     }
 
-    // HAND 1 (LEFT): Controls ZOOM via continuous Pinch In / Pinch Out
-    const h1x = 0.28;
-    const h1y = 0.5 + Math.sin(t * 0.4) * 0.04;
-    // Oscillating pinch distance between thumb and index: 0.03 (pinched in) to 0.16 (pinched out)
-    const pinchDist1 = 0.09 + Math.sin(t * 1.5) * 0.055;
-    const zoomDelta = Math.cos(t * 1.5) * 0.012; // + when unpinching (zoom in), - when pinching (zoom out)
+    // HAND 1 (LEFT): Pointing index finger (Laser pointer & Index 1 Helipad)
+    const h1x = 0.28 + Math.sin(t * 0.5) * 0.08;
+    const h1y = 0.45 + Math.cos(t * 0.4) * 0.06;
 
-    // HAND 2 (RIGHT): Controls ORBIT & TRANSLATION in (x,y)
+    // HAND 2 (RIGHT): Moving in (x,y) -> Move / Orbit model
     const h2x = 0.72 + Math.sin(t * 0.8) * 0.12;
     const h2y = 0.5 + Math.cos(t * 0.6) * 0.09;
-    const deltaX = Math.cos(t * 0.8) * 0.006;
+    const deltaX = Math.cos(t * 0.8) * 0.007;
     const deltaY = -Math.sin(t * 0.6) * 0.005;
 
     const currentDist = Math.hypot(h2x - h1x, h2y - h1y);
-    const gesture: RecognizedGesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
-    const activeMode: GestureTrackingResult['activeMode'] = 'JARVIS_DECOUPLED_DUAL';
+    const gesture: RecognizedGesture = 'MOVE';
+    const activeMode: GestureTrackingResult['activeMode'] = 'ORBIT';
 
-    // Left hand pinch landmarks
+    // Broadcast Laser Pointer Cursor from Hand 1
+    useRigStore.getState().setPointerCursor({
+      x: h1x,
+      y: h1y - 0.2,
+      active: true,
+    });
+
+    // Left hand landmarks (pointing index)
     const landmarks1: HandLandmark[] = [
-      { x: h1x, y: h1y, type: 'palm' },
-      { x: h1x, y: h1y - 0.18, type: 'middle' },
-      { x: h1x - pinchDist1 * 0.6, y: h1y - pinchDist1 * 0.4, type: 'thumb' },
-      { x: h1x + 0.08, y: h1y - 0.1, type: 'pinky' },
       { x: h1x, y: h1y + 0.16, type: 'wrist' },
-      { x: h1x + pinchDist1 * 0.4, y: h1y - pinchDist1 * 0.5, type: 'index' },
-      { x: h1x + 0.04, y: h1y - 0.16, type: 'ring' },
+      { x: h1x, y: h1y, type: 'palm' },
+      { x: h1x - 0.06, y: h1y + 0.02, type: 'thumb' },
+      { x: h1x, y: h1y - 0.22, type: 'index' },
+      { x: h1x + 0.03, y: h1y + 0.02, type: 'middle' },
+      { x: h1x + 0.06, y: h1y + 0.04, type: 'ring' },
+      { x: h1x + 0.09, y: h1y + 0.06, type: 'pinky' },
     ];
 
-    // Right hand orbit landmarks
+    // Right hand landmarks (open palm moving)
     const landmarks2: HandLandmark[] = [
-      { x: h2x, y: h2y, type: 'palm' },
-      { x: h2x, y: h2y - 0.2, type: 'middle' },
-      { x: h2x - 0.1, y: h2y - 0.1, type: 'thumb' },
-      { x: h2x + 0.1, y: h2y - 0.1, type: 'pinky' },
       { x: h2x, y: h2y + 0.18, type: 'wrist' },
-      { x: h2x - 0.05, y: h2y - 0.18, type: 'index' },
-      { x: h2x + 0.05, y: h2y - 0.18, type: 'ring' },
+      { x: h2x, y: h2y, type: 'palm' },
+      { x: h2x - 0.1, y: h2y - 0.08, type: 'thumb' },
+      { x: h2x - 0.04, y: h2y - 0.18, type: 'index' },
+      { x: h2x, y: h2y - 0.20, type: 'middle' },
+      { x: h2x + 0.04, y: h2y - 0.18, type: 'ring' },
+      { x: h2x + 0.09, y: h2y - 0.12, type: 'pinky' },
     ];
 
     const result: GestureTrackingResult = {
@@ -939,33 +913,33 @@ class JarvisGestureVisionEngine {
       handDistance: currentDist,
       deltaX,
       deltaY,
-      zoomDelta,
+      zoomDelta: 0,
       isTwoHanded: true,
-      isPinching: pinchDist1 < 0.06,
-      fingerCount: 10,
+      isPinching: false,
+      fingerCount: 6,
       primaryHand: {
         landmarks: landmarks1,
-        wrist: landmarks1[4],
+        wrist: landmarks1[0],
         thumbTip: landmarks1[2],
-        indexTip: landmarks1[5],
+        indexTip: landmarks1[3],
         centroid: { x: h1x, y: h1y },
-        fingerCount: 5,
-        isPinching: pinchDist1 < 0.06,
-        pinchDist: pinchDist1,
-        pinchDelta: zoomDelta,
+        fingerCount: 1,
+        isPinching: false,
+        pinchDist: 1.0,
+        pinchDelta: 0,
         isFist: false,
-        gesture: zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT',
-        role: 'ZOOM',
+        gesture: 'INDEX_1',
+        role: 'IDLE',
       },
       secondaryHand: {
         landmarks: landmarks2,
-        wrist: landmarks2[4],
+        wrist: landmarks2[0],
         thumbTip: landmarks2[2],
-        indexTip: landmarks2[5],
+        indexTip: landmarks2[3],
         centroid: { x: h2x, y: h2y },
         fingerCount: 5,
         isPinching: false,
-        pinchDist: 0.18,
+        pinchDist: 1.0,
         pinchDelta: 0,
         isFist: false,
         gesture: 'MOVE',
@@ -980,23 +954,23 @@ class JarvisGestureVisionEngine {
     useRigStore.getState().setGestureSpatial({
       deltaX,
       deltaY,
-      zoomDelta,
+      zoomDelta: 0,
       distance: currentDist,
       handsCount: 2,
       primaryHand: {
         x: h1x,
         y: h1y,
-        fingerCount: 5,
-        isPinching: pinchDist1 < 0.06,
-        pinchDist: pinchDist1,
-        role: 'ZOOM',
+        fingerCount: 1,
+        isPinching: false,
+        pinchDist: 1.0,
+        role: 'IDLE',
       },
       secondaryHand: {
         x: h2x,
         y: h2y,
         fingerCount: 5,
         isPinching: false,
-        pinchDist: 0.18,
+        pinchDist: 1.0,
         role: 'ORBIT',
       },
       activeMode,
@@ -1014,7 +988,6 @@ class JarvisGestureVisionEngine {
 
     this.animFrameId = requestAnimationFrame(this.processSyntheticLoop);
   };
-
   public registerFrameCallback(
     cb: (result: GestureTrackingResult, video: HTMLVideoElement) => void
   ): () => void {

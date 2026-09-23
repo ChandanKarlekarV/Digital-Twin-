@@ -138,17 +138,16 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ffff';
         ctx.font = 'bold 7.5px monospace';
         ctx.fillText(
-          hand.role === 'ZOOM' ? 'HAND 1 [ZOOM CONTROLLER]' : 'HAND 1 [ORBIT CONTROLLER]',
+          `HAND 1: [${hand.gesture || 'TRACKING'}]`,
           Math.max(8, hx - 45),
           Math.max(16, hy - 16)
         );
 
-        // Holographic Pinch Arc if Zooming
-        if (hand.role === 'ZOOM' && hand.thumbTip && hand.indexTip) {
+        // Laser pointer ring on index fingertip
+        if ((hand.gesture === 'INDEX_1' || (hand as any)._isPoint) && hand.indexTip) {
           ctx.beginPath();
-          ctx.moveTo(hand.thumbTip.x * w, hand.thumbTip.y * h);
-          ctx.lineTo(hand.indexTip.x * w, hand.indexTip.y * h);
-          ctx.strokeStyle = '#ff00ff';
+          ctx.arc(hand.indexTip.x * w, hand.indexTip.y * h, 7, 0, Math.PI * 2);
+          ctx.strokeStyle = '#00e5ff';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -164,16 +163,15 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ff88';
         ctx.font = 'bold 7.5px monospace';
         ctx.fillText(
-          hand.role === 'ZOOM' ? 'HAND 2 [ZOOM CONTROLLER]' : 'HAND 2 [ORBIT CONTROLLER]',
+          `HAND 2: [${hand.gesture || 'TRACKING'}]`,
           Math.max(8, hx - 45),
           Math.max(16, hy - 16)
         );
 
-        if (hand.role === 'ZOOM' && hand.thumbTip && hand.indexTip) {
+        if ((hand.gesture === 'INDEX_1' || (hand as any)._isPoint) && hand.indexTip) {
           ctx.beginPath();
-          ctx.moveTo(hand.thumbTip.x * w, hand.thumbTip.y * h);
-          ctx.lineTo(hand.indexTip.x * w, hand.indexTip.y * h);
-          ctx.strokeStyle = '#ff00ff';
+          ctx.arc(hand.indexTip.x * w, hand.indexTip.y * h, 7, 0, Math.PI * 2);
+          ctx.strokeStyle = '#00ff88';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -287,16 +285,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   };
 
   const triggerGesture = (
-    type:
-      | 'SPLIT'
-      | 'MERGE'
-      | 'MOVE'
-      | 'PINCH_IN'
-      | 'PINCH_OUT'
-      | 'INDEX'
-      | 'JARVIS_DUAL'
-      | 'PALM'
-      | 'SWIPE_LEFT'
+    type: 'SPLIT' | 'MERGE' | 'MOVE' | 'POINT' | 'PALM' | 'SWIPE_LEFT' | 'INDEX'
   ) => {
     if (type === 'SPLIT') {
       setGestureDetected('SPLIT', 0.98);
@@ -314,22 +303,11 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         activeMode: 'ORBIT',
       });
       varunaVoice.speakCustom('Model move and orbit tracking engaged.');
-    } else if (type === 'PINCH_OUT') {
-      // Pinch out -> Zoom in
-      setGestureDetected('ZOOM_IN', 0.98);
-      useRigStore.getState().setGestureSpatial({
-        zoomDelta: 0.028,
-        activeMode: 'ZOOM',
-      });
-      varunaVoice.speakCustom('Pinch out recognized: Zooming in.');
-    } else if (type === 'PINCH_IN') {
-      // Pinch in -> Zoom out
-      setGestureDetected('ZOOM_OUT', 0.98);
-      useRigStore.getState().setGestureSpatial({
-        zoomDelta: -0.028,
-        activeMode: 'ZOOM',
-      });
-      varunaVoice.speakCustom('Pinch in recognized: Zooming out.');
+    } else if (type === 'POINT') {
+      // Point -> Laser targeting
+      setGestureDetected('INDEX_1', 0.98);
+      useRigStore.getState().setPointerCursor({ x: 0.65, y: 0.45, active: true });
+      varunaVoice.speakCustom('Pointing index finger: 3D laser targeting active.');
     } else if (type === 'PALM') {
       // Open Palm -> Instant freeze in place
       setGestureDetected('PALM', 0.99);
@@ -344,16 +322,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       // Swipe Left -> Open targeted/next subsystem inspection deck
       setGestureDetected('SWIPE_LEFT', 0.99);
       openNextSubsystemView();
-    } else if (type === 'JARVIS_DUAL') {
-      // Decoupled dual hand: Left Zoom In + Right Orbit
-      setGestureDetected('ZOOM_IN', 0.98);
-      useRigStore.getState().setGestureSpatial({
-        deltaX: 0.012,
-        deltaY: -0.006,
-        zoomDelta: 0.022,
-        activeMode: 'JARVIS_DECOUPLED_DUAL',
-      });
-      varunaVoice.speakCustom('Jarvis decoupled mode: Simultaneous one-hand zoom, one-hand move.');
+
     } else if (type === 'INDEX') {
       openSubsystemByIndex(selectedSubsystemIndex);
     }
@@ -511,41 +480,11 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                 {/* JARVIS DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
                 <div className="space-y-1 bg-black/40 p-1.5 rounded-lg border border-white/10">
                   <div className="flex items-center justify-between text-[8px] font-bold text-reliance-cyan">
-                    <span>JARVIS HOLOGRAPHIC CONTROLS:</span>
-                    <span className="text-white/60">PINCH / MOVE MATRIX</span>
+                    <span>JARVIS HOLOGRAPHIC GESTURES:</span>
+                    <span className="text-white/60">MOVE / POINT / SPLIT / MERGE</span>
                   </div>
 
-                  {/* Top Row: Decoupled Jarvis & Pinch Controls */}
-                  <div className="grid grid-cols-3 gap-1 text-[8px]">
-                    <button
-                      onClick={() => triggerGesture('PINCH_OUT')}
-                      className="p-1 rounded bg-blue-500/20 hover:bg-blue-500/40 border border-blue-400/40 text-blue-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Pinch Out (fingers spread apart) -> Zoom In"
-                    >
-                      <ZoomIn className="w-2.5 h-2.5 text-blue-400" />
-                      <span>🤏 Pinch Out (+Zoom)</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('PINCH_IN')}
-                      className="p-1 rounded bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-400/40 text-indigo-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Pinch In (fingers close together) -> Zoom Out"
-                    >
-                      <ZoomOut className="w-2.5 h-2.5 text-indigo-400" />
-                      <span>🤏 Pinch In (-Zoom)</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('JARVIS_DUAL')}
-                      className="p-1 rounded bg-purple-500/30 hover:bg-purple-500/50 border border-purple-400/50 text-purple-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold shadow-cyan-glow"
-                      title="Complete Jarvis Copy: Left Hand Zoom + Right Hand Move simultaneously"
-                    >
-                      <Crosshair className="w-2.5 h-2.5 text-purple-300 animate-spin" />
-                      <span>🤖 Jarvis Dual Mode</span>
-                    </button>
-                  </div>
-
-                  {/* Second Row: Split, Merge, Move */}
+                  {/* Top Row: Split, Merge, Move */}
                   <div className="grid grid-cols-3 gap-1 text-[8px]">
                     <button
                       onClick={() => triggerGesture('SPLIT')}
@@ -576,31 +515,40 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     <button
                       onClick={() => triggerGesture('MOVE')}
                       className="p-1 rounded bg-reliance-navy/50 hover:bg-reliance-blue/50 border border-white/15 text-white/80 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                      title="Gesture 3: Move hand in (x,y) -> Continuous 3D Rotate & Pan"
+                      title="Gesture 3: 5 fingers / moving hand -> Continuous 3D Rotate & Pan"
                     >
                       <Move className="w-2.5 h-2.5 text-cyan-400" />
                       <span>3. Move (X,Y)</span>
                     </button>
                   </div>
 
-                  {/* Third Row: Swipe Left & Open Palm Freeze */}
-                  <div className="grid grid-cols-2 gap-1 text-[8px]">
+                  {/* Second Row: Point Laser, Palm Freeze, Swipe Left */}
+                  <div className="grid grid-cols-3 gap-1 text-[8px]">
+                    <button
+                      onClick={() => triggerGesture('POINT')}
+                      className="p-1 rounded bg-blue-500/25 hover:bg-blue-500/40 border border-blue-400/40 text-blue-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Pointing Index Finger -> Laser Pointer Targeting"
+                    >
+                      <Crosshair className="w-2.5 h-2.5 text-blue-300" />
+                      <span>👆 Point Laser</span>
+                    </button>
+
+                    <button
+                      onClick={() => triggerGesture('PALM')}
+                      className="p-1 rounded bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-rose-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Open Palm -> Freeze camera in place with zero drift"
+                    >
+                      <Hand className="w-2.5 h-2.5 text-rose-300" />
+                      <span>🖐️ Freeze Palm</span>
+                    </button>
+
                     <button
                       onClick={() => triggerGesture('SWIPE_LEFT')}
                       className="p-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-400/40 text-teal-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
                       title="Swipe Left: Open targeted component / Next subsystem"
                     >
                       <FolderOpen className="w-2.5 h-2.5 text-teal-300" />
-                      <span>◀ Swipe Left (Open View)</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('PALM')}
-                      className="p-1 rounded bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-rose-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Open Palm: Instantly stop and freeze camera in place"
-                    >
-                      <Hand className="w-2.5 h-2.5 text-rose-300" />
-                      <span>🖐️ Open Palm (Freeze)</span>
+                      <span>◀ Swipe Left</span>
                     </button>
                   </div>
 

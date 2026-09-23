@@ -12,29 +12,21 @@ export const ColorCodeLegend: React.FC = () => {
   const legendItems = [
     { name: 'CRANE 1 (LATTICE BOOM)', color: '#FF9900', target: 'crane1', asset: 'CRANE-PORT' },
     { name: 'CRANE 2 (PEDESTAL)', color: '#FF007F', target: 'crane2', asset: 'CRANE-STARBOARD' },
-    { name: 'HELIPAD', color: '#00FF66', target: 'helipad', asset: 'HELIPAD-DECK' },
-    { name: 'ACCOMMODATION MODULE', color: '#9933FF', target: 'upper_rig', asset: 'TOPSIDE-DRILL-RIG' },
-    { name: 'INDUSTRIAL PIPE FITTING', color: '#00FFFF', target: 'pipe1', asset: 'RISER-ALPHA' },
-    { name: 'JACK-UP LEGS', color: '#00B4D8', target: 'topside', asset: 'PILLAR-FOUNDATION' },
-    { name: 'SUBSEA DRILL STRING', color: '#00D2FF', target: 'drill', asset: 'DRILL-SYSTEM' },
-    { name: 'DRILL BIT', color: '#FF3300', target: 'drill', asset: 'DRILL-SYSTEM' },
-    { name: 'MAIN DECK STRUCTURE', color: '#1976D2', target: 'topside', asset: 'TOPSIDE-DRILL-RIG' },
+    { name: 'HELIPAD (CAP 437)', color: '#00FF66', target: 'helipad', asset: 'HELIPAD-DECK' },
+    { name: 'COMMAND DOCK & BRIDGE', color: '#00E5FF', target: 'command_dock', asset: 'DOCK-BRIDGE-MAIN' },
+    { name: 'ACCOMMODATION MODULE', color: '#9933FF', target: 'accommodation', asset: 'ACCOMMODATION-MODULE' },
+    { name: 'INDUSTRIAL PIPE FITTING', color: '#00FFFF', target: 'industrial_pipes', asset: 'INDUSTRIAL-PIPES' },
+    { name: 'JACK-UP LEGS', color: '#00B4D8', target: 'jackup_legs', asset: 'PILLAR-FOUNDATION' },
+    { name: 'SUBSEA DRILL STRING', color: '#00D2FF', target: 'drill_string', asset: 'DRILL-SYSTEM' },
+    { name: 'PDC DRILL BIT', color: '#FF3300', target: 'drill_bit', asset: 'DRILL-SYSTEM' },
+    { name: 'MAIN DECK STRUCTURE', color: '#1976D2', target: 'main_deck', asset: 'TOPSIDE-DRILL-RIG' },
   ];
 
   const handleItemClick = (item: (typeof legendItems)[0]) => {
     setSelectedAssetId(item.asset);
-    if (
-      item.target.startsWith('pipe') ||
-      item.target === 'drill' ||
-      item.target === 'helipad' ||
-      item.target.startsWith('crane') ||
-      item.target === 'upper_rig'
-    ) {
-      openHoloModal(item.target as HolographicComponentType);
-    } else {
-      setCameraViewMode(item.target as any);
-      varunaVoice.speakDiagnostic(item.asset);
-    }
+    openHoloModal(item.target as HolographicComponentType);
+    setCameraViewMode(item.target as any);
+    varunaVoice.speakDiagnostic(item.asset);
   };
 
   return (

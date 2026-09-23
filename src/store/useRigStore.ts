@@ -36,6 +36,7 @@ export type CameraViewMode =
   | 'well6'
   | 'well7'
   | 'wells1_7'
+  | 'command_dock'
   | 'split'
   | 'part_detail';
 
@@ -68,7 +69,8 @@ export type HolographicComponentType =
   | 'well5'
   | 'well6'
   | 'well7'
-  | 'wells1_7';
+  | 'wells1_7'
+  | 'command_dock';
 export type ScannerMode = 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
 export type EmergencyScenario =

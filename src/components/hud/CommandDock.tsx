@@ -66,6 +66,8 @@ export const CommandDock: React.FC = () => {
   const currentFlowPower = useRigStore((s) => s.currentFlowPower);
   const setCurrentFlowPower = useRigStore((s) => s.setCurrentFlowPower);
   const currentDirectionLabel = useRigStore((s) => s.currentDirectionLabel);
+  const openHoloModal = useRigStore((s) => s.openHoloModal);
+  const setSelectedAssetId = useRigStore((s) => s.setSelectedAssetId);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,6 +201,48 @@ export const CommandDock: React.FC = () => {
                 }`}
               >
                 {scan.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2.5 HOLOGRAPHIC 3D SUBSYSTEMS INSPECTION */}
+        <div>
+          <div className="flex items-center justify-between text-[10px] font-mono text-reliance-textMuted uppercase mb-1.5 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>3D Holographic Subsystems</span>
+            </span>
+            <span className="text-[9px] text-emerald-400 font-bold">360° LASER SCAN</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              { id: 'helipad', label: 'Helipad (CAP 437)', asset: 'HELIPAD-DECK' },
+              { id: 'crane1', label: 'Port Crane 1 (Lattice)', asset: 'CRANE-PORT' },
+              { id: 'crane2', label: 'Starboard Crane 2', asset: 'CRANE-STARBOARD' },
+              { id: 'command_dock', label: 'Command Dock Bridge', asset: 'DOCK-BRIDGE-MAIN' },
+              { id: 'accommodation', label: 'Living Quarters', asset: 'ACCOMMODATION-MODULE' },
+              { id: 'industrial_pipes', label: 'Industrial Pipes', asset: 'INDUSTRIAL-PIPES' },
+              { id: 'jackup_legs', label: 'Jack-Up Legs', asset: 'PILLAR-FOUNDATION' },
+              { id: 'drill_string', label: 'Drill String Conduit', asset: 'DRILL-SYSTEM' },
+              { id: 'drill_bit', label: 'PDC Diamond Bit', asset: 'DRILL-SYSTEM' },
+              { id: 'main_deck', label: 'Platform Main Deck', asset: 'TOPSIDE-DRILL-RIG' },
+              { id: 'motor', label: '1,200 HP Top Drive', asset: 'TOP-DRIVE-MOTOR' },
+              { id: 'wells1_7', label: 'Subsea Wells 1–7', asset: 'WELL-CLUSTER' },
+            ].map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => {
+                  openHoloModal(sub.id as any);
+                  setSelectedAssetId(sub.asset);
+                  setCameraViewMode(sub.id as any);
+                  setCommandDockOpen(false);
+                  varunaVoice.speakDiagnostic(sub.asset);
+                }}
+                className="px-2 py-1.5 rounded-lg text-left text-[10px] font-mono bg-reliance-blue/30 border border-reliance-cyan/40 hover:bg-reliance-blue/60 hover:border-reliance-cyan text-white transition-all cursor-pointer truncate shadow-sm flex items-center gap-1 group"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-reliance-cyan group-hover:animate-ping shrink-0" />
+                <span className="truncate">{sub.label}</span>
               </button>
             ))}
           </div>

@@ -90,108 +90,117 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
     switch (type) {
       case 'helipad':
         return {
-          focalOffset: new THREE.Vector3(5.4, 25.5, -22.5),
-          camPos: new THREE.Vector3(14, 32, -10),
-          targetBounds: [14, 8, 14] as [number, number, number],
-          camDistance: 16,
+          focalOffset: new THREE.Vector3(-22.03, 32.37, -3.23),
+          camPos: new THREE.Vector3(-8.0, 42.0, 13.0),
+          targetBounds: [24.0, 14.0, 22.0] as [number, number, number],
+          camDistance: 20,
           label: 'CAP 437 HELIDECK SECTION',
           wireColor: '#00FF66',
         };
       case 'crane1':
         return {
-          focalOffset: new THREE.Vector3(-14, 18, 0),
-          camPos: new THREE.Vector3(-28, 26, 12),
-          targetBounds: [12, 18, 12] as [number, number, number],
-          camDistance: 18,
+          focalOffset: new THREE.Vector3(-3.90, 33.14, 8.54),
+          camPos: new THREE.Vector3(-20.0, 43.0, 25.0),
+          targetBounds: [28.0, 24.0, 20.0] as [number, number, number],
+          camDistance: 22,
           label: 'PORT CRANE 1 (LATTICE BOOM) SECTION',
           wireColor: '#FF9900',
         };
       case 'crane2':
         return {
-          focalOffset: new THREE.Vector3(14, 18, 0),
-          camPos: new THREE.Vector3(28, 26, 12),
-          targetBounds: [12, 18, 12] as [number, number, number],
-          camDistance: 18,
+          focalOffset: new THREE.Vector3(-9.94, 28.40, -9.70),
+          camPos: new THREE.Vector3(4.0, 38.0, -24.0),
+          targetBounds: [24.0, 20.0, 18.0] as [number, number, number],
+          camDistance: 20,
           label: 'STARBOARD CRANE 2 (PEDESTAL) SECTION',
           wireColor: '#FF007F',
         };
+      case 'command_dock':
+        return {
+          focalOffset: new THREE.Vector3(0.0, 16.0, 0.0),
+          camPos: new THREE.Vector3(0.0, 26.0, 22.0),
+          targetBounds: [28.0, 14.0, 28.0] as [number, number, number],
+          camDistance: 22,
+          label: 'TACTICAL COMMAND DOCK & COCKPIT BRIDGE',
+          wireColor: '#00E5FF',
+        };
       case 'accommodation':
         return {
-          focalOffset: new THREE.Vector3(-10, 14, -8),
-          camPos: new THREE.Vector3(-22, 20, 6),
-          targetBounds: [14, 12, 14] as [number, number, number],
-          camDistance: 16,
+          focalOffset: new THREE.Vector3(15.09, 18.90, -5.68),
+          camPos: new THREE.Vector3(29.0, 27.0, 8.0),
+          targetBounds: [22.0, 14.0, 18.0] as [number, number, number],
+          camDistance: 18,
           label: 'ACCOMMODATION MODULE (LIVING QUARTERS)',
           wireColor: '#9933FF',
         };
       case 'industrial_pipes':
         return {
-          focalOffset: new THREE.Vector3(0, 10, 0),
-          camPos: new THREE.Vector3(12, 16, 14),
-          targetBounds: [16, 14, 16] as [number, number, number],
+          focalOffset: new THREE.Vector3(0.0, 18.0, 0.0),
+          camPos: new THREE.Vector3(14.0, 25.0, 14.0),
+          targetBounds: [16.0, 14.0, 16.0] as [number, number, number],
           camDistance: 18,
           label: 'INDUSTRIAL PROCESS PIPE FITTING & MANIFOLD',
           wireColor: '#00FFFF',
         };
       case 'jackup_legs':
         return {
-          focalOffset: new THREE.Vector3(0, -4, 0),
-          camPos: new THREE.Vector3(24, 6, 24),
-          targetBounds: [26, 20, 26] as [number, number, number],
-          camDistance: 28,
+          focalOffset: new THREE.Vector3(-0.18, -4.0, -0.15),
+          camPos: new THREE.Vector3(28.0, 12.0, 28.0),
+          targetBounds: [36.0, 28.0, 36.0] as [number, number, number],
+          camDistance: 32,
           label: 'BUOYANT JACK-UP LEGS & FOUNDATION COLUMNS',
           wireColor: '#00B4D8',
         };
       case 'drill_string':
         return {
-          focalOffset: new THREE.Vector3(0, 0, 0),
-          camPos: new THREE.Vector3(8, 4, 14),
-          targetBounds: [10, 30, 10] as [number, number, number],
-          camDistance: 18,
+          focalOffset: new THREE.Vector3(-1.52, -18.0, 0.11),
+          camPos: new THREE.Vector3(10.5, -12.0, 16.0),
+          targetBounds: [14.0, 36.0, 14.0] as [number, number, number],
+          camDistance: 24,
           label: 'SUBSEA DRILL STRING CONDUIT',
           wireColor: '#00D2FF',
         };
       case 'drill_bit':
         return {
-          focalOffset: new THREE.Vector3(0, -18, 0),
-          camPos: new THREE.Vector3(6, -14, 10),
-          targetBounds: [8, 10, 8] as [number, number, number],
+          focalOffset: new THREE.Vector3(-1.52, -16.4, 0.11),
+          camPos: new THREE.Vector3(4.5, -12.4, 8.0),
+          targetBounds: [10.0, 10.0, 10.0] as [number, number, number],
           camDistance: 12,
           label: '8-1/2" PDC DIAMOND DRILL BIT HEAD',
           wireColor: '#FF3300',
         };
       case 'main_deck':
         return {
-          focalOffset: new THREE.Vector3(0, 12, 0),
-          camPos: new THREE.Vector3(0, 26, 22),
-          targetBounds: [24, 12, 24] as [number, number, number],
-          camDistance: 24,
+          focalOffset: new THREE.Vector3(-3.45, 14.85, 2.94),
+          camPos: new THREE.Vector3(-3.45, 30.85, 26.94),
+          targetBounds: [32.0, 12.0, 32.0] as [number, number, number],
+          camDistance: 26,
           label: 'PLATFORM MAIN DECK STRUCTURE',
           wireColor: '#1976D2',
         };
       case 'upper_rig':
         return {
-          focalOffset: new THREE.Vector3(0, 22, 0),
-          camPos: new THREE.Vector3(0, 30, 24),
-          targetBounds: [18, 24, 18] as [number, number, number],
-          camDistance: 24,
+          focalOffset: new THREE.Vector3(0.68, 36.44, 0.47),
+          camPos: new THREE.Vector3(14.68, 44.44, 16.47),
+          targetBounds: [16.0, 24.0, 16.0] as [number, number, number],
+          camDistance: 22,
           label: 'TOPSIDE DERRICK MAST SECTION',
           wireColor: '#00F5D4',
         };
       case 'motor':
         return {
-          focalOffset: new THREE.Vector3(0, 16, 0),
-          camPos: new THREE.Vector3(6, 20, 10),
-          targetBounds: [10, 10, 10] as [number, number, number],
-          camDistance: 12,
+          focalOffset: new THREE.Vector3(0.68, 26.0, 0.47),
+          camPos: new THREE.Vector3(8.68, 30.0, 10.47),
+          targetBounds: [12.0, 14.0, 12.0] as [number, number, number],
+          camDistance: 14,
           label: '1,200 HP TOP DRIVE MOTOR SECTION',
           wireColor: '#38BDF8',
         };
       case 'drill':
         return {
-          focalOffset: new THREE.Vector3(0, -6, 0),
-          camPos: new THREE.Vector3(10, 2, 16),
-          targetBounds: [12, 35, 12] as [number, number, number],
+          focalOffset: new THREE.Vector3(-1.52, -12.0, 0.11),
+          camPos: new THREE.Vector3(10.5, -4.0, 16.0),
+          targetBounds: [14.0, 32.0, 14.0] as [number, number, number],
           camDistance: 22,
           label: 'ROTARY DRILL STRING & CASING SECTION',
           wireColor: '#00FFFF',
@@ -205,10 +214,10 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
       case 'well7':
       case 'wells1_7':
         return {
-          focalOffset: new THREE.Vector3(0, -16.4, 0),
-          camPos: new THREE.Vector3(12, -8, 16),
-          targetBounds: [20, 12, 20] as [number, number, number],
-          camDistance: 20,
+          focalOffset: new THREE.Vector3(-0.85, -13.41, 4.57),
+          camPos: new THREE.Vector3(13.15, -5.41, 20.57),
+          targetBounds: [26.0, 14.0, 26.0] as [number, number, number],
+          camDistance: 22,
           label: 'SUBSEA WELLHEAD & MANIFOLD SECTION',
           wireColor: '#A855F7',
         };
@@ -310,18 +319,20 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
                 chosen = cCrane1Amber;
               } else if (type === 'crane2' && cy > 0.18 && cx > 0.09 && cz < 0.15) {
                 chosen = cCrane2Pink;
-              } else if (type === 'accommodation' && cy > 0.12 && cx < -0.06 && cz < 0.1) {
+              } else if (type === 'accommodation' && cy > 0.08 && cy < 0.32 && cz > 0.12 && cx > -0.05 && distHelipad >= 0.28) {
                 chosen = cAccommodationViolet;
-              } else if (type === 'industrial_pipes' && cy > 0.06 && cy < 0.22 && distXZ < 0.24) {
+              } else if (type === 'industrial_pipes' && cy > 0.06 && cy < 0.30 && Math.abs(cx) <= 0.14 && Math.abs(cz) <= 0.14) {
                 chosen = cIndustrialPipesCyan;
-              } else if (type === 'jackup_legs' && cy < 0.08) {
+              } else if (type === 'jackup_legs' && cy < 0.05) {
                 chosen = cJackupLegsTeal;
-              } else if (type === 'main_deck' && cy >= 0.06 && cy <= 0.16) {
+              } else if (type === 'main_deck' && cy >= 0.05 && cy <= 0.16) {
                 chosen = cMainDeckBlue;
-              } else if (type === 'upper_rig' && cy > 0.10 && distXZ < 0.22) {
+              } else if (type === 'upper_rig' && cy > 0.32 && distXZ < 0.16) {
                 chosen = cDerrickCyan;
-              } else if (type === 'motor' && cy > 0.08 && cy < 0.28 && distXZ < 0.14) {
+              } else if (type === 'motor' && cy > 0.18 && cy < 0.36 && distXZ < 0.12) {
                 chosen = cMotorSky;
+              } else if (type === 'command_dock' && cy >= 0.08 && cy <= 0.26) {
+                chosen = cDerrickCyan;
               }
 
               for (let j = 0; j < 3; j++) {
@@ -582,6 +593,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'SUBSEA FLOWLINE & RISER',
         spec: meta.spec,
         depth: meta.depth,
+        image: '/presentation/subsea_pipes_glowing_arrows_1789149758412.jpg',
         latex: '\\Delta P = f_D \\cdot \\frac{L}{D} \\cdot \\frac{\\rho v^2}{2} = 0.28\\text{ bar}',
         metrics: [
           { label: 'FLOW RATE', val: meta.flow, icon: Droplets, color: 'text-cyan-400' },
@@ -602,6 +614,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'DOWNHOLE DRILLING CONDUIT',
         spec: '5-7/8" S-135 High-Strength Drill Pipe • NC50 Tool Joints',
         depth: '-35m to -2,040m Borehole Depth',
+        image: '/presentation/drill_static_casing_spinning_core_1789149401625.jpg',
         latex: '\\sigma_{\\text{tensile}} = \\frac{W_{\\text{string}} + F_{\\text{overpull}}}{A_{\\text{pipe}}} = 210.4\\text{ MPa} \\quad [\\text{SF} = 4.62]',
         metrics: [
           { label: 'DRILLSTRING LENGTH', val: '2,040 m (Active)', icon: Compass, color: 'text-cyan-400' },
@@ -622,6 +635,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'FORMATION EXCAVATION',
         spec: '6-Blade Matrix Body • 16mm Premium Polycrystalline Diamond Cutters',
         depth: '-2,040m Subterranean Bedrock',
+        image: '/presentation/drill_static_casing_spinning_core_1789149401625.jpg',
         latex: '\\text{MSE} = \\frac{\\text{WOB}}{A_b} + \\frac{120 \\pi \\cdot N \\cdot T}{A_b \\cdot \\text{ROP}} = 38.4\\text{ MPa}',
         metrics: [
           { label: 'BIT DIAMETER', val: '8.500" (215.9 mm)', icon: Disc, color: 'text-rose-400' },
@@ -642,6 +656,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'ROTARY DRILLING CORE',
         spec: '8-1/2" Matrix Body PDC Bit • 5-7/8" S-135 Drill Pipe',
         depth: '-2,040m Target Reservoir Depth',
+        image: '/presentation/oil_flow_arrows_drill_1789149090190.jpg',
         latex: 'T = \\frac{\\tau \\cdot J}{r} = 28.4\\text{ kNm}, \\quad \\text{SF} = \\frac{\\sigma_{\\text{yield}}}{\\sigma_{\\text{eq}}} = 9.327',
         metrics: [
           { label: 'ROTARY SPEED', val: '42 RPM (Nominal)', icon: Disc, color: 'text-cyan-400' },
@@ -662,6 +677,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'POWER & ROTARY DRIVE',
         spec: '4,160V 3-Phase AC Induction • Siemens MasterDrive VFD',
         depth: 'Topside Rig Mezzanine Deck (+12m)',
+        image: '/presentation/oil_flow_arrows_drill_1789149090190.jpg',
         latex: 'P_{\\text{mech}} = \\sqrt{3} \\cdot V \\cdot I \\cdot \\cos\\phi \\cdot \\eta = 895.2\\text{ kW} \\quad (1,200\\text{ HP})',
         metrics: [
           { label: 'RATED POWER', val: '1,200 HP / 895 kW', icon: Zap, color: 'text-cyan-400' },
@@ -682,6 +698,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'OFFSHORE AVIATION',
         spec: 'D-Value: 22.2m • Max Landing Weight: 12.8 MT',
         depth: 'Topside Cantilever Deck (+38m ASL)',
+        image: '/presentation/helipad_deck_schematic.jpg',
         latex: '\\text{Heave Velocity} \\le 1.3\\text{ m/s}, \\quad \\text{Pitch/Roll} \\le \\pm 2.0^\\circ \\quad [\\text{CAP 437 Standard}]',
         metrics: [
           { label: 'MAX CAPACITY', val: '12.8 MT (Sikorsky S-92)', icon: Anchor, color: 'text-cyan-400' },
@@ -702,6 +719,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'OFFSHORE MATERIAL HANDLING',
         spec: '65 MT SWL at 18m Radius • 42m Lattice Boom',
         depth: 'Topside Main Deck (+18m ASL)',
+        image: '/presentation/crane1_port_boom_schematic.jpg',
         latex: '\\text{Load Moment} = F_{\\text{load}} \\cdot R_{\\text{boom}} \\le M_{\\text{max}} = 1,170\\text{ ton}\\cdot\\text{m}',
         metrics: [
           { label: 'MAX CAPACITY (SWL)', val: '65.0 Metric Tons', icon: Anchor, color: 'text-cyan-400' },
@@ -722,6 +740,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'OFFSHORE MATERIAL HANDLING',
         spec: '30 MT SWL at 12m Radius • 28m Box Girder Boom',
         depth: 'Topside Starboard Mezzanine (+16m ASL)',
+        image: '/presentation/crane2_starboard_pedestal_schematic.jpg',
         latex: '\\text{Dynamic Amplification Factor} = 1.0 + 0.4 \\cdot \\left(\\frac{H_s}{3.0}\\right) = 1.22',
         metrics: [
           { label: 'MAX CAPACITY (SWL)', val: '30.0 Metric Tons', icon: Anchor, color: 'text-cyan-400' },
@@ -734,7 +753,28 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 9. ACCOMMODATION MODULE
+    // 9. COMMAND DOCK
+    if (type === 'command_dock') {
+      return {
+        title: 'TACTICAL COMMAND DOCK & DIGITAL TWIN SCADA COCKPIT',
+        tag: 'DOCK-BRIDGE-MAIN',
+        category: 'COMMAND & CONTROL INTERFACE',
+        spec: 'Real-Time Edge SCADA Gateway • Dual Redundant Fiber Optic Hub',
+        depth: 'Topside Control Deck (+16m ASL)',
+        image: '/presentation/command_dock_tactical_bridge.jpg',
+        latex: '\\tau_{\\text{latency}} = \\Delta t_{\\text{sensor}} + \\Delta t_{\\text{mesh}} \\le 12.5\\text{ ms} \\quad [\\text{IEC 61850 Realtime}]',
+        metrics: [
+          { label: 'SCADA CYCLE TIME', val: '8.4 ms (Ultra Fast)', icon: Cpu, color: 'text-cyan-400' },
+          { label: 'TELEMETRY BUS', val: 'Dual Modbus / OPC-UA', icon: Zap, color: 'text-emerald-400' },
+          { label: 'UPLINK BANDWIDTH', val: '10 Gbps Redundant', icon: Activity, color: 'text-blue-400' },
+          { label: 'AI CO-PILOT AGENT', val: 'VARUNA ACTIVE (0.12s)', icon: ShieldCheck, color: 'text-purple-400' },
+          { label: 'ACTIVE SUBSYSTEMS', val: '24 / 24 Online', icon: Gauge, color: 'text-emerald-400' },
+          { label: 'CYBERSECURITY', val: 'IEC 62443 SL-4 ARMED', icon: Anchor, color: 'text-amber-400' },
+        ],
+      };
+    }
+
+    // 10. ACCOMMODATION MODULE
     if (type === 'accommodation') {
       return {
         title: 'OFFSHORE ACCOMMODATION MODULE & LIVING QUARTERS',
@@ -742,6 +782,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'HABITATION & HVAC',
         spec: '120 POB Safe Haven • Blast-Resistant Class H-60 Division',
         depth: 'Topside Quarters Deck (+24m ASL)',
+        image: '/presentation/rig_diorama_colored_1789147250513.jpg',
         latex: 'Q_{\\text{HVAC}} = \\dot{m} \\cdot C_p \\cdot \\Delta T + Q_{\\text{sensible}} = 450.8\\text{ kW}',
         metrics: [
           { label: 'POB CAPACITY', val: '120 Personnel On Board', icon: ShieldCheck, color: 'text-purple-400' },
@@ -754,7 +795,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 10. INDUSTRIAL PROCESS PIPES
+    // 11. INDUSTRIAL PROCESS PIPES
     if (type === 'industrial_pipes') {
       return {
         title: 'INDUSTRIAL PROCESS PIPE FITTING & MANIFOLD FLANGES',
@@ -762,6 +803,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'TOP-SIDE PROCESS PIPING',
         spec: 'Class 2500# RTJ Duplex Stainless Steel 22Cr',
         depth: 'Topside Mezzanine (+14m ASL)',
+        image: '/presentation/subsea_pipes_glowing_arrows_1789149758412.jpg',
         latex: '\\sigma_{\\text{hoop}} = \\frac{P \\cdot D}{2 \\cdot t \\cdot E} = 142.6\\text{ MPa} \\le 0.72 \\cdot \\sigma_{\\text{yield}}',
         metrics: [
           { label: 'DESIGN PRESSURE', val: '414 bar (6,000 psi)', icon: Gauge, color: 'text-cyan-400' },
@@ -774,7 +816,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 11. JACK-UP LEGS & COLUMNS
+    // 12. JACK-UP LEGS & COLUMNS
     if (type === 'jackup_legs') {
       return {
         title: 'BUOYANT JACK-UP LEGS & SUBMERGED FOUNDATION COLUMNS',
@@ -782,6 +824,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'HYDROSTATIC STABILITY',
         spec: '4x High-Tensile Steel Column Pontoons • 18,400 MT Net Buoyancy',
         depth: 'Surface to -35m Keel Draft',
+        image: '/presentation/ocean_current_tides_flow_power_1789151043507.jpg',
         latex: '\\overline{GM} = KB + BM - KG = 3.42\\text{ m} > 1.0\\text{ m} \\quad [\\text{IMO Standard}]',
         metrics: [
           { label: 'METACENTRIC HEIGHT GM', val: '3.42 m (Positive)', icon: Anchor, color: 'text-cyan-400' },
@@ -794,7 +837,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 12. MAIN DECK STRUCTURE
+    // 13. MAIN DECK STRUCTURE
     if (type === 'main_deck') {
       return {
         title: 'PLATFORM MAIN DECK STRUCTURE & TOPSIDE PROCESS HUB',
@@ -802,6 +845,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'PRIMARY LOAD BEARING DECK',
         spec: 'High-Yield Structural Steel S355ML • Integrated Coffer Dam',
         depth: 'Topside Main Deck (+12m ASL)',
+        image: '/presentation/rig_diorama_colored_1789147250513.jpg',
         latex: '\\sigma_{\\text{bending}} = \\frac{M \\cdot y}{I} = 98.2\\text{ MPa} \\le \\sigma_{\\text{allowable}} = 230\\text{ MPa}',
         metrics: [
           { label: 'TOTAL DECK AREA', val: '4,800 m² Dual Level', icon: Anchor, color: 'text-blue-400' },
@@ -814,7 +858,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 13. UPPER RIG
+    // 14. UPPER RIG
     if (type === 'upper_rig') {
       return {
         title: 'TOPSIDE DERRICK MAST, PRODUCTION PROCESS & LIVING QUARTERS',
@@ -822,6 +866,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
         category: 'SURFACE PRODUCTION FACILITY',
         spec: 'Semi-Submersible Hub • 18,400 MT Total Operating Load',
         depth: 'Surface to +65m Derrick Apex',
+        image: '/presentation/hologram_digital_twin_1789148609789.jpg',
         latex: '\\sum F_y = F_{\\text{buoyancy}} - \\left(W_{\\text{hull}} + W_{\\text{topside}} + T_{\\text{mooring}}\\right) = 0',
         metrics: [
           { label: 'TOTAL TOPSIDE LOAD', val: '18,400 Metric Tons', icon: Anchor, color: 'text-cyan-400' },
@@ -834,7 +879,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       };
     }
 
-    // 14. WELLS 1-7
+    // 15. WELLS 1-7
     const wellNum = type.replace('well', '');
     const isSingleWell = !isNaN(Number(wellNum));
     const wellData: { [k: string]: { name: string; type: string; depth: string; press: string } } = {
@@ -857,6 +902,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
       category: 'SUBSEA GEOLOGICAL INTERFACE',
       spec: '10,000 psi (690 bar) Dual-Bore Subsea Christmas Tree (API 17D)',
       depth: isSingleWell ? curWell.depth : '-1,780m to -2,150m Seabed',
+      image: '/presentation/subsea_pipes_glowing_arrows_1789149758412.jpg',
       latex: 'P_{\\text{BHP}} = P_{\\text{WHP}} + \\int_0^H \\rho_{\\text{fluid}}(z) \\, g \\, dz - \\Delta P_{\\text{friction}} = 385.4\\text{ bar}',
       metrics: [
         { label: 'WELLHEAD PRESSURE', val: isSingleWell ? curWell.press : '265.4 bar (Avg)', icon: Gauge, color: 'text-amber-400' },
@@ -885,6 +931,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
     { id: 'helipad', label: 'Helipad' },
     { id: 'crane1', label: 'Crane 1' },
     { id: 'crane2', label: 'Crane 2' },
+    { id: 'command_dock', label: 'Command Dock' },
     { id: 'accommodation', label: 'Accommodation' },
     { id: 'industrial_pipes', label: 'Industrial Pipes' },
     { id: 'jackup_legs', label: 'Jack-Up Legs' },
@@ -1036,6 +1083,49 @@ export const HolographicPartInspectionModal: React.FC = () => {
           {/* Right 5 Cols: Live Engineering Telemetry & Controls (Hidden when Expanded 3D is active) */}
           {!isExpanded3D && (
             <div className="lg:col-span-5 flex flex-col justify-between space-y-3">
+              {/* High-Resolution Diagnostic Engineering Schematic Card */}
+              {data.image && (
+                <div className="relative group overflow-hidden rounded-2xl bg-black/80 border border-reliance-cyan/40 shadow-dock shrink-0">
+                  <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-reliance-deepnavy/90">
+                    <img
+                      src={data.image}
+                      alt={data.title}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-500 opacity-95"
+                      onError={(e) => {
+                        // Fallback if image fails
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    {/* High-Tech Overlay Gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-reliance-deepnavy via-transparent to-reliance-deepnavy/30 pointer-events-none" />
+
+                    {/* Corner Reticle Accents */}
+                    <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t-2 border-l-2 border-reliance-cyan" />
+                    <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t-2 border-r-2 border-reliance-cyan" />
+                    <div className="absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b-2 border-l-2 border-reliance-cyan" />
+                    <div className="absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b-2 border-r-2 border-reliance-cyan" />
+
+                    {/* Subsystem Schematic Floating Badge */}
+                    <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 font-mono text-[9px] bg-black/85 px-2 py-0.5 rounded border border-reliance-cyan/40 text-reliance-cyan backdrop-blur-md">
+                      <Scan className="w-3 h-3 animate-pulse" />
+                      <span>SCHEMATIC BLUEPRINT</span>
+                    </div>
+
+                    {/* Operational Health Badge */}
+                    <div className="absolute top-2 right-2 z-10 font-mono text-[9px] bg-emerald-950/85 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/40 backdrop-blur-md font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      <span>HEALTH: 100% NOMINAL</span>
+                    </div>
+
+                    {/* Bottom Schematic Title Bar */}
+                    <div className="absolute bottom-1.5 left-2 right-2 z-10 flex items-center justify-between font-mono text-[10px] bg-reliance-deepnavy/90 px-2.5 py-1 rounded-lg border border-white/10 backdrop-blur-md">
+                      <span className="text-white font-extrabold truncate">{data.tag}</span>
+                      <span className="text-reliance-cyan text-[9px] font-semibold truncate ml-1">{data.category}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 6 Metrics Grid */}
               <div className="grid grid-cols-2 gap-2.5 font-mono">
                 {data.metrics.map((m, idx) => {

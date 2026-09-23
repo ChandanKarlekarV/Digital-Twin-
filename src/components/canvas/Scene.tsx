@@ -8,6 +8,7 @@ import { InteractiveHighlightRings } from './InteractiveHighlightRings';
 import { GammaCrossSection } from './Scanners/GammaCrossSection';
 import { OceanCurrentVisualizer } from './OceanCurrentVisualizer';
 import { JarvisSplitExplodedView } from './JarvisSplitExplodedView';
+import { HolographicTargetPointer } from './HolographicTargetPointer';
 import { useRigStore } from '../../store/useRigStore';
 
 /**
@@ -94,6 +95,7 @@ export const Scene: React.FC = () => {
         <InteractiveHighlightRings />
         <GammaCrossSection />
         <JarvisSplitExplodedView />
+        <HolographicTargetPointer />
       </Suspense>
     </Canvas>
   );

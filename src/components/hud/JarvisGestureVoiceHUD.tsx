@@ -36,11 +36,13 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   const voiceTranscript = useRigStore((s) => s.voiceTranscript);
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const isPipeSliced = useRigStore((s) => s.isPipeSliced);
+  const targetedPartId = useRigStore((s) => s.targetedPartId);
 
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
   const setGestureDetected = useRigStore((s) => s.setGestureDetected);
   const openSubsystemByIndex = useRigStore((s) => s.openSubsystemByIndex);
+  const openNextSubsystemView = useRigStore((s) => s.openNextSubsystemView);
 
   const [isExpanded, setIsExpanded] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
@@ -284,7 +286,16 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   };
 
   const triggerGesture = (
-    type: 'SPLIT' | 'MERGE' | 'MOVE' | 'PINCH_IN' | 'PINCH_OUT' | 'INDEX' | 'JARVIS_DUAL'
+    type:
+      | 'SPLIT'
+      | 'MERGE'
+      | 'MOVE'
+      | 'PINCH_IN'
+      | 'PINCH_OUT'
+      | 'INDEX'
+      | 'JARVIS_DUAL'
+      | 'PALM'
+      | 'SWIPE_LEFT'
   ) => {
     if (type === 'SPLIT') {
       setGestureDetected('SPLIT', 0.98);
@@ -318,6 +329,20 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         activeMode: 'ZOOM',
       });
       varunaVoice.speakCustom('Pinch in recognized: Zooming out.');
+    } else if (type === 'PALM') {
+      // Open Palm -> Instant freeze in place
+      setGestureDetected('PALM', 0.99);
+      useRigStore.getState().setGestureSpatial({
+        deltaX: 0,
+        deltaY: 0,
+        zoomDelta: 0,
+        activeMode: 'IDLE',
+      });
+      varunaVoice.speakCustom('Open palm recognized: Camera frozen immediately in place.');
+    } else if (type === 'SWIPE_LEFT') {
+      // Swipe Left -> Open targeted/next subsystem inspection deck
+      setGestureDetected('SWIPE_LEFT', 0.99);
+      openNextSubsystemView();
     } else if (type === 'JARVIS_DUAL') {
       // Decoupled dual hand: Left Zoom In + Right Orbit
       setGestureDetected('ZOOM_IN', 0.98);
@@ -448,6 +473,25 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Holographic Target Lock Readout Banner */}
+                {targetedPartId && (
+                  <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-between shadow-cyan-glow animate-in fade-in duration-150">
+                    <div className="flex items-center gap-1.5 text-cyan-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span className="font-extrabold text-[8.5px] tracking-wide">
+                        🎯 LOCKED: [{targetedPartId.toUpperCase().replace('_', ' ')}]
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => triggerGesture('SWIPE_LEFT')}
+                      className="px-2 py-0.5 rounded bg-cyan-500/40 hover:bg-cyan-500/60 border border-cyan-300 text-white font-bold text-[8px] cursor-pointer shadow-sm flex items-center gap-1"
+                      title="Inspect locked component"
+                    >
+                      <span>SWIPE LEFT ◀</span>
+                    </button>
+                  </div>
+                )}
+
                 {/* JARVIS DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
                 <div className="space-y-1 bg-black/40 p-1.5 rounded-lg border border-white/10">
                   <div className="flex items-center justify-between text-[8px] font-bold text-reliance-cyan">
@@ -520,6 +564,27 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     >
                       <Move className="w-2.5 h-2.5 text-cyan-400" />
                       <span>3. Move (X,Y)</span>
+                    </button>
+                  </div>
+
+                  {/* Third Row: Swipe Left & Open Palm Freeze */}
+                  <div className="grid grid-cols-2 gap-1 text-[8px]">
+                    <button
+                      onClick={() => triggerGesture('SWIPE_LEFT')}
+                      className="p-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-400/40 text-teal-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Swipe Left: Open targeted component / Next subsystem"
+                    >
+                      <FolderOpen className="w-2.5 h-2.5 text-teal-300" />
+                      <span>◀ Swipe Left (Open View)</span>
+                    </button>
+
+                    <button
+                      onClick={() => triggerGesture('PALM')}
+                      className="p-1 rounded bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-rose-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Open Palm: Instantly stop and freeze camera in place"
+                    >
+                      <Hand className="w-2.5 h-2.5 text-rose-300" />
+                      <span>🖐️ Open Palm (Freeze)</span>
                     </button>
                   </div>
 

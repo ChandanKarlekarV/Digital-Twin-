@@ -193,14 +193,21 @@ export const CameraRig: React.FC = () => {
 
   useFrame((_, delta) => {
     if (controlsRef.current) {
-      // 1. Gesture Vision Spatial Manipulation (Simultaneous Move & Zoom)
+      // 1. Gesture Vision Spatial Manipulation (Immediate Stop & Zero-Drift Freeze)
       const isGestureActive = useRigStore.getState().isGestureCameraActive;
       const gestureSpatial = useRigStore.getState().gestureSpatial;
+      const gestureDetected = useRigStore.getState().gestureDetected;
 
       if (isGestureActive && !isUserInteracting.current && gestureSpatial) {
-        const { deltaX, deltaY, zoomDelta } = gestureSpatial;
+        let { deltaX, deltaY, zoomDelta } = gestureSpatial;
+
+        // Open palm strictly stops all zooming and only allows smooth translation
+        if (gestureDetected === 'PALM') {
+          zoomDelta = 0;
+        }
+
         const hasMotion =
-          Math.abs(deltaX) > 0.001 || Math.abs(deltaY) > 0.001 || Math.abs(zoomDelta) > 0.001;
+          Math.abs(deltaX) > 0.0008 || Math.abs(deltaY) > 0.0008 || Math.abs(zoomDelta) > 0.0008;
 
         if (hasMotion) {
           isTransitioning.current = false;
@@ -208,32 +215,35 @@ export const CameraRig: React.FC = () => {
           const offset = camera.position.clone().sub(target);
 
           // Horizontal azimuth rotation (Move left/right)
-          if (Math.abs(deltaX) > 0.001) {
-            const rotX = -deltaX * 3.8;
+          if (Math.abs(deltaX) > 0.0008) {
+            const rotX = -deltaX * 3.6;
             offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotX);
           }
 
           // Vertical polar tilt (Move up/down)
-          if (Math.abs(deltaY) > 0.001) {
-            const rotY = -deltaY * 3.0;
+          if (Math.abs(deltaY) > 0.0008) {
+            const rotY = -deltaY * 2.8;
             const right = new THREE.Vector3().crossVectors(offset, camera.up).normalize();
             offset.applyAxisAngle(right, rotY);
           }
 
-          // Simultaneous Dolly Zoom (Expand/Pinch hands)
-          if (Math.abs(zoomDelta) > 0.001) {
+          // Dolly Zoom: Pinch In -> Zoom Out (distance increases), Pinch Out -> Zoom In (distance decreases)
+          if (Math.abs(zoomDelta) > 0.0008) {
             const currentDist = offset.length();
-            const newDist = THREE.MathUtils.clamp(
-              currentDist * (1.0 - zoomDelta * 3.5),
-              4.0,
-              350.0
-            );
+            // Complete Zoom Out up to 340m, Complete Zoom In down to 7m
+            const targetDist = currentDist * (1.0 - zoomDelta * 3.8);
+            const newDist = THREE.MathUtils.clamp(targetDist, 7.0, 340.0);
             offset.setLength(newDist);
           }
 
           camera.position.copy(target).add(offset);
           targetCamPos.current.copy(camera.position);
           targetLookAt.current.copy(target);
+
+          // INSTANT DELTA DECAY: Consume delta so camera stops dead in place with zero residual drift
+          gestureSpatial.deltaX *= 0.12;
+          gestureSpatial.deltaY *= 0.12;
+          gestureSpatial.zoomDelta *= 0.12;
         }
       }
 

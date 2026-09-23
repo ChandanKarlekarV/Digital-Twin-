@@ -3,13 +3,13 @@
  * Real-Time Webcam & Complete Jarvis Decoupled Dual-Hand Spatial Holographic Matrix:
  *
  * 1. ASYMMETRIC DECOUPLED DUAL-HAND INTERACTION (Full Jarvis Copy):
- *    - Left Hand: Controls continuous ZOOM (Pinch In -> Zoom Out, Pinch Out -> Zoom In).
- *    - Right Hand: Controls continuous 3D MODEL MOVE & ORBIT (Translating in (x,y) space).
- *    - Simultaneously executed on every frame without conflict!
+ *    - Hand 1 (Zoom Controller): Operates continuous smooth ZOOM (Pinch In -> Zoom Out, Pinch Out -> Zoom In).
+ *    - Hand 2 (Orbit Controller): Operates continuous smooth 3D MODEL MOVE & ORBIT (Translating in (x,y)).
+ *    - Simultaneous, zero-drift, instant freeze in place when motion stops or palm is opened.
  *
- * 2. PINCH GESTURE DYNAMICS:
- *    - Pinch In (fingers touching / coming closer): Smoothly Zooms OUT.
- *    - Pinch Out (fingers spreading apart / unpinching): Smoothly Zooms IN.
+ * 2. 3D FINGER LASER TARGETING & RIGHT-TO-LEFT SWIPE INSPECTION:
+ *    - Pointing finger projects a 3D holographic laser targeting reticle onto subsea & topside components.
+ *    - Swiping finger/hand rapidly from Right to Left instantly opens the targeted part's dedicated inspection view!
  *
  * 3. THE 6 CORE RECOGNIZABLE & TRACKABLE GESTURES:
  *    - 1. SPLIT VIEW (Two hands spreading outward / open palm spread -> Exploded Rig view)
@@ -18,6 +18,7 @@
  *    - 4. ZOOM IN (Pinch out / Hands moving apart -> Dolly camera in)
  *    - 5. ZOOM OUT (Pinch in / Hands moving closer -> Dolly camera out)
  *    - 6. SUBSYSTEM INDEX SELECTOR (Finger count 1-5 -> Helipad, Crane 1, Crane 2, Command Dock, Accommodation)
+ *    - BONUS: SWIPE LEFT (Right to Left swipe -> Open targeted subsystem view)
  */
 
 import { useRigStore, RecognizedGesture } from '../store/useRigStore';
@@ -101,6 +102,7 @@ class JarvisGestureVisionEngine {
   private lastSplitTime = 0;
   private lastMergeTime = 0;
   private lastSliceTime = 0;
+  private lastSwipeLeftTime = 0;
   private lastIndexTriggerTime = 0;
 
   // Viewfinder callbacks
@@ -271,7 +273,7 @@ class JarvisGestureVisionEngine {
   }
 
   /**
-   * MediaPipe Multi-Hand Pipeline: Decoupled Jarvis Dual-Hand Tracking
+   * MediaPipe Multi-Hand Pipeline: Decoupled Jarvis Dual-Hand Tracking & Instant Freeze
    */
   private handleMediaPipeResults = (results: any): void => {
     if (!this.isRunning || !results) return;
@@ -372,8 +374,18 @@ class JarvisGestureVisionEngine {
     let midX = hand1Data.centroid.x;
     let midY = hand1Data.centroid.y;
 
+    // Fast Right-to-Left Swipe Detection (Opens targeted / next subsystem view)
+    // Note: in mirrored coords (1.0 - x), moving hand from right to left produces dH_x < -0.09
+    const isSwipeLeft =
+      (dH1_x < -0.09 || dH2_x < -0.09) && now - this.lastSwipeLeftTime > 1400;
+
+    if (isSwipeLeft) {
+      gesture = 'SWIPE_LEFT';
+      activeMode = 'INDEX_SELECT';
+      this.lastSwipeLeftTime = now;
+    }
     // 3. KINEMATIC DUAL-HAND ASYMMETRIC / DECOUPLED MATRIX
-    if (handsCount >= 2 && hand2Data) {
+    else if (handsCount >= 2 && hand2Data) {
       midX = (hand1Data.centroid.x + hand2Data.centroid.x) / 2.0;
       midY = (hand1Data.centroid.y + hand2Data.centroid.y) / 2.0;
       currentDistance = Math.hypot(
@@ -388,60 +400,67 @@ class JarvisGestureVisionEngine {
       const totalFingers = hand1Data.fingerCount + hand2Data.fingerCount;
       const bothFists = hand1Data.isFist && hand2Data.isFist;
 
-      // Check for Discrete Macro Gestures (Split View / Merge Rig)
+      // Discrete Macro Gestures (Split View / Merge Rig)
       if (bothFists || currentDistance < 0.13) {
         gesture = 'MERGE';
         activeMode = 'MERGE';
+        zoomDelta = 0;
       } else if (currentDistance > 0.48 || (dDistance > 0.045 && totalFingers >= 8)) {
         gesture = 'SPLIT';
         activeMode = 'SPLIT';
+        zoomDelta = 0;
       }
       // DECOUPLED CASE A: Hand 1 is Zooming (Pinch In/Out) & Hand 2 is Moving (Orbit (x,y))
-      else if (Math.abs(dPinch1) > 0.0025 || (hand1Data.isPinching && Math.abs(dPinch1) > 0.001)) {
+      else if (Math.abs(dPinch1) > 0.0022 || (hand1Data.isPinching && Math.abs(dPinch1) > 0.001)) {
         hand1Data.role = 'ZOOM';
         hand2Data.role = 'ORBIT';
         activeMode = 'JARVIS_DECOUPLED_DUAL';
 
         // Pinch out (dPinch1 > 0) -> Zoom In; Pinch in (dPinch1 < 0) -> Zoom Out
-        zoomDelta = dPinch1 * 4.2;
-        deltaX = dH2_x;
-        deltaY = dH2_y;
+        zoomDelta = dPinch1 * 3.8;
+        deltaX = Math.abs(dH2_x) > 0.0015 ? dH2_x : 0;
+        deltaY = Math.abs(dH2_y) > 0.0015 ? dH2_y : 0;
         gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
       }
       // DECOUPLED CASE B: Hand 2 is Zooming (Pinch In/Out) & Hand 1 is Moving (Orbit (x,y))
-      else if (Math.abs(dPinch2) > 0.0025 || (hand2Data.isPinching && Math.abs(dPinch2) > 0.001)) {
+      else if (Math.abs(dPinch2) > 0.0022 || (hand2Data.isPinching && Math.abs(dPinch2) > 0.001)) {
         hand1Data.role = 'ORBIT';
         hand2Data.role = 'ZOOM';
         activeMode = 'JARVIS_DECOUPLED_DUAL';
 
-        zoomDelta = dPinch2 * 4.2;
-        deltaX = dH1_x;
-        deltaY = dH1_y;
+        zoomDelta = dPinch2 * 3.8;
+        deltaX = Math.abs(dH1_x) > 0.0015 ? dH1_x : 0;
+        deltaY = Math.abs(dH1_y) > 0.0015 ? dH1_y : 0;
         gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
       }
       // SYMMETRIC DUAL-HAND CASE: Both hands expanding apart / moving together
-      else if (Math.abs(dDistance) > 0.006) {
+      else if (Math.abs(dDistance) > 0.005) {
         hand1Data.role = 'ZOOM';
         hand2Data.role = 'ZOOM';
-        activeMode = Math.abs(dH1_x) > 0.004 || Math.abs(dH1_y) > 0.004 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
+        activeMode = Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
 
-        zoomDelta = dDistance * 3.2; // Spreading hands apart zooms in, bringing closer zooms out
+        zoomDelta = dDistance * 3.0; // Spreading hands apart zooms in, bringing closer zooms out
         deltaX = (dH1_x + dH2_x) / 2.0;
         deltaY = (dH1_y + dH2_y) / 2.0;
         gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
       }
       // PURE TRANSLATION CASE: Both hands moving together across frame
-      else if (Math.abs(dH1_x) > 0.004 || Math.abs(dH1_y) > 0.004 || Math.abs(dH2_x) > 0.004 || Math.abs(dH2_y) > 0.004) {
+      else if (Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003 || Math.abs(dH2_x) > 0.003 || Math.abs(dH2_y) > 0.003) {
         hand1Data.role = 'ORBIT';
         hand2Data.role = 'ORBIT';
         activeMode = 'ORBIT';
 
         deltaX = (dH1_x + dH2_x) / 2.0;
         deltaY = (dH1_y + dH2_y) / 2.0;
+        zoomDelta = 0; // Freeze zoom
         gesture = 'MOVE';
       } else {
+        // STEADY STATE: Zero drift, instant stop
         gesture = 'PALM';
         activeMode = 'IDLE';
+        deltaX = 0;
+        deltaY = 0;
+        zoomDelta = 0;
       }
     } else {
       // 4. SINGLE HAND INTERACTION (Simultaneous Pinch In/Out Zoom + Move)
@@ -449,30 +468,32 @@ class JarvisGestureVisionEngine {
       midY = hand1Data.centroid.y;
       this.prevDistance = null;
 
-      // Fast horizontal swipe -> SLICE
-      if (Math.abs(dH1_x) > 0.12 && now - this.lastSliceTime > 1400) {
-        gesture = 'SLICE';
-        activeMode = 'SPLIT';
-        this.lastSliceTime = now;
-      } else if (Math.abs(dPinch1) > 0.002 || hand1Data.isPinching) {
-        // Pinch In (fingers close) -> Zoom Out, Pinch Out (fingers spread) -> Zoom In
-        zoomDelta = dPinch1 * 4.5;
-        deltaX = dH1_x;
-        deltaY = dH1_y;
+      if (Math.abs(dPinch1) > 0.0022 || hand1Data.isPinching) {
+        // Pinch In -> Zoom Out, Pinch Out -> Zoom In
+        zoomDelta = dPinch1 * 4.0;
+        deltaX = Math.abs(dH1_x) > 0.002 ? dH1_x : 0;
+        deltaY = Math.abs(dH1_y) > 0.002 ? dH1_y : 0;
         hand1Data.role = 'ZOOM';
-        activeMode = Math.abs(deltaX) > 0.003 || Math.abs(deltaY) > 0.003 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
+        activeMode = Math.abs(deltaX) > 0.002 || Math.abs(deltaY) > 0.002 ? 'DUAL_MOVE_ZOOM' : 'ZOOM';
         gesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';
       } else if (hand1Data.isFist) {
         gesture = 'FIST';
         activeMode = 'MERGE';
-      } else if (Math.abs(dH1_x) > 0.004 || Math.abs(dH1_y) > 0.004) {
+        zoomDelta = 0;
+        deltaX = 0;
+        deltaY = 0;
+      } else if (Math.abs(dH1_x) > 0.003 || Math.abs(dH1_y) > 0.003) {
         deltaX = dH1_x;
         deltaY = dH1_y;
+        zoomDelta = 0; // Pure translation with zero zoom drift
         hand1Data.role = 'ORBIT';
         activeMode = 'ORBIT';
         gesture = 'MOVE';
       } else {
         // Subsystem Index Selection via Finger Count (1 to 5)
+        zoomDelta = 0;
+        deltaX = 0;
+        deltaY = 0;
         switch (hand1Data.fingerCount) {
           case 1:
             gesture = 'INDEX_1';
@@ -680,7 +701,13 @@ class JarvisGestureVisionEngine {
     const store = useRigStore.getState();
     const now = performance.now();
 
-    // 1. Gesture 1: SPLIT VIEW
+    // 1. SWIPE LEFT (Right to Left horizontal swipe -> Opens targeted or next subsystem view)
+    if (res.gesture === 'SWIPE_LEFT' && now - this.lastSwipeLeftTime < 400) {
+      store.openNextSubsystemView();
+      return;
+    }
+
+    // 2. Gesture 1: SPLIT VIEW
     if (res.gesture === 'SPLIT' && !store.isSplitViewActive && now - this.lastSplitTime > 2200) {
       this.lastSplitTime = now;
       store.setSplitViewActive(true);
@@ -690,7 +717,7 @@ class JarvisGestureVisionEngine {
       return;
     }
 
-    // 2. Gesture 2: MERGE / REASSEMBLE
+    // 3. Gesture 2: MERGE / REASSEMBLE
     if (
       (res.gesture === 'MERGE' || res.gesture === 'FIST') &&
       store.isSplitViewActive &&
@@ -700,15 +727,6 @@ class JarvisGestureVisionEngine {
       store.setSplitViewActive(false);
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
         varunaVoice.speakCustom('Merge gesture recognized. Reassembling digital twin.');
-      });
-      return;
-    }
-
-    // 3. SLICE GESTURE
-    if (res.gesture === 'SLICE' && !store.isPipeSliced && now - this.lastSliceTime < 400) {
-      store.setPipeSliced(true);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Slice gesture detected. Activating pipeline cross-sectional ultrasound view.');
       });
       return;
     }
@@ -846,16 +864,16 @@ class JarvisGestureVisionEngine {
 
     // HAND 1 (LEFT): Controls ZOOM via continuous Pinch In / Pinch Out
     const h1x = 0.28;
-    const h1y = 0.5 + Math.sin(t * 0.4) * 0.05;
+    const h1y = 0.5 + Math.sin(t * 0.4) * 0.04;
     // Oscillating pinch distance between thumb and index: 0.03 (pinched in) to 0.16 (pinched out)
-    const pinchDist1 = 0.09 + Math.sin(t * 1.5) * 0.06;
+    const pinchDist1 = 0.09 + Math.sin(t * 1.5) * 0.055;
     const zoomDelta = Math.cos(t * 1.5) * 0.012; // + when unpinching (zoom in), - when pinching (zoom out)
 
     // HAND 2 (RIGHT): Controls ORBIT & TRANSLATION in (x,y)
     const h2x = 0.72 + Math.sin(t * 0.8) * 0.12;
-    const h2y = 0.5 + Math.cos(t * 0.6) * 0.10;
-    const deltaX = Math.cos(t * 0.8) * 0.007;
-    const deltaY = -Math.sin(t * 0.6) * 0.006;
+    const h2y = 0.5 + Math.cos(t * 0.6) * 0.09;
+    const deltaX = Math.cos(t * 0.8) * 0.006;
+    const deltaY = -Math.sin(t * 0.6) * 0.005;
 
     const currentDist = Math.hypot(h2x - h1x, h2y - h1y);
     const gesture: RecognizedGesture = zoomDelta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT';

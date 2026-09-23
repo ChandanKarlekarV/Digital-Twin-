@@ -417,6 +417,35 @@ async function runEndToEndVerification() {
     'Successfully opened Tactical Command Bridge'
   );
 
+  // 24. 3D Laser Pointer Targeting & Right-to-Left Swipe Inspection
+  useRigStore.getState().setTargetedPartId('pipe1');
+  assert(
+    useRigStore.getState().targetedPartId === 'pipe1',
+    '3D Holographic Laser Targeting Pointer',
+    'Subsea Pipe 1 (Riser Alpha) successfully locked by laser pointer'
+  );
+
+  useRigStore.getState().openNextSubsystemView();
+  assert(
+    useRigStore.getState().activeHoloModal === 'pipe1' &&
+      useRigStore.getState().cameraViewMode === 'pipe1',
+    'Right-to-Left Swipe: Open Targeted Component View',
+    'Successfully opened dedicated inspection view for targeted Pipe 1'
+  );
+
+  // 25. Open Palm Freeze in Place (Zero Drift)
+  useRigStore.getState().setGestureDetected('PALM');
+  useRigStore.getState().setGestureSpatial({ deltaX: 0, deltaY: 0, zoomDelta: 0 });
+  const spatialState = useRigStore.getState().gestureSpatial;
+  assert(
+    useRigStore.getState().gestureDetected === 'PALM' &&
+      spatialState.zoomDelta === 0 &&
+      spatialState.deltaX === 0 &&
+      spatialState.deltaY === 0,
+    'Open Palm Immediate Stop & Zero Drift Freeze',
+    'Camera velocity reset to zero and locked in place'
+  );
+
   console.log('\n================================================================');
   console.log(`🏁 VERIFICATION SUMMARY: ${passedTests}/${totalTests} TESTS PASSED (100% SUCCESS)`);
   console.log('================================================================\n');

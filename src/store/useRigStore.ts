@@ -89,6 +89,8 @@ export type RecognizedGesture =
   | 'INDEX_5'
   | 'SLICE'
   | 'POINT'
+  | 'SWIPE_LEFT'
+  | 'SWIPE_RIGHT'
   | 'FIST'
   | null;
 
@@ -600,6 +602,9 @@ interface RigState {
     confidence?: number
   ) => void;
   setGestureSpatial: (spatial: Partial<GestureSpatialState>) => void;
+  targetedPartId: HolographicComponentType | null;
+  setTargetedPartId: (id: HolographicComponentType | null) => void;
+  openNextSubsystemView: () => void;
   openSubsystemByIndex: (index: number) => void;
 
   // Jarvis Voice Commander & Varuna Wake-Word Architecture
@@ -893,10 +898,57 @@ export const useRigStore = create<RigState>((set, get) => ({
     }
     set({ gestureDetected: gesture, gestureConfidence: confidence });
   },
-  setGestureSpatial: (spatial) =>
+  setGestureSpatial: (spatial: Partial<GestureSpatialState>) =>
     set((state) => ({
       gestureSpatial: { ...state.gestureSpatial, ...spatial },
     })),
+  targetedPartId: null,
+  setTargetedPartId: (id) => set({ targetedPartId: id }),
+  openNextSubsystemView: () => {
+    const state = get();
+    // If a part is currently targeted by finger laser pointer, open that part
+    if (state.targetedPartId) {
+      state.openHoloModal(state.targetedPartId);
+      state.setCameraViewMode(state.targetedPartId);
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+        varunaVoice.speakCustom(
+          `Swipe gesture recognized. Opening dedicated inspection view for ${state.targetedPartId?.toUpperCase().replace('_', ' ')}.`
+        );
+      });
+      return;
+    }
+
+    // Otherwise cycle through available subsystems
+    const subsystems: HolographicComponentType[] = [
+      'helipad',
+      'crane1',
+      'crane2',
+      'command_dock',
+      'accommodation',
+      'pipe1',
+      'pipe2',
+      'pipe3',
+      'pipe4',
+      'pipe5',
+      'pipe6',
+      'pipe7',
+      'pipe8',
+      'pipe9',
+    ];
+
+    const currentModal = state.activeHoloModal;
+    const currentIndex = currentModal ? subsystems.indexOf(currentModal) : -1;
+    const nextIndex = (currentIndex + 1) % subsystems.length;
+    const nextSubsystem = subsystems[nextIndex];
+
+    state.openHoloModal(nextSubsystem);
+    state.setCameraViewMode(nextSubsystem);
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
+      varunaVoice.speakCustom(
+        `Swipe gesture recognized. Opening dedicated inspection view for ${nextSubsystem.toUpperCase().replace('_', ' ')}.`
+      );
+    });
+  },
   openSubsystemByIndex: (index: number) => {
     const state = get();
     switch (index) {

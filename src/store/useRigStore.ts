@@ -98,9 +98,31 @@ export interface GestureSpatialState {
   zoomDelta: number;
   distance: number;
   handsCount: number;
-  primaryHand: { x: number; y: number; fingerCount: number; isPinching?: boolean } | null;
-  secondaryHand: { x: number; y: number; fingerCount: number; isPinching?: boolean } | null;
-  activeMode: 'DUAL_MOVE_ZOOM' | 'ORBIT' | 'ZOOM' | 'SPLIT' | 'MERGE' | 'INDEX_SELECT' | 'IDLE';
+  primaryHand: {
+    x: number;
+    y: number;
+    fingerCount: number;
+    isPinching?: boolean;
+    pinchDist?: number;
+    role?: 'ZOOM' | 'ORBIT' | 'IDLE';
+  } | null;
+  secondaryHand: {
+    x: number;
+    y: number;
+    fingerCount: number;
+    isPinching?: boolean;
+    pinchDist?: number;
+    role?: 'ZOOM' | 'ORBIT' | 'IDLE';
+  } | null;
+  activeMode:
+    | 'JARVIS_DECOUPLED_DUAL'
+    | 'DUAL_MOVE_ZOOM'
+    | 'ORBIT'
+    | 'ZOOM'
+    | 'SPLIT'
+    | 'MERGE'
+    | 'INDEX_SELECT'
+    | 'IDLE';
 }
 export type EmergencyScenario =
   | 'none'

@@ -11,11 +11,10 @@ import {
   Move,
   ZoomIn,
   ZoomOut,
-  Maximize2,
-  Minimize2,
   FolderOpen,
   Power,
   Hand,
+  Crosshair,
 } from 'lucide-react';
 import { useRigStore, RecognizedGesture } from '../../store/useRigStore';
 import { jarvisGestureEngine } from '../../vision/JarvisGestureVisionEngine';
@@ -48,7 +47,6 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   const [selectedSubsystemIndex, setSelectedSubsystemIndex] = useState<number>(1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Initialize continuous voice commander on component mount
   useEffect(() => {
     jarvisVoiceCommander.start();
     return () => {
@@ -57,7 +55,6 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     };
   }, []);
 
-  // Update wake countdown timer
   useEffect(() => {
     if (!isVarunaAwake) {
       setSecondsRemaining(0);
@@ -75,7 +72,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     return () => clearInterval(interval);
   }, [isVarunaAwake, varunaWakeExpiry]);
 
-  // Connect viewfinder canvas to dual-hand skeleton output
+  // Connect viewfinder canvas to dual-hand skeleton output with Jarvis Holographic UI
   useEffect(() => {
     if (!isGestureCameraActive) return;
 
@@ -127,14 +124,56 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       ctx.lineTo(w - 6, h - 16);
       ctx.stroke();
 
-      // Render Primary Hand (Cyan Skeletons & Nodes)
+      // Render Hand 1 (Cyan)
       if (result.primaryHand && result.primaryHand.landmarks.length > 0) {
-        drawHandSkeleton(ctx, result.primaryHand.landmarks, w, h, '#00e5ff', '#ffffff');
+        const hand = result.primaryHand;
+        drawHandSkeleton(ctx, hand.landmarks, w, h, '#00e5ff', '#ffffff');
+
+        // Hand Role Tag
+        const hx = hand.centroid.x * w;
+        const hy = hand.centroid.y * h;
+        ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ffff';
+        ctx.font = 'bold 7.5px monospace';
+        ctx.fillText(
+          hand.role === 'ZOOM' ? 'HAND 1 [ZOOM CONTROLLER]' : 'HAND 1 [ORBIT CONTROLLER]',
+          Math.max(8, hx - 45),
+          Math.max(16, hy - 16)
+        );
+
+        // Holographic Pinch Arc if Zooming
+        if (hand.role === 'ZOOM' && hand.thumbTip && hand.indexTip) {
+          ctx.beginPath();
+          ctx.moveTo(hand.thumbTip.x * w, hand.thumbTip.y * h);
+          ctx.lineTo(hand.indexTip.x * w, hand.indexTip.y * h);
+          ctx.strokeStyle = '#ff00ff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
 
-      // Render Secondary Hand (Emerald / Amber Skeletons & Nodes)
+      // Render Hand 2 (Emerald/Yellow)
       if (result.secondaryHand && result.secondaryHand.landmarks.length > 0) {
-        drawHandSkeleton(ctx, result.secondaryHand.landmarks, w, h, '#00ff88', '#ffea00');
+        const hand = result.secondaryHand;
+        drawHandSkeleton(ctx, hand.landmarks, w, h, '#00ff88', '#ffea00');
+
+        const hx = hand.centroid.x * w;
+        const hy = hand.centroid.y * h;
+        ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ff88';
+        ctx.font = 'bold 7.5px monospace';
+        ctx.fillText(
+          hand.role === 'ZOOM' ? 'HAND 2 [ZOOM CONTROLLER]' : 'HAND 2 [ORBIT CONTROLLER]',
+          Math.max(8, hx - 45),
+          Math.max(16, hy - 16)
+        );
+
+        if (hand.role === 'ZOOM' && hand.thumbTip && hand.indexTip) {
+          ctx.beginPath();
+          ctx.moveTo(hand.thumbTip.x * w, hand.thumbTip.y * h);
+          ctx.lineTo(hand.indexTip.x * w, hand.indexTip.y * h);
+          ctx.strokeStyle = '#ff00ff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
 
       // Render Dual Hand Spatial Tether Laser Connection
@@ -147,9 +186,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         const midY = result.handY * h;
 
         ctx.save();
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash([3, 3]);
         ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(p1x, p1y);
         ctx.lineTo(p2x, p2y);
@@ -158,39 +197,19 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
         // Center Midpoint Reticle
         ctx.beginPath();
-        ctx.arc(midX, midY, 9, 0, Math.PI * 2);
+        ctx.arc(midX, midY, 8, 0, Math.PI * 2);
         ctx.strokeStyle = '#ffea00';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.8;
         ctx.stroke();
 
         ctx.fillStyle = 'rgba(255, 234, 0, 0.25)';
         ctx.fill();
 
-        // Distance Tag in Viewfinder
         ctx.fillStyle = '#ffea00';
         ctx.font = 'bold 8px monospace';
-        ctx.fillText(`DIST: ${result.handDistance.toFixed(2)}`, midX - 22, midY - 12);
+        ctx.fillText(`DIST: ${result.handDistance.toFixed(2)}`, midX - 20, midY - 10);
 
         ctx.restore();
-      } else if (result.gesture && result.landmarks.length > 0) {
-        // Single hand reticle
-        const hx = result.handX * w;
-        const hy = result.handY * h;
-
-        ctx.beginPath();
-        ctx.arc(hx, hy, 10, 0, Math.PI * 2);
-        ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(hx - 14, hy);
-        ctx.lineTo(hx + 14, hy);
-        ctx.moveTo(hx, hy - 14);
-        ctx.lineTo(hx, hy + 14);
-        ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
       }
     });
 
@@ -209,12 +228,11 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     ctx.shadowBlur = 6;
     ctx.shadowColor = boneColor;
     ctx.strokeStyle = boneColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
 
     const wrist = landmarks[0];
     const palm = landmarks.find((l) => l.type === 'palm') || landmarks[9] || landmarks[0];
 
-    // Connect wrist to fingers / palm
     if (wrist && palm) {
       ctx.beginPath();
       ctx.moveTo(wrist.x * w, wrist.y * h);
@@ -231,10 +249,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       }
     });
 
-    // Draw Joint Nodes
     landmarks.forEach((p) => {
       ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+      ctx.arc(p.x * w, p.y * h, 2.8, 0, Math.PI * 2);
       ctx.fillStyle = nodeColor;
       ctx.fill();
       ctx.strokeStyle = boneColor;
@@ -253,7 +270,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       const ok = await jarvisGestureEngine.start();
       if (ok) {
         varunaVoice.speakCustom(
-          'Two-hand gesture vision active. Move both hands to pan and orbit, change distance to zoom simultaneously.'
+          'Jarvis spatial holographic vision online. Pinch in to zoom out, pinch out to zoom in, and move model with your other hand.'
         );
       }
     }
@@ -261,11 +278,14 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
   const handleStartDemoVision = () => {
     jarvisGestureEngine.startSynthetic();
-    varunaVoice.speakCustom('Synthetic dual-hand demo vision mode active.');
+    varunaVoice.speakCustom(
+      'Jarvis decoupled dual-hand demo online: left hand zooming, right hand orbiting model.'
+    );
   };
 
-  // Trigger one of the 6 Core Trackable Hand Gestures
-  const triggerGesture = (type: 'SPLIT' | 'MERGE' | 'MOVE' | 'ZOOM_IN' | 'ZOOM_OUT' | 'INDEX') => {
+  const triggerGesture = (
+    type: 'SPLIT' | 'MERGE' | 'MOVE' | 'PINCH_IN' | 'PINCH_OUT' | 'INDEX' | 'JARVIS_DUAL'
+  ) => {
     if (type === 'SPLIT') {
       setGestureDetected('SPLIT', 0.98);
       setSplitViewActive(true);
@@ -282,20 +302,32 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
         activeMode: 'ORBIT',
       });
       varunaVoice.speakCustom('Model move and orbit tracking engaged.');
-    } else if (type === 'ZOOM_IN') {
+    } else if (type === 'PINCH_OUT') {
+      // Pinch out -> Zoom in
       setGestureDetected('ZOOM_IN', 0.98);
       useRigStore.getState().setGestureSpatial({
-        zoomDelta: 0.025,
+        zoomDelta: 0.028,
         activeMode: 'ZOOM',
       });
-      varunaVoice.speakCustom('Zoom in command executed.');
-    } else if (type === 'ZOOM_OUT') {
+      varunaVoice.speakCustom('Pinch out recognized: Zooming in.');
+    } else if (type === 'PINCH_IN') {
+      // Pinch in -> Zoom out
       setGestureDetected('ZOOM_OUT', 0.98);
       useRigStore.getState().setGestureSpatial({
-        zoomDelta: -0.025,
+        zoomDelta: -0.028,
         activeMode: 'ZOOM',
       });
-      varunaVoice.speakCustom('Zoom out command executed.');
+      varunaVoice.speakCustom('Pinch in recognized: Zooming out.');
+    } else if (type === 'JARVIS_DUAL') {
+      // Decoupled dual hand: Left Zoom In + Right Orbit
+      setGestureDetected('ZOOM_IN', 0.98);
+      useRigStore.getState().setGestureSpatial({
+        deltaX: 0.012,
+        deltaY: -0.006,
+        zoomDelta: 0.022,
+        activeMode: 'JARVIS_DECOUPLED_DUAL',
+      });
+      varunaVoice.speakCustom('Jarvis decoupled mode: Simultaneous one-hand zoom, one-hand move.');
     } else if (type === 'INDEX') {
       openSubsystemByIndex(selectedSubsystemIndex);
     }
@@ -303,13 +335,13 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
   return (
     <div className="font-mono text-xs animate-in fade-in duration-200 shrink-0">
-      <div className="w-72 sm:w-80 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 rounded-2xl p-2.5 shadow-dock backdrop-blur-2xl text-white">
+      <div className="w-76 sm:w-84 glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/95 rounded-2xl p-2.5 shadow-dock backdrop-blur-2xl text-white">
         {/* HUD Header */}
         <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-reliance-cyan/20">
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-reliance-cyan animate-pulse" />
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-reliance-cyan flex items-center gap-1">
-              <span>VARUNA DUAL-HAND VISION</span>
+              <span>JARVIS DUAL-HAND HOLOGRAPHIC VISION</span>
             </span>
           </div>
 
@@ -369,7 +401,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                 }`}
               />
               <div className="truncate italic text-[9px] text-white/80">
-                {voiceTranscript ? `"${voiceTranscript}"` : 'Say: "Varuna open helipad", "Varuna open crane 1"...'}
+                {voiceTranscript
+                  ? `"${voiceTranscript}"`
+                  : 'Say: "Varuna open helipad", "Varuna open crane 1"...'}
               </div>
             </div>
 
@@ -379,7 +413,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                 <div className="relative w-full h-28 rounded-lg bg-black/90 overflow-hidden border border-reliance-cyan/40 flex items-center justify-center">
                   <canvas
                     ref={canvasRef}
-                    width={260}
+                    width={280}
                     height={140}
                     className="w-full h-full object-cover"
                   />
@@ -390,9 +424,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span>
                         {gestureSpatial?.handsCount >= 2
-                          ? '2 HANDS TRACKING'
+                          ? '2 HANDS TRACKED (DECOUPLED)'
                           : gestureSpatial?.handsCount === 1
-                          ? '1 HAND TRACKING'
+                          ? '1 HAND TRACKED'
                           : 'SEARCHING HANDS...'}
                       </span>
                     </div>
@@ -403,8 +437,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   </div>
 
                   {/* Mode & FPS info */}
-                  <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/80 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                    {gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
+                  <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/85 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    {gestureSpatial?.activeMode === 'JARVIS_DECOUPLED_DUAL'
+                      ? '🤖 JARVIS: 1-HAND ZOOM + 1-HAND MOVE'
+                      : gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
                       ? '⚡ SIMULTANEOUS MOVE+ZOOM'
                       : isSyntheticCameraActive
                       ? 'DEMO SIMULATOR 60 FPS'
@@ -412,13 +448,44 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 6 IDENTIFIABLE & TRACKABLE GESTURES BAR */}
+                {/* JARVIS DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
                 <div className="space-y-1 bg-black/40 p-1.5 rounded-lg border border-white/10">
                   <div className="flex items-center justify-between text-[8px] font-bold text-reliance-cyan">
-                    <span>6 RECOGNIZED GESTURES:</span>
-                    <span className="text-white/60">CLICK OR PERFORM IN CAM</span>
+                    <span>JARVIS HOLOGRAPHIC CONTROLS:</span>
+                    <span className="text-white/60">PINCH / MOVE MATRIX</span>
                   </div>
 
+                  {/* Top Row: Decoupled Jarvis & Pinch Controls */}
+                  <div className="grid grid-cols-3 gap-1 text-[8px]">
+                    <button
+                      onClick={() => triggerGesture('PINCH_OUT')}
+                      className="p-1 rounded bg-blue-500/20 hover:bg-blue-500/40 border border-blue-400/40 text-blue-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Pinch Out (fingers spread apart) -> Zoom In"
+                    >
+                      <ZoomIn className="w-2.5 h-2.5 text-blue-400" />
+                      <span>🤏 Pinch Out (+Zoom)</span>
+                    </button>
+
+                    <button
+                      onClick={() => triggerGesture('PINCH_IN')}
+                      className="p-1 rounded bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-400/40 text-indigo-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
+                      title="Pinch In (fingers close together) -> Zoom Out"
+                    >
+                      <ZoomOut className="w-2.5 h-2.5 text-indigo-400" />
+                      <span>🤏 Pinch In (-Zoom)</span>
+                    </button>
+
+                    <button
+                      onClick={() => triggerGesture('JARVIS_DUAL')}
+                      className="p-1 rounded bg-purple-500/30 hover:bg-purple-500/50 border border-purple-400/50 text-purple-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold shadow-cyan-glow"
+                      title="Complete Jarvis Copy: Left Hand Zoom + Right Hand Move simultaneously"
+                    >
+                      <Crosshair className="w-2.5 h-2.5 text-purple-300 animate-spin" />
+                      <span>🤖 Jarvis Dual Mode</span>
+                    </button>
+                  </div>
+
+                  {/* Second Row: Split, Merge, Move */}
                   <div className="grid grid-cols-3 gap-1 text-[8px]">
                     <button
                       onClick={() => triggerGesture('SPLIT')}
@@ -430,7 +497,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                       title="Gesture 1: Two hands spreading apart -> Exploded Split View"
                     >
                       <Layers className="w-2.5 h-2.5 text-amber-400" />
-                      <span>1. Split</span>
+                      <span>1. Split Rig</span>
                     </button>
 
                     <button
@@ -442,8 +509,8 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                       }`}
                       title="Gesture 2: Closed fist / Hands together -> Reassemble Digital Twin"
                     >
-                      <Minimize2 className="w-2.5 h-2.5 text-emerald-400" />
-                      <span>2. Merge</span>
+                      <Hand className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>2. Merge Rig</span>
                     </button>
 
                     <button
@@ -452,38 +519,11 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                       title="Gesture 3: Move hand in (x,y) -> Continuous 3D Rotate & Pan"
                     >
                       <Move className="w-2.5 h-2.5 text-cyan-400" />
-                      <span>3. Move</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('ZOOM_IN')}
-                      className="p-1 rounded bg-reliance-navy/50 hover:bg-reliance-blue/50 border border-white/15 text-white/80 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                      title="Gesture 4: Hands moving apart / Pinch spread -> Zoom In"
-                    >
-                      <ZoomIn className="w-2.5 h-2.5 text-blue-400" />
-                      <span>4. Zoom In</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('ZOOM_OUT')}
-                      className="p-1 rounded bg-reliance-navy/50 hover:bg-reliance-blue/50 border border-white/15 text-white/80 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                      title="Gesture 5: Hands moving closer / Pinch close -> Zoom Out"
-                    >
-                      <ZoomOut className="w-2.5 h-2.5 text-blue-400" />
-                      <span>5. Zoom Out</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('INDEX')}
-                      className="p-1 rounded bg-purple-500/25 hover:bg-purple-500/40 border border-purple-400/40 text-purple-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Gesture 6: Finger count 1-5 -> Open Subsystem Index"
-                    >
-                      <FolderOpen className="w-2.5 h-2.5 text-purple-300" />
-                      <span>6. Index [{selectedSubsystemIndex}]</span>
+                      <span>3. Move (X,Y)</span>
                     </button>
                   </div>
 
-                  {/* Finger Count Subsystem Index Selector */}
+                  {/* Subsystem Index Quick Bar */}
                   <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1 text-[7.5px]">
                     <span className="text-white/60">INDEX:</span>
                     {[
@@ -517,7 +557,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   {cameraErrorMessage ? (
                     <span className="text-amber-300">⚠️ {cameraErrorMessage}</span>
                   ) : (
-                    'Dual-Hand Tracking & 6 Gestures Ready'
+                    'Jarvis Holographic Tracking Ready: Pinch In/Out & Decoupled Hands'
                   )}
                 </div>
 
@@ -528,7 +568,9 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     className="flex-1 py-1.5 px-2 rounded-lg bg-reliance-blue/70 hover:bg-reliance-blue border border-reliance-cyan/50 text-[9px] font-bold text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-cyan-glow disabled:opacity-50"
                   >
                     <Video className="w-3 h-3 text-reliance-cyan" />
-                    <span>{cameraPermissionState === 'requesting' ? 'CONNECTING...' : 'START WEBCAM'}</span>
+                    <span>
+                      {cameraPermissionState === 'requesting' ? 'CONNECTING...' : 'START WEBCAM'}
+                    </span>
                   </button>
 
                   <button
@@ -536,7 +578,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-400/40 text-[9px] font-bold text-emerald-200 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <Sparkles className="w-3 h-3 text-emerald-300" />
-                    <span>DEMO VISION</span>
+                    <span>JARVIS DEMO</span>
                   </button>
                 </div>
               </div>

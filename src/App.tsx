@@ -49,6 +49,7 @@ import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
 
 import { telemetryDb } from './db/TelemetryDatabase';
 import { sixMonthDataEngine } from './db/SixMonthDataEngine';
+import { rigModelCache } from './services/RigModelCache';
 
 export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
@@ -103,6 +104,9 @@ export default function App() {
 
     // 3. Start 10-second continuous dynamic tide & metocean phase cycling
     dynamicTideEngine.start();
+
+    // 4. Preload 3D OBJ Rig Model and precompute vertex colors into RAM
+    rigModelCache.preload('/models/untitled.obj').catch(console.warn);
 
     // Rolling FPS calculation
     let animId: number;

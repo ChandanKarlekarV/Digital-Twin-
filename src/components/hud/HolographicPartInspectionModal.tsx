@@ -22,42 +22,11 @@ import {
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { useRigStore, HolographicComponentType } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 import { KaTeXBlock } from '../common/KaTeXBlock';
-
-// Cached OBJ geometry to prevent reloading
-let cachedObjTemplate: THREE.Group | null = null;
-let isLoadingObj = false;
-const objLoadListeners: Array<(obj: THREE.Group) => void> = [];
-
-const loadModelOnce = (url: string, onLoaded: (obj: THREE.Group) => void) => {
-  if (cachedObjTemplate) {
-    onLoaded(cachedObjTemplate.clone());
-    return;
-  }
-  objLoadListeners.push(onLoaded);
-  if (isLoadingObj) return;
-  isLoadingObj = true;
-
-  const loader = new OBJLoader();
-  loader.load(
-    url,
-    (loadedObj) => {
-      cachedObjTemplate = loadedObj;
-      isLoadingObj = false;
-      objLoadListeners.forEach((cb) => cb(loadedObj.clone()));
-      objLoadListeners.length = 0;
-    },
-    undefined,
-    (err) => {
-      console.warn('Failed to load modal .obj model:', err);
-      isLoadingObj = false;
-    }
-  );
-};
+import { rigModelCache } from '../../services/RigModelCache';
 
 interface HoloRigSectionProps {
   type: HolographicComponentType;
@@ -233,133 +202,21 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
     }
   }, [type]);
 
-  // Load and apply exact selective highlight shaders to model meshes
+  // Load and apply exact selective highlight shaders to model meshes with 0ms cache
   useEffect(() => {
     if (isPipe) return;
 
-    loadModelOnce(customObjUrl, (loadedObj) => {
-      const cloned = loadedObj.clone(true);
-      const box = new THREE.Box3().setFromObject(cloned);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
+    // 1. Instant synchronous cache lookup (0ms)
+    const cachedGroup = rigModelCache.getHoloRigGroup(customObjUrl, type);
+    if (cachedGroup) {
+      setModelGroup(cachedGroup);
+      return;
+    }
 
-      cloned.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-      cloned.position.x = -center.x * MODEL_SCALE;
-      cloned.position.y = -WATER_LINE_OBJ_Y * MODEL_SCALE;
-      cloned.position.z = -center.z * MODEL_SCALE;
-      cloned.rotation.y = -Math.PI / 2;
-
-      // Selectively highlight target component while dimming the background rig
-      cloned.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          const name = mesh.name || '';
-
-          if (name === 'pCube2') {
-            mesh.visible = false;
-          } else if (name === 'model_Mesh') {
-            // Drill casing / drill bit / drill string
-            const isTarget = type === 'drill' || type === 'drill_string' || type === 'drill_bit';
-            const wireColor = type === 'drill_bit' ? '#FF3300' : type === 'drill_string' ? '#00D2FF' : '#00E5FF';
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: isTarget ? wireColor : '#001A33',
-              emissive: isTarget ? wireColor : '#001122',
-              emissiveIntensity: isTarget ? 3.2 : 0.1,
-              wireframe: true,
-              transparent: true,
-              opacity: isTarget ? 0.95 : 0.1,
-              side: THREE.DoubleSide,
-            });
-          } else if (name === 'model1_Mesh') {
-            // Subsea manifold & wellheads
-            const isTarget = type.startsWith('well') || type === 'wells1_7';
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: isTarget ? '#C084FC' : '#001A33',
-              emissive: isTarget ? '#A855F7' : '#001122',
-              emissiveIntensity: isTarget ? 3.2 : 0.1,
-              wireframe: true,
-              transparent: true,
-              opacity: isTarget ? 0.95 : 0.1,
-              side: THREE.DoubleSide,
-            });
-          } else if (name === 'modelfinal_Mesh') {
-            // Topside rig: Selectively color triangles according to target part
-            const geo = mesh.geometry.clone();
-            const pos = geo.attributes.position;
-            const count = pos.count;
-            const colors = new Float32Array(count * 3);
-
-            const cDimmed = new THREE.Color('#031526');
-            const cHelipadGreen = new THREE.Color('#00FF66');      // HELIPAD: Electric Green
-            const cCrane1Amber = new THREE.Color('#FF9900');       // CRANE 1: Amber Orange
-            const cCrane2Pink = new THREE.Color('#FF007F');        // CRANE 2: Fuchsia Pink
-            const cAccommodationViolet = new THREE.Color('#9933FF'); // ACCOMMODATION: Violet
-            const cIndustrialPipesCyan = new THREE.Color('#00FFFF'); // INDUSTRIAL PIPES: Bright Cyan
-            const cJackupLegsTeal = new THREE.Color('#00B4D8');    // JACK-UP LEGS: Teal
-            const cMainDeckBlue = new THREE.Color('#1976D2');      // MAIN DECK: Core Blue
-            const cDerrickCyan = new THREE.Color('#00FFFF');       // PROCESS / DERRICK: Bright Cyan
-            const cMotorSky = new THREE.Color('#38BDF8');
-
-            for (let i = 0; i < count; i += 3) {
-              const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
-              const x1 = pos.getX(i + 1), y1 = pos.getY(i + 1), z1 = pos.getZ(i + 1);
-              const x2 = pos.getX(i + 2), y2 = pos.getY(i + 2), z2 = pos.getZ(i + 2);
-
-              const cx = (x0 + x1 + x2) / 3;
-              const cy = (y0 + y1 + y2) / 3;
-              const cz = (z0 + z1 + z2) / 3;
-              const distXZ = Math.sqrt(cx * cx + cz * cz);
-              const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
-
-              let chosen = cDimmed;
-
-              if (type === 'helipad' && cy > 0.28 && distHelipad < 0.28) {
-                chosen = cHelipadGreen;
-              } else if (type === 'crane1' && cy > 0.18 && (cx < -0.09 || (cz < -0.10 && cx < 0.05))) {
-                chosen = cCrane1Amber;
-              } else if (type === 'crane2' && cy > 0.18 && cx > 0.09 && cz < 0.15) {
-                chosen = cCrane2Pink;
-              } else if (type === 'accommodation' && cy > 0.08 && cy < 0.32 && cz > 0.12 && cx > -0.05 && distHelipad >= 0.28) {
-                chosen = cAccommodationViolet;
-              } else if (type === 'industrial_pipes' && cy > 0.06 && cy < 0.30 && Math.abs(cx) <= 0.14 && Math.abs(cz) <= 0.14) {
-                chosen = cIndustrialPipesCyan;
-              } else if (type === 'jackup_legs' && cy < 0.05) {
-                chosen = cJackupLegsTeal;
-              } else if (type === 'main_deck' && cy >= 0.05 && cy <= 0.16) {
-                chosen = cMainDeckBlue;
-              } else if (type === 'upper_rig' && cy > 0.32 && distXZ < 0.16) {
-                chosen = cDerrickCyan;
-              } else if (type === 'motor' && cy > 0.18 && cy < 0.36 && distXZ < 0.12) {
-                chosen = cMotorSky;
-              } else if (type === 'command_dock' && cy >= 0.08 && cy <= 0.26) {
-                chosen = cDerrickCyan;
-              }
-
-              for (let j = 0; j < 3; j++) {
-                const idx = (i + j) * 3;
-                colors[idx] = chosen.r;
-                colors[idx + 1] = chosen.g;
-                colors[idx + 2] = chosen.b;
-              }
-            }
-
-            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-            mesh.geometry = geo;
-
-            mesh.material = new THREE.MeshStandardMaterial({
-              vertexColors: true,
-              roughness: 0.25,
-              metalness: 0.6,
-              wireframe: true,
-              transparent: true,
-              opacity: 0.88,
-              side: THREE.DoubleSide,
-            });
-          }
-        }
-      });
-
-      setModelGroup(cloned);
+    // 2. Preload on demand if not yet cached
+    rigModelCache.preload(customObjUrl).then(() => {
+      const g = rigModelCache.getHoloRigGroup(customObjUrl, type);
+      if (g) setModelGroup(g);
     });
   }, [customObjUrl, type, isPipe]);
 
@@ -1083,49 +940,6 @@ export const HolographicPartInspectionModal: React.FC = () => {
           {/* Right 5 Cols: Live Engineering Telemetry & Controls (Hidden when Expanded 3D is active) */}
           {!isExpanded3D && (
             <div className="lg:col-span-5 flex flex-col justify-between space-y-3">
-              {/* High-Resolution Diagnostic Engineering Schematic Card */}
-              {data.image && (
-                <div className="relative group overflow-hidden rounded-2xl bg-black/80 border border-reliance-cyan/40 shadow-dock shrink-0">
-                  <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-reliance-deepnavy/90">
-                    <img
-                      src={data.image}
-                      alt={data.title}
-                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-500 opacity-95"
-                      onError={(e) => {
-                        // Fallback if image fails
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                    {/* High-Tech Overlay Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-reliance-deepnavy via-transparent to-reliance-deepnavy/30 pointer-events-none" />
-
-                    {/* Corner Reticle Accents */}
-                    <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t-2 border-l-2 border-reliance-cyan" />
-                    <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t-2 border-r-2 border-reliance-cyan" />
-                    <div className="absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b-2 border-l-2 border-reliance-cyan" />
-                    <div className="absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b-2 border-r-2 border-reliance-cyan" />
-
-                    {/* Subsystem Schematic Floating Badge */}
-                    <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 font-mono text-[9px] bg-black/85 px-2 py-0.5 rounded border border-reliance-cyan/40 text-reliance-cyan backdrop-blur-md">
-                      <Scan className="w-3 h-3 animate-pulse" />
-                      <span>SCHEMATIC BLUEPRINT</span>
-                    </div>
-
-                    {/* Operational Health Badge */}
-                    <div className="absolute top-2 right-2 z-10 font-mono text-[9px] bg-emerald-950/85 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/40 backdrop-blur-md font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span>HEALTH: 100% NOMINAL</span>
-                    </div>
-
-                    {/* Bottom Schematic Title Bar */}
-                    <div className="absolute bottom-1.5 left-2 right-2 z-10 flex items-center justify-between font-mono text-[10px] bg-reliance-deepnavy/90 px-2.5 py-1 rounded-lg border border-white/10 backdrop-blur-md">
-                      <span className="text-white font-extrabold truncate">{data.tag}</span>
-                      <span className="text-reliance-cyan text-[9px] font-semibold truncate ml-1">{data.category}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* 6 Metrics Grid */}
               <div className="grid grid-cols-2 gap-2.5 font-mono">
                 {data.metrics.map((m, idx) => {

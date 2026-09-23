@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { useRigStore } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 import { createHolographicMaterial } from '../../shaders/HolographicMaterial';
 import { OilFlowArrows } from './OilFlowArrows';
 import { SubseaPipelineFlowNetwork } from './SubseaPipelineFlowNetwork';
+import { rigModelCache, CachedRigData } from '../../services/RigModelCache';
 
 interface CustomObjRigProps {
   objUrl: string;
@@ -92,198 +92,122 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
   });
 
   useEffect(() => {
-    const loader = new OBJLoader();
+    // Initialize reusable Holographic materials
+    const holoRigMat = createHolographicMaterial({
+      baseColor: '#1976D2',
+      glowColor: '#00FFFF',
+      opacity: 0.90,
+      scanlineFreq: 1.2,
+      glowIntensity: 2.2,
+      useVertexColor: true,
+    });
+    holoRigMatRef.current = holoRigMat;
 
-    loader.load(
-      objUrl,
-      (loadedObj) => {
-        const box = new THREE.Box3().setFromObject(loadedObj);
-        const center = new THREE.Vector3();
-        box.getCenter(center);
+    const holoOuterCasingMat = createHolographicMaterial({
+      baseColor: '#003366',
+      glowColor: '#00D2FF',
+      opacity: 0.65,
+      scanlineFreq: 0.6,
+      glowIntensity: 1.8,
+      wireframe: false,
+    });
+    holoOuterCasingMatRef.current = holoOuterCasingMat;
 
-        loadedObj.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+    const holoInnerDrillMat = createHolographicMaterial({
+      baseColor: '#00D2FF',
+      glowColor: '#00F0FF',
+      opacity: 0.95,
+      scanlineFreq: 2.5,
+      glowIntensity: 3.2,
+    });
+    holoInnerDrillMatRef.current = holoInnerDrillMat;
 
-        // Position: X and Z centered, Y shifted so water line sits at world Y = 0.0
-        loadedObj.position.x = -center.x * MODEL_SCALE;
-        loadedObj.position.y = -WATER_LINE_OBJ_Y * MODEL_SCALE;
-        loadedObj.position.z = -center.z * MODEL_SCALE;
+    const holoManifoldMat = createHolographicMaterial({
+      baseColor: '#00FFFF',
+      glowColor: '#00E5FF',
+      opacity: 0.92,
+      scanlineFreq: 1.5,
+      glowIntensity: 2.4,
+    });
+    holoManifoldMatRef.current = holoManifoldMat;
 
-        // Rotate by -90 deg so the carved rectangular box and drill face the FRONT (+Z)
-        loadedObj.rotation.y = -Math.PI / 2;
+    const applyRigData = (data: CachedRigData) => {
+      const group = new THREE.Group();
+      group.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+      group.position.x = -data.center.x * MODEL_SCALE;
+      group.position.y = -WATER_LINE_OBJ_Y * MODEL_SCALE;
+      group.position.z = -data.center.z * MODEL_SCALE;
+      group.rotation.y = -Math.PI / 2;
 
-        // Exact Component Color Palettes (User Color-Code Specification)
-        const cHelipadGreen = new THREE.Color('#00FF66');      // HELIPAD: Electric Green
-        const cCrane1Amber = new THREE.Color('#FF9900');       // CRANE 1 (LATTICE BOOM): Amber Orange
-        const cCrane2Pink = new THREE.Color('#FF007F');        // CRANE 2 (PEDESTAL): Fuchsia Pink
-        const cAccommodationViolet = new THREE.Color('#9933FF'); // ACCOMMODATION MODULE: Violet
-        const cProcessPipesCyan = new THREE.Color('#00FFFF');  // INDUSTRIAL PIPE FITTING (PROCESS SYSTEMS): Bright Cyan
-        const cJackUpLegsTeal = new THREE.Color('#00B4D8');    // JACK-UP LEGS: Teal
-        const cMainDeckBlue = new THREE.Color('#1976D2');      // MAIN DECK STRUCTURE: Core Blue
-        const cSubseaAqua = new THREE.Color('#00D2FF');        // SUBSEA DRILL STRING: Aqua Blue
-
-        // Initialize reusable Holographic materials
-        const holoRigMat = createHolographicMaterial({
-          baseColor: '#1976D2',
-          glowColor: '#00FFFF',
-          opacity: 0.90,
-          scanlineFreq: 1.2,
-          glowIntensity: 2.2,
-          useVertexColor: true,
-        });
-        holoRigMatRef.current = holoRigMat;
-
-        // Static Outer Cylinder Casing (Subsea Drill String Casing)
-        const holoOuterCasingMat = createHolographicMaterial({
-          baseColor: '#003366',
-          glowColor: '#00D2FF',
-          opacity: 0.65,
-          scanlineFreq: 0.6,
-          glowIntensity: 1.8,
-          wireframe: false,
-        });
-        holoOuterCasingMatRef.current = holoOuterCasingMat;
-
-        // Inner Spinning Rotary Drill String Material (Aqua Blue)
-        const holoInnerDrillMat = createHolographicMaterial({
-          baseColor: '#00D2FF',
-          glowColor: '#00F0FF',
-          opacity: 0.95,
-          scanlineFreq: 2.5,
-          glowIntensity: 3.2,
-        });
-        holoInnerDrillMatRef.current = holoInnerDrillMat;
-
-        // Subsea Manifold & Gathering Hub
-        const holoManifoldMat = createHolographicMaterial({
-          baseColor: '#00FFFF',
-          glowColor: '#00E5FF',
-          opacity: 0.92,
-          scanlineFreq: 1.5,
-          glowIntensity: 2.4,
-        });
-        holoManifoldMatRef.current = holoManifoldMat;
-
-        loadedObj.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            const name = mesh.name || '';
-
-            if (name === 'pCube2') {
-              mesh.visible = false;
-            } else if (name === 'model_Mesh') {
-              // SUBSEA DRILL STRING Casing Cylinder
-              if (scannerMode === 'hologram') {
-                mesh.material = holoOuterCasingMat;
-              } else {
-                mesh.material = new THREE.MeshStandardMaterial({
-                  color: '#00D2FF',
-                  roughness: 0.35,
-                  metalness: 0.7,
-                  transparent: true,
-                  opacity: 0.75,
-                  side: THREE.DoubleSide,
-                });
-              }
-            } else if (name === 'model1_Mesh') {
-              // Subsea Manifold, Wellhead Jumpers, Valves & Mudmats
-              if (scannerMode === 'hologram') {
-                mesh.material = holoManifoldMat;
-              } else {
-                mesh.material = new THREE.MeshStandardMaterial({
-                  color: '#00FFFF',
-                  roughness: 0.35,
-                  metalness: 0.7,
-                  side: THREE.DoubleSide,
-                });
-              }
-            } else if (name === 'modelfinal_Mesh') {
-              // Topside rig: Apply exact per-triangle classified component colors
-              const geo = mesh.geometry;
-              const pos = geo.attributes.position;
-              const count = pos.count;
-              const colors = new Float32Array(count * 3);
-
-              for (let i = 0; i < count; i += 3) {
-                const x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
-                const x1 = pos.getX(i + 1), y1 = pos.getY(i + 1), z1 = pos.getZ(i + 1);
-                const x2 = pos.getX(i + 2), y2 = pos.getY(i + 2), z2 = pos.getZ(i + 2);
-
-                const cx = (x0 + x1 + x2) / 3;
-                const cy = (y0 + y1 + y2) / 3;
-                const cz = (z0 + z1 + z2) / 3;
-                const distXZ = Math.sqrt(cx * cx + cz * cz);
-                const distHelipad = Math.sqrt((cx - 0.12) * (cx - 0.12) + (cz + 0.50) * (cz + 0.50));
-
-                let chosen = cMainDeckBlue; // Default: MAIN DECK STRUCTURE (Core Blue)
-
-                if (cy < 0.05) {
-                  // Below main deck: JACK-UP LEGS (Teal) or central Subsea riser conduits (Aqua Blue)
-                  if (distXZ < 0.06) {
-                    chosen = cSubseaAqua; // Central drill / riser path
-                  } else {
-                    chosen = cJackUpLegsTeal; // JACK-UP LEGS: Teal
-                  }
-                } else {
-                  // Topside Deck Subsystems
-                  if (cy > 0.28 && distHelipad < 0.28) {
-                    // HELIPAD: Electric Green
-                    chosen = cHelipadGreen;
-                  } else if (cy > 0.18 && (cx < -0.09 || (cz < -0.10 && cx < 0.05))) {
-                    // CRANE 1 (LATTICE BOOM): Amber Orange
-                    chosen = cCrane1Amber;
-                  } else if (cy > 0.18 && cx > 0.09 && cz < 0.15) {
-                    // CRANE 2 (PEDESTAL): Fuchsia Pink
-                    chosen = cCrane2Pink;
-                  } else if (cy > 0.08 && cy < 0.32 && cz > 0.12 && cx > -0.05 && distHelipad >= 0.28) {
-                    // ACCOMMODATION MODULE: Violet
-                    chosen = cAccommodationViolet;
-                  } else if (cy > 0.06 && cy < 0.30 && Math.abs(cx) <= 0.14 && Math.abs(cz) <= 0.14) {
-                    // INDUSTRIAL PIPE FITTING (PROCESS SYSTEMS): Bright Cyan
-                    chosen = cProcessPipesCyan;
-                  } else if (cy > 0.35 && distXZ < 0.14) {
-                    // Derrick mast crown: Bright Cyan
-                    chosen = cProcessPipesCyan;
-                  } else {
-                    // MAIN DECK STRUCTURE: Core Blue
-                    chosen = cMainDeckBlue;
-                  }
-                }
-
-                for (let j = 0; j < 3; j++) {
-                  const idx = (i + j) * 3;
-                  colors[idx] = chosen.r;
-                  colors[idx + 1] = chosen.g;
-                  colors[idx + 2] = chosen.b;
-                }
-              }
-
-              geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
-              geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-              if (scannerMode === 'hologram') {
-                mesh.material = holoRigMat;
-              } else {
-                mesh.material = new THREE.MeshStandardMaterial({
-                  vertexColors: true,
-                  roughness: 0.35,
-                  metalness: 0.6,
-                  side: THREE.DoubleSide,
-                });
-              }
-            }
-          }
-        });
-
-        setObjGroup(loadedObj);
-      },
-      undefined,
-      (err) => {
-        console.warn('Failed to load .obj from url:', objUrl, err);
+      // 1. Outer Drill Casing Mesh
+      if (data.drillGeo) {
+        const mat = scannerMode === 'hologram'
+          ? holoOuterCasingMat
+          : new THREE.MeshStandardMaterial({
+              color: '#00D2FF',
+              roughness: 0.35,
+              metalness: 0.7,
+              transparent: true,
+              opacity: 0.75,
+              side: THREE.DoubleSide,
+            });
+        const mesh = new THREE.Mesh(data.drillGeo, mat);
+        mesh.name = 'model_Mesh';
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
       }
-    );
+
+      // 2. Subsea Manifold Mesh
+      if (data.manifoldGeo) {
+        const mat = scannerMode === 'hologram'
+          ? holoManifoldMat
+          : new THREE.MeshStandardMaterial({
+              color: '#00FFFF',
+              roughness: 0.35,
+              metalness: 0.7,
+              side: THREE.DoubleSide,
+            });
+        const mesh = new THREE.Mesh(data.manifoldGeo, mat);
+        mesh.name = 'model1_Mesh';
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+
+      // 3. Topside Rig Mesh with instant precomputed vertex colors
+      if (data.topsideGeo) {
+        const geo = data.topsideGeo.clone();
+        const colors = data.colorBuffers.get('full_colored');
+        if (colors) {
+          geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
+          geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        }
+
+        const mat = scannerMode === 'hologram'
+          ? holoRigMat
+          : new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 0.35,
+              metalness: 0.6,
+              side: THREE.DoubleSide,
+            });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.name = 'modelfinal_Mesh';
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+
+      setObjGroup(group);
+    };
+
+    const cached = rigModelCache.getCachedData(objUrl);
+    if (cached) {
+      applyRigData(cached);
+    } else {
+      rigModelCache.preload(objUrl).then(applyRigData).catch(console.warn);
+    }
   }, [objUrl, scannerMode]);
 
   // 100% Enclosed 4-Sided Solid Bedrock with Focused Central Drill Window
@@ -441,7 +365,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
   return (
     <group ref={wholeRigGroupRef}>
       {/* 1. Main 3D Rig */}
-      <primitive object={objGroup} onClick={handleObjectClick} />
+      {objGroup && <primitive object={objGroup} onClick={handleObjectClick} />}
 
       {/* 2. ONLY THE INNER DRILL ROTARY SHAFT & BIT SPINS */}
       <group

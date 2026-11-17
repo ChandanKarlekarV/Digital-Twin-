@@ -298,12 +298,12 @@ async function runEndToEndVerification() {
     'Command dock opened successfully'
   );
 
-  // 13. One-breath: "varuna open hardware SCADA gateway"
-  useRigStore.getState().executeVoiceCommand('varuna open hardware SCADA gateway');
+  // 13. One-breath: "varuna open compliance report"
+  useRigStore.getState().executeVoiceCommand('varuna open compliance report');
   assert(
-    useRigStore.getState().isHardwareModalOpen === true,
-    'Varuna One-Breath: "varuna open hardware SCADA gateway"',
-    'Hardware SCADA Gateway modal opened successfully'
+    useRigStore.getState().isReportModalOpen === true,
+    'Varuna One-Breath: "varuna open compliance report"',
+    'Compliance audit report opened successfully'
   );
 
   // 14. One-breath: "varuna open open ppt"
@@ -322,11 +322,11 @@ async function runEndToEndVerification() {
     'Physical Governing Equations & LaTeX audit modal opened'
   );
 
-  // 16. One-breath: "varuna open jarvis view"
-  useRigStore.getState().executeVoiceCommand('varuna open jarvis view');
+  // 16. One-breath: "varuna open exploded view"
+  useRigStore.getState().executeVoiceCommand('varuna open exploded view');
   assert(
     useRigStore.getState().isSplitViewActive === true && useRigStore.getState().cameraViewMode === 'split',
-    'Varuna One-Breath: "varuna open jarvis view"',
+    'Varuna One-Breath: "varuna open exploded view"',
     'Exploded 12-module assembly view active'
   );
 

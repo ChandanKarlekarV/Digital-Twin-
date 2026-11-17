@@ -270,6 +270,32 @@ class VarunaVoiceSynthesizer {
     this.speakCustom(message);
   }
 
+  /** Two-note rising chime (~150 ms) acknowledging the wake word. */
+  public playWakeChime(): void {
+    if (this.isMuted) return;
+    try {
+      this.initAudio();
+      const ctx = this.audioCtx;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      [880, 1320].forEach((hz, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const t = now + i * 0.07;
+        osc.frequency.setValueAtTime(hz, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.09);
+      });
+    } catch {
+      // audio blocked until the first user gesture
+    }
+  }
+
   /**
    * Speak custom message using ElevenLabs (if configured) or fallback to Web Speech
    */

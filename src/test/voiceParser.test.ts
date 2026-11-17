@@ -1,5 +1,13 @@
-﻿import { parseVoiceCommand } from '../voice/VoiceCommandParser';
+/** Run: npx tsx src/test/voiceParser.test.ts */
+import { parseVoiceCommand, hasWakeWord, stripWakeWord, isUnambiguous } from '../voice/VoiceCommandParser';
 
+let fail = 0;
+const check = (ok: boolean, label: string, got: unknown) => {
+  if (!ok) fail++;
+  console.log(ok ? 'ok  ' : 'FAIL', label, '->', got);
+};
+
+// Intents
 const cases: [string, string, number?][] = [
   ['varuna open crane 2', 'crane', 2],
   ['Varun a open crane to', 'crane', 2],
@@ -14,13 +22,11 @@ const cases: [string, string, number?][] = [
   ['well three', 'well', 3],
   ['show all wells', 'wells_all'],
   ['split view', 'split_view'],
-  ['varuna open jarvis view', 'split_view'],
+  ['varuna open exploded view', 'split_view'],
   ['merge it', 'assemble'],
   ['close split', 'assemble'],
   ['open the slide deck', 'presentation'],
   ['what is the weather', 'weather'],
-  ['switch to hologram mode', 'mode_hologram'],
-  ['realistic mode', 'mode_realistic'],
   ['jack up legs', 'jackup_legs'],
   ['open accomodation', 'accommodation'],
   ['reset view', 'view_topside'],
@@ -28,12 +34,26 @@ const cases: [string, string, number?][] = [
   ['go to sleep', 'sleep'],
   ['open command dock', 'command_dock'],
 ];
-let fail = 0;
 for (const [text, id, num] of cases) {
   const r = parseVoiceCommand(text);
-  const ok = r?.id === id && (num === undefined || r?.num === num);
-  if (!ok) fail++;
-  console.log(ok ? 'ok  ' : 'FAIL', JSON.stringify(text), '->', r?.id, r?.num, r?.complete);
+  check(r?.id === id && (num === undefined || r?.num === num), JSON.stringify(text), `${r?.id} ${r?.num ?? ''}`);
 }
-console.log(fail ? `${fail} failures` : 'all passed');
 
+// Wake word: the ways recognisers spell "Varuna"
+for (const t of ['Varuna', 'hey varuna', 'Varun a open crane', 'Baruna show helipad', 'veruna', 'waruna open drill', 'var una open drill',
+  'Varuna AI status', 'Verna open pipe 3', 'Bharuna', 'ok Varun', 'VARUNA, what is the pressure?', 'Verona'])
+  check(hasWakeWord(t), `wake  ${JSON.stringify(t)}`, true);
+for (const t of ['open the crane', 'banana', 'run a test', 'variable flow', 'turn on camera', 'marine riser', 'warning', 'very nice', 'around'])
+  check(!hasWakeWord(t), `sleep ${JSON.stringify(t)}`, false);
+check(stripWakeWord('Varun a open crane two') === 'open crane two', 'strip "Varun a"', stripWakeWord('Varun a open crane two'));
+check(stripWakeWord('varuna ai rig status') === 'rig status', 'strip "varuna ai"', stripWakeWord('varuna ai rig status'));
+
+// Instant (first-interim) execution only when the command cannot still grow
+const instant: [string, boolean][] = [['split view', true], ['helipad', true], ['crane 2', true], ['drill', false], ['close', false], ['open crane', false]];
+for (const [t, want] of instant) {
+  const p = parseVoiceCommand(t);
+  check(!!p && isUnambiguous(p) === want, `instant ${JSON.stringify(t)}`, p && isUnambiguous(p));
+}
+
+console.log(fail ? `${fail} failures` : 'all passed');
+if (fail) process.exit(1);

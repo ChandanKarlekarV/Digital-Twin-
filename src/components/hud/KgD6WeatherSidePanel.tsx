@@ -384,7 +384,7 @@ export const KgD6WeatherSidePanel: React.FC = () => {
                 <div className="w-full h-1.5 bg-reliance-navy rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-reliance-cyan to-emerald-400 transition-all duration-1000"
-                    style={{ width: `${(dynamicTideSecondsRemaining / 10) * 100}%` }}
+                    style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
                   />
                 </div>
               </div>

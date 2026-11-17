@@ -2,7 +2,7 @@
  * Pose classifier checks on synthetic MediaPipe-style hand landmarks (21 points, y down).
  * Run: npx tsx src/test/gestureClassifier.test.ts
  */
-import { jarvisGestureEngine, HandLandmark } from '../vision/JarvisGestureVisionEngine';
+import { varunaGestureEngine, HandLandmark } from '../vision/VarunaGestureEngine';
 
 type Finger = 'up' | 'down';
 
@@ -49,7 +49,7 @@ const cases: [string, HandLandmark[], string | null][] = [
 ];
 
 let fail = 0;
-const engine = jarvisGestureEngine as any;
+const engine = varunaGestureEngine as any;
 for (const [name, lm, expected] of cases) {
   const got = engine.analyzeSingleHand(lm, null).gesture;
   const ok = got === expected;

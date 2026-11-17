@@ -1,14 +1,10 @@
 /**
- * Offline converter: public/models/rig.obj (59 MB text) -> public/models/rig.bin
+ * Offline converter: assets/source/rig.obj (59 MB text) -> public/models/rig.bin.gz
  *
  * The browser used to download and parse the 59 MB OBJ on the main thread at
  * every start (several seconds of frozen UI). This bakes the three meshes the
- * app uses into an indexed, quantised binary that loads with zero parsing:
- *
- *   [u32 headerByteLength][JSON header][padding to 4][binary chunks...]
- *
- * Header: { version, center:[x,y,z], meshes: { name: { vertexCount, indexCount,
- *   position:{offset}, normal:{offset}, uv:{offset}|null, index:{offset} } } }
+ * app uses into an indexed, quantised, gzipped binary that loads with zero parsing
+ * (layout in scripts/rig-pack.mjs).
  *
  * Usage: node scripts/convert-rig-model.mjs [input.obj] [output.bin]
  */
@@ -18,10 +14,12 @@ import { fileURLToPath } from 'url';
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { packRig } from './rig-pack.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const input = process.argv[2] || path.join(root, 'public/models/rig.obj');
-const output = process.argv[3] || path.join(root, 'public/models/rig.bin');
+// Source mesh lives outside public/ so it is not shipped with the site
+const input = process.argv[2] || path.join(root, 'assets/source/rig.obj');
+const output = process.argv[3] || path.join(root, 'public/models/rig.bin.gz');
 
 const KEEP = ['model_Mesh', 'model1_Mesh', 'modelfinal_Mesh'];
 const EDGE_ANGLE_DEG = 30;
@@ -196,21 +194,7 @@ console.timeEnd('parse');
 const box = new THREE.Box3().setFromObject(obj);
 const center = box.getCenter(new THREE.Vector3());
 
-const header = { version: 2, center: center.toArray(), labels: LABELS, meshes: {} };
-const chunks = [];
-let offset = 0;
-
-const push = (typed) => {
-  const pad = (4 - (offset % 4)) % 4;
-  if (pad) {
-    chunks.push(Buffer.alloc(pad));
-    offset += pad;
-  }
-  const at = offset;
-  chunks.push(Buffer.from(typed.buffer, typed.byteOffset, typed.byteLength));
-  offset += typed.byteLength;
-  return { offset: at };
-};
+const meshes = {};
 
 obj.traverse((child) => {
   if (!child.isMesh || !KEEP.includes(child.name)) return;
@@ -226,7 +210,6 @@ obj.traverse((child) => {
   const nrm = new Int8Array(nrmSrc.length);
   for (let i = 0; i < nrmSrc.length; i++) nrm[i] = Math.round(Math.max(-1, Math.min(1, nrmSrc[i])) * 127);
 
-  const uvAttr = geo.attributes.uv;
   const idx = geo.index.array;
   const vertexCount = geo.attributes.position.count;
   const index = vertexCount > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
@@ -245,25 +228,9 @@ obj.traverse((child) => {
     triLabels.forEach((l) => (counts[LABELS[l]] = (counts[LABELS[l]] || 0) + 1));
     console.log('  part triangles', counts);
   }
-  header.meshes[child.name] = {
-    vertexCount,
-    indexCount: index.length,
-    indexType: index instanceof Uint32Array ? 'u32' : 'u16',
-    position: push(new Float32Array(pos)),
-    normal: push(nrm),
-    uv: uvAttr ? push(new Float32Array(uvAttr.array)) : null,
-    index: push(index),
-    edgeCount: edges.length / 2,
-    edges: push(edges),
-    triLabels: triLabels ? push(triLabels) : null,
-    edgeLabels: edgeLabels ? push(edgeLabels) : null,
-  };
+  meshes[child.name] = { position: new Float32Array(pos), normal: nrm, index, edges, triLabels, edgeLabels };
   console.log(`${child.name}: ${child.geometry.attributes.position.count} -> ${vertexCount} verts, ${index.length / 3} tris, ${edges.length / 2} edges`);
 });
 
-const json = Buffer.from(JSON.stringify(header));
-const headLen = Buffer.alloc(4);
-headLen.writeUInt32LE(json.length);
-const headPad = Buffer.alloc((4 - ((4 + json.length) % 4)) % 4);
-fs.writeFileSync(output, Buffer.concat([headLen, json, headPad, ...chunks]));
+fs.writeFileSync(output, packRig(center.toArray(), LABELS, meshes));
 console.log(`wrote ${output} (${(fs.statSync(output).size / 1e6).toFixed(1)} MB)`);

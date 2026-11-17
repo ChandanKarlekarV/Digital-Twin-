@@ -3,9 +3,10 @@ import {
   parseVoiceCommand,
   normalizeTranscript,
   stripWakeWord,
-  WAKE_WORD_REGEX,
+  hasWakeWord,
   VOICE_HELP_TEXT,
 } from '../voice/VoiceCommandParser';
+import { answerRigQuestion } from '../voice/RigKnowledge';
 
 export type CameraViewMode =
   | 'topside'
@@ -78,7 +79,6 @@ export type HolographicComponentType =
   | 'well7'
   | 'wells1_7'
   | 'command_dock';
-export type ScannerMode = 'realistic' | 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
 
 export type RecognizedGesture =
@@ -124,7 +124,7 @@ export interface GestureSpatialState {
     role?: 'ZOOM' | 'ORBIT' | 'IDLE';
   } | null;
   activeMode:
-    | 'JARVIS_DECOUPLED_DUAL'
+    | 'DECOUPLED_DUAL'
     | 'DUAL_MOVE_ZOOM'
     | 'ORBIT'
     | 'ZOOM'
@@ -506,8 +506,6 @@ interface RigState {
   setCustomObjUrl: (url: string | null, fileName?: string) => void;
 
   // Scanning Suites
-  scannerMode: ScannerMode;
-  setScannerMode: (mode: ScannerMode) => void;
 
   // Environment & Scenarios
   metoceanCondition: MetoceanCondition;
@@ -534,7 +532,6 @@ interface RigState {
   setCurrentSpeedKnots: (speed: number) => void;
   setCurrentDirectionDeg: (deg: number) => void;
   setDynamicTideCycling: (active: boolean) => void;
-  setTidePhaseIndex: (index: number) => void;
 
   // Weather Side Panel
   isWeatherPanelOpen: boolean;
@@ -558,24 +555,17 @@ interface RigState {
   setIncidentModalOpen: (open: boolean) => void;
   toggleIncidentModal: () => void;
 
-  isHardwareModalOpen: boolean;
-  setHardwareModalOpen: (open: boolean) => void;
-  toggleHardwareModal: () => void;
 
   isReportModalOpen: boolean;
   setReportModalOpen: (open: boolean) => void;
-  toggleReportModal: () => void;
 
   isEodModalOpen: boolean;
   setEodModalOpen: (open: boolean) => void;
-  toggleEodModal: () => void;
 
   isSihModalOpen: boolean;
   setSihModalOpen: (open: boolean) => void;
-  toggleSihModal: () => void;
 
   isTelemetryDrawerOpen: boolean;
-  setTelemetryDrawerOpen: (open: boolean) => void;
   toggleTelemetryDrawer: () => void;
 
   isPhysicsModalOpen: boolean;
@@ -583,8 +573,6 @@ interface RigState {
   togglePhysicsModal: () => void;
 
   // Hardware Connection Mode
-  hardwareMode: 'simulation' | 'websocket' | 'webserial' | 'blackbox_csv';
-  setHardwareMode: (mode: 'simulation' | 'websocket' | 'webserial' | 'blackbox_csv') => void;
 
   // Dedicated Holographic Part Inspection Modals (Pipes 1-9, Drill, Motor, Helipad, Cranes, Upper Rig, Wells 1-7)
   activeHoloModal: HolographicComponentType | null;
@@ -594,14 +582,11 @@ interface RigState {
 
   // Vision Gesture Technology
   isGestureCameraActive: boolean;
-  isSyntheticCameraActive: boolean;
   cameraPermissionState: 'idle' | 'requesting' | 'active' | 'denied' | 'error';
   cameraErrorMessage: string | null;
   gestureDetected: RecognizedGesture;
-  gestureConfidence: number;
   gestureSpatial: GestureSpatialState;
   setGestureCameraActive: (active: boolean) => void;
-  setSyntheticCameraActive: (active: boolean) => void;
   setCameraPermissionState: (status: 'idle' | 'requesting' | 'active' | 'denied' | 'error') => void;
   setCameraErrorMessage: (msg: string | null) => void;
   setGestureDetected: (
@@ -616,33 +601,28 @@ interface RigState {
   openNextSubsystemView: () => void;
   openSubsystemByIndex: (index: number) => void;
 
-  // Jarvis Voice Commander & Varuna Wake-Word Architecture
+  // Varuna Voice Commander & Wake-Word Architecture
   isVoiceCommanderActive: boolean;
   isVarunaAwake: boolean;
   varunaWakeExpiry: number;
-  lastVoiceCommand: string | null;
   voiceTranscript: string | null;
   isListeningSpeech: boolean;
   setVoiceCommanderActive: (active: boolean) => void;
-  setLastVoiceCommand: (cmd: string | null) => void;
   setVoiceTranscript: (transcript: string | null) => void;
   setIsListeningSpeech: (listening: boolean) => void;
   wakeVaruna: () => void;
   sleepVaruna: () => void;
   executeVoiceCommand: (command: string) => void;
 
-  // Jarvis Exploded / Split View & Pipe Slicing
+  // Varuna Exploded / Split View & Pipe Slicing
   isSplitViewActive: boolean;
-  splitFactor: number;
   isPipeSliced: boolean;
   isPipeSliceModalOpen: boolean;
   selectedSplitPartId: string | null;
   setSplitViewActive: (active: boolean) => void;
-  setSplitFactor: (factor: number) => void;
   setPipeSliced: (sliced: boolean) => void;
   setPipeSliceModalOpen: (open: boolean) => void;
   setSelectedSplitPartId: (id: string | null) => void;
-  zoomToSplitPart: (partId: string) => void;
 
   // Audio / Speech State
   voiceStatus: {
@@ -675,7 +655,7 @@ export const useRigStore = create<RigState>((set, get) => ({
   selectedAssetId: 'RISER-ALPHA',
   setSelectedAssetId: (id) => set({ selectedAssetId: id, isTelemetryDrawerOpen: !!id }),
 
-  customObjUrl: '/models/rig.bin',
+  customObjUrl: '/models/rig.bin.gz',
   customObjFileName: 'KG-D6 rig (built-in)',
   setCustomObjUrl: (url, fileName) =>
     set({
@@ -684,8 +664,6 @@ export const useRigStore = create<RigState>((set, get) => ({
     }),
 
   // The twin is hologram-only; other modes are kept in the type for older callers but render as hologram
-  scannerMode: 'hologram',
-  setScannerMode: () => set({ scannerMode: 'hologram' }),
 
   metoceanCondition: 'calm',
   setMetoceanCondition: (condition) => set({ metoceanCondition: condition }),
@@ -771,6 +749,7 @@ export const useRigStore = create<RigState>((set, get) => ({
       currentSpeedKnots: speed,
       metoceanCondition: metocean,
       tidePhase: tide,
+      isDynamicTideCycling: false,
     });
   },
 
@@ -795,15 +774,15 @@ export const useRigStore = create<RigState>((set, get) => ({
       metocean = 'cyclonic';
     }
 
-    set({ currentSpeedKnots: speed, currentFlowPower: power, metoceanCondition: metocean });
+    // A manual setting pauses the live/tidal auto mode so it is not overwritten
+    set({ currentSpeedKnots: speed, currentFlowPower: power, metoceanCondition: metocean, isDynamicTideCycling: false });
   },
 
   setCurrentDirectionDeg: (deg) => {
-    set({ currentDirectionDeg: deg, currentDirectionLabel: getDirectionLabel(deg) });
+    set({ currentDirectionDeg: deg, currentDirectionLabel: getDirectionLabel(deg), isDynamicTideCycling: false });
   },
 
   setDynamicTideCycling: (active) => set({ isDynamicTideCycling: active }),
-  setTidePhaseIndex: (index) => set({ tidePhaseIndex: index }),
 
   // Weather Side Panel
   isWeatherPanelOpen: false,
@@ -838,24 +817,17 @@ export const useRigStore = create<RigState>((set, get) => ({
   setIncidentModalOpen: (open) => set({ isIncidentModalOpen: open }),
   toggleIncidentModal: () => set((s) => ({ isIncidentModalOpen: !s.isIncidentModalOpen })),
 
-  isHardwareModalOpen: false,
-  setHardwareModalOpen: (open) => set({ isHardwareModalOpen: open }),
-  toggleHardwareModal: () => set((s) => ({ isHardwareModalOpen: !s.isHardwareModalOpen })),
 
   isReportModalOpen: false,
   setReportModalOpen: (open) => set({ isReportModalOpen: open }),
-  toggleReportModal: () => set((s) => ({ isReportModalOpen: !s.isReportModalOpen })),
 
   isEodModalOpen: false,
   setEodModalOpen: (open) => set({ isEodModalOpen: open }),
-  toggleEodModal: () => set((s) => ({ isEodModalOpen: !s.isEodModalOpen })),
 
   isSihModalOpen: false,
   setSihModalOpen: (open) => set({ isSihModalOpen: open }),
-  toggleSihModal: () => set((s) => ({ isSihModalOpen: !s.isSihModalOpen })),
 
   isTelemetryDrawerOpen: true,
-  setTelemetryDrawerOpen: (open) => set({ isTelemetryDrawerOpen: open }),
   toggleTelemetryDrawer: () => set((s) => ({ isTelemetryDrawerOpen: !s.isTelemetryDrawerOpen })),
 
   isPhysicsModalOpen: false,
@@ -863,8 +835,6 @@ export const useRigStore = create<RigState>((set, get) => ({
   togglePhysicsModal: () => set((s) => ({ isPhysicsModalOpen: !s.isPhysicsModalOpen })),
 
   // Hardware Connection Mode
-  hardwareMode: 'simulation',
-  setHardwareMode: (mode) => set({ hardwareMode: mode }),
 
   // Dedicated Holographic Part Inspection Modals
   activeHoloModal: null,
@@ -882,11 +852,9 @@ export const useRigStore = create<RigState>((set, get) => ({
 
   // Vision Gesture Technology
   isGestureCameraActive: false,
-  isSyntheticCameraActive: false,
   cameraPermissionState: 'idle',
   cameraErrorMessage: null,
   gestureDetected: null,
-  gestureConfidence: 0,
   gestureSpatial: {
     deltaX: 0,
     deltaY: 0,
@@ -898,15 +866,14 @@ export const useRigStore = create<RigState>((set, get) => ({
     activeMode: 'IDLE',
   },
   setGestureCameraActive: (active) => set({ isGestureCameraActive: active }),
-  setSyntheticCameraActive: (active) => set({ isSyntheticCameraActive: active }),
   setCameraPermissionState: (status) => set({ cameraPermissionState: status }),
   setCameraErrorMessage: (msg) => set({ cameraErrorMessage: msg }),
   setGestureDetected: (gesture, confidence = 1.0) => {
     const prev = get();
-    if (prev.gestureDetected === gesture && Math.abs(prev.gestureConfidence - confidence) < 0.05) {
+    if (prev.gestureDetected === gesture) {
       return;
     }
-    set({ gestureDetected: gesture, gestureConfidence: confidence });
+    set({ gestureDetected: gesture });
   },
   pointerCursor: { x: 0.5, y: 0.5, active: false },
   setPointerCursor: (cursor: { x: number; y: number; active: boolean }) => set({ pointerCursor: cursor }),
@@ -1015,32 +982,27 @@ export const useRigStore = create<RigState>((set, get) => ({
     }
   },
 
-  // Jarvis / Varuna Voice Commander & Wake-Word Architecture
+  // Varuna Voice Commander & Wake-Word Architecture
   isVoiceCommanderActive: true,
   isVarunaAwake: false,
   varunaWakeExpiry: 0,
-  lastVoiceCommand: null,
   voiceTranscript: null,
   isListeningSpeech: false,
   setVoiceCommanderActive: (active) => set({ isVoiceCommanderActive: active }),
-  setLastVoiceCommand: (cmd) => set({ lastVoiceCommand: cmd }),
   setVoiceTranscript: (transcript) => set({ voiceTranscript: transcript }),
   setIsListeningSpeech: (listening) => set({ isListeningSpeech: listening }),
 
   wakeVaruna: () => {
     const expiry = Date.now() + 10000; // 10 second active listening window
     set({ isVarunaAwake: true, varunaWakeExpiry: expiry });
-    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      // Short reply: the recogniser ignores input while VARUNA talks (echo guard)
-      varunaVoice.speakCustom('Yes?');
-    });
+    // A 150 ms chime instead of speech: no TTS start-up delay and no echo-guard dead time
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => varunaVoice.playWakeChime());
   },
 
   sleepVaruna: () => set({ isVarunaAwake: false, varunaWakeExpiry: 0 }),
 
-  // Jarvis Exploded / Split View & Pipe Slicing
+  // Varuna Exploded / Split View & Pipe Slicing
   isSplitViewActive: false,
-  splitFactor: 0.0,
   isPipeSliced: false,
   isPipeSliceModalOpen: false,
   selectedSplitPartId: null,
@@ -1048,7 +1010,6 @@ export const useRigStore = create<RigState>((set, get) => ({
   setSplitViewActive: (active) => {
     set({
       isSplitViewActive: active,
-      splitFactor: active ? 1.0 : 0.0,
       cameraViewMode: active ? 'split' : 'topside',
     });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
@@ -1060,7 +1021,6 @@ export const useRigStore = create<RigState>((set, get) => ({
     });
   },
 
-  setSplitFactor: (factor) => set({ splitFactor: factor }),
 
   setPipeSliced: (sliced) => {
     set({
@@ -1080,34 +1040,26 @@ export const useRigStore = create<RigState>((set, get) => ({
   setPipeSliceModalOpen: (open) => set({ isPipeSliceModalOpen: open }),
   setSelectedSplitPartId: (id) => set({ selectedSplitPartId: id }),
 
-  zoomToSplitPart: (partId) => {
-    const validComponent = partId.toLowerCase() as HolographicComponentType;
-    set({
-      selectedSplitPartId: partId,
-      selectedAssetId: partId,
-      cameraViewMode: 'part_detail',
-      activeHoloModal: validComponent,
-    });
-    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      varunaVoice.speakCustom(`Focusing on decoupled module ${partId}. Synchronizing holographic telemetry.`);
-    });
-  },
-
   /** VARUNA-AI voice pipeline: wake word gate -> intent parser (src/voice/VoiceCommandParser.ts) -> action. */
   executeVoiceCommand: (rawCommand: string) => {
-    set({ lastVoiceCommand: rawCommand });
 
     const say = (text: string) => {
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => varunaVoice.speakCustom(text));
     };
 
-    const hasWakeWord = WAKE_WORD_REGEX.test(rawCommand);
     const isCurrentlyAwake = get().isVarunaAwake && Date.now() < get().varunaWakeExpiry;
 
     // Asleep and no wake word: stay silent
-    if (!hasWakeWord && !isCurrentlyAwake) return;
+    if (!isCurrentlyAwake && !hasWakeWord(rawCommand)) return;
 
     const parsed = parseVoiceCommand(rawCommand);
+
+    // Questions about the rig are answered from live telemetry; other questions get a polite refusal
+    const answer = answerRigQuestion(stripWakeWord(rawCommand), parsed);
+    if (answer) {
+      set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 12000, voiceTranscript: null });
+      return say(answer);
+    }
 
     // Wake word alone ("Varuna", "hey Varuna, hello") opens the listening window
     if (!parsed) {
@@ -1119,8 +1071,8 @@ export const useRigStore = create<RigState>((set, get) => ({
         return;
       }
       // Something was said but nothing matched: keep listening and ask once
-      set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000, voiceTranscript: null, lastVoiceCommand: null });
-      import('../voice/JarvisVoiceCommander').then(({ jarvisVoiceCommander }) => jarvisVoiceCommander.resetDebounce());
+      set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000, voiceTranscript: null });
+      import('../voice/VarunaVoiceCommander').then(({ varunaVoiceCommander }) => varunaVoiceCommander.resetDebounce());
       say("Sorry, I didn't catch that. Say help to hear what I can do.");
       return;
     }
@@ -1138,14 +1090,13 @@ export const useRigStore = create<RigState>((set, get) => ({
     switch (parsed.id) {
       case 'split_view':
         return openPanel(
-          { isSplitViewActive: true, splitFactor: 1.0, cameraViewMode: 'split' },
+          { isSplitViewActive: true, cameraViewMode: 'split' },
           'Opening exploded split view. All structural assemblies decoupled.'
         );
       case 'assemble':
         return openPanel(
           {
             isSplitViewActive: false,
-            splitFactor: 0.0,
             isPipeSliced: false,
             isPipeSliceModalOpen: false,
             activeHoloModal: null,
@@ -1206,8 +1157,6 @@ export const useRigStore = create<RigState>((set, get) => ({
         );
       case 'command_dock':
         return openPanel({ isCommandDockOpen: true }, 'Opening the command dock.');
-      case 'hardware':
-        return openPanel({ isHardwareModalOpen: true }, 'Opening the hardware SCADA gateway.');
       case 'presentation':
         return openPanel({ isSihModalOpen: true }, 'Opening the presentation deck.');
       case 'database':
@@ -1231,18 +1180,11 @@ export const useRigStore = create<RigState>((set, get) => ({
         return openPanel({ cameraViewMode: 'subsea' }, 'Diving below the waterline.');
       case 'view_manifold':
         return openPanel({ cameraViewMode: 'manifold' }, 'Moving to the seabed manifold.');
-      case 'mode_hologram':
-        return say("You're already in the hologram view.");
-      case 'mode_realistic':
-      case 'mode_thermal':
-      case 'mode_acoustic':
-      case 'mode_color':
-        return say('The twin runs in hologram view only.');
       case 'start_camera':
-        import('../vision/JarvisGestureVisionEngine').then(({ jarvisGestureEngine }) => jarvisGestureEngine.start());
+        import('../vision/VarunaGestureEngine').then(({ varunaGestureEngine }) => varunaGestureEngine.start());
         return say('Starting the gesture camera.');
       case 'stop_camera':
-        import('../vision/JarvisGestureVisionEngine').then(({ jarvisGestureEngine }) => jarvisGestureEngine.stop());
+        import('../vision/VarunaGestureEngine').then(({ varunaGestureEngine }) => varunaGestureEngine.stop());
         return say('Gesture camera off.');
       case 'close':
         return openPanel(
@@ -1251,7 +1193,6 @@ export const useRigStore = create<RigState>((set, get) => ({
             isSihModalOpen: false,
             isEodModalOpen: false,
             isReportModalOpen: false,
-            isHardwareModalOpen: false,
             isPhysicsModalOpen: false,
             isWeatherPanelOpen: false,
             isPipeSliceModalOpen: false,

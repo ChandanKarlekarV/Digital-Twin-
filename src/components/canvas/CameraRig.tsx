@@ -4,13 +4,8 @@ import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { useRigStore } from '../../store/useRigStore';
-import { rigModelCache, DEFAULT_RIG_URL, SUBSEA_SHIFT_M } from '../../services/RigModelCache';
+import { rigModelCache, DEFAULT_RIG_URL } from '../../services/RigModelCache';
 
-/** Presets that look at seabed equipment (pipes, wells, manifold) */
-const SEABED_MODES = new Set<string>([
-  'manifold', 'riser', 'pipe1', 'pipe2', 'pipe3', 'pipe4', 'pipe5', 'pipe6', 'pipe7', 'pipe8', 'pipe9', 'pipe1_slice',
-  'well1', 'well2', 'well3', 'well4', 'well5', 'well6', 'well7', 'wells1_7',
-]);
 
 /**
  * Camera Rig with Fixed 360-Degree Free Orbit:
@@ -242,12 +237,6 @@ export const CameraRig: React.FC = () => {
       targetCamPos.current.set(20, 5, 25);
       targetLookAt.current.set(0, 0, 0);
       transitionSpeed.current = 3.8;
-    }
-
-    // Seabed presets were authored for the original 16 m water depth
-    if (SEABED_MODES.has(cameraViewMode)) {
-      targetCamPos.current.y -= SUBSEA_SHIFT_M;
-      targetLookAt.current.y -= SUBSEA_SHIFT_M;
     }
   }, [cameraViewMode]);
 

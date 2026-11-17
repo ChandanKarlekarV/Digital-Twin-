@@ -6,7 +6,7 @@ import { OilRigModel } from './OilRigModel';
 import { OceanSurface } from './OceanSurface';
 import { InteractiveHighlightRings } from './InteractiveHighlightRings';
 import { OceanCurrentVisualizer } from './OceanCurrentVisualizer';
-import { JarvisSplitExplodedView } from './JarvisSplitExplodedView';
+import { PipeSliceView } from './PipeSliceView';
 import { HolographicTargetPointer } from './HolographicTargetPointer';
 import { HOLO } from '../../shaders/HoloPalette';
 
@@ -68,7 +68,7 @@ export const Scene: React.FC = () => {
         <OceanSurface />
         <OceanCurrentVisualizer />
         <InteractiveHighlightRings />
-        <JarvisSplitExplodedView />
+        <PipeSliceView />
         <HolographicTargetPointer />
       </Suspense>
     </Canvas>

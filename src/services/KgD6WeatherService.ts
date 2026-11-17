@@ -78,10 +78,10 @@ export class KgD6WeatherService {
       const lon = 82.33;
 
       // 1. Fetch general weather
-      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover&hourly=temperature_2m,precipitation_probability,wind_speed_10m&forecast_days=2`;
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,visibility&hourly=temperature_2m,precipitation_probability,wind_speed_10m&forecast_days=2`;
       
       // 2. Fetch marine wave & swell data
-      const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,ocean_current_velocity,ocean_current_direction&hourly=wave_height,wave_period,wave_direction&forecast_days=2`;
+      const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,ocean_current_velocity,ocean_current_direction,sea_surface_temperature&hourly=wave_height,wave_period,wave_direction&forecast_days=2`;
 
       const [weatherRes, marineRes] = await Promise.allSettled([
         fetch(weatherUrl),
@@ -102,16 +102,16 @@ export class KgD6WeatherService {
         const curr = weatherData.current;
         const marineCurr = marineData?.current || {};
 
-        const windKmh = curr.wind_speed_10m || 24;
+        const windKmh = curr.wind_speed_10m ?? 24;
         const windKnots = windKmh * 0.539957;
-        const gustKnots = (curr.wind_gusts_10m || 35) * 0.539957;
-        const windDir = curr.wind_direction_10m || 65;
+        const gustKnots = (curr.wind_gusts_10m ?? 35) * 0.539957;
+        const windDir = curr.wind_direction_10m ?? 65;
 
         const waveHeight = marineCurr.wave_height != null ? marineCurr.wave_height : 1.6;
         const swellHeight = marineCurr.swell_wave_height != null ? marineCurr.swell_wave_height : 1.2;
         const wavePeriod = marineCurr.wave_period != null ? marineCurr.wave_period : 7.2;
         const waveDir = marineCurr.wave_direction != null ? marineCurr.wave_direction : 70;
-        const currentVel = marineCurr.ocean_current_velocity != null ? marineCurr.ocean_current_velocity * 1.94384 : 2.4;
+        const currentVel = marineCurr.ocean_current_velocity != null ? marineCurr.ocean_current_velocity / 1.852 : 1.2; // API gives km/h
         const currentDir = marineCurr.ocean_current_direction != null ? marineCurr.ocean_current_direction : 45;
 
         // Build 24h forecast
@@ -120,8 +120,10 @@ export class KgD6WeatherService {
         const hourlyM = marineData?.hourly || {};
         const times = hourlyW.time || [];
 
-        for (let i = 0; i < Math.min(24, times.length); i++) {
-          const tStr = times[i];
+        // Hourly arrays start at 00:00 UTC today; begin the outlook at the current hour
+        const firstHour = Math.max(0, times.findIndex((t: string) => Date.parse(t + 'Z') >= now - 3600000));
+        for (let i = firstHour; i < Math.min(firstHour + 24, times.length); i++) {
+          const tStr = times[i] + 'Z'; // Open-Meteo times are UTC without a zone suffix
           const d = new Date(tStr);
           const hour = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
           const wH = hourlyM.wave_height?.[i] != null ? hourlyM.wave_height[i] : 1.4 + Math.sin(i * 0.4) * 0.5;
@@ -162,13 +164,13 @@ export class KgD6WeatherService {
           locationName: 'Krishna Godavari Basin • Bay of Bengal',
           blockCode: 'KG-DWN-98/3 (KG-D6 Deepwater Block)',
           timestamp: new Date().toISOString(),
-          airTemperatureC: Number((curr.temperature_2m || 29.8).toFixed(1)),
-          seaSurfaceTemperatureC: 29.4,
-          apparentTemperatureC: Number((curr.apparent_temperature || 34.2).toFixed(1)),
-          relativeHumidityPct: curr.relative_humidity_2m || 78,
-          surfacePressureHpa: Number((curr.surface_pressure || 1008.4).toFixed(1)),
-          visibilityKm: 12.5,
-          cloudCoverPct: curr.cloud_cover || 42,
+          airTemperatureC: Number((curr.temperature_2m ?? 29.8).toFixed(1)),
+          seaSurfaceTemperatureC: Number((marineCurr.sea_surface_temperature ?? 28.5).toFixed(1)),
+          apparentTemperatureC: Number((curr.apparent_temperature ?? 34.2).toFixed(1)),
+          relativeHumidityPct: curr.relative_humidity_2m ?? 78,
+          surfacePressureHpa: Number((curr.surface_pressure ?? 1008.4).toFixed(1)),
+          visibilityKm: curr.visibility != null ? Number((curr.visibility / 1000).toFixed(1)) : 12.5,
+          cloudCoverPct: curr.cloud_cover ?? 42,
           windSpeedKnots: Number(windKnots.toFixed(1)),
           windGustsKnots: Number(gustKnots.toFixed(1)),
           windDirectionDeg: windDir,
@@ -233,7 +235,7 @@ export class KgD6WeatherService {
       blockCode: 'KG-DWN-98/3 (KG-D6 Deepwater Block)',
       timestamp: new Date().toISOString(),
       airTemperatureC: 30.2,
-      seaSurfaceTemperatureC: 29.4,
+      seaSurfaceTemperatureC: 28.5,
       apparentTemperatureC: 35.6,
       relativeHumidityPct: 82,
       surfacePressureHpa: 1007.8,
@@ -266,8 +268,8 @@ export class KgD6WeatherService {
     const condition = report.cloudCoverPct > 60 ? 'mostly cloudy with scattered monsoon mist' : report.cloudCoverPct > 30 ? 'partly cloudy and clear' : 'sunny and clear';
     
     // Future forecast trend
-    const maxWave = Math.max(...report.forecast24h.map((f) => f.waveHeightM), 1.8);
-    const maxWind = Math.max(...report.forecast24h.map((f) => f.windSpeedKt), 24.0);
+    const maxWave = Math.max(report.significantWaveHeightM, ...report.forecast24h.map((f) => f.waveHeightM));
+    const maxWind = Math.max(report.windSpeedKnots, ...report.forecast24h.map((f) => f.windSpeedKt));
     const hasRain = report.forecast24h.some((f) => f.precipitationMm > 2.0);
 
     const futureOutlook = hasRain

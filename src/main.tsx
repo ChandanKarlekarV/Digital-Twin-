@@ -6,7 +6,7 @@ import './index.css';
 // This means the model is already partially or fully downloaded by the time
 // the 3D canvas mounts, eliminating the blank-model delay on first load.
 import { rigModelCache } from './services/RigModelCache';
-rigModelCache.preload('/models/rig.bin').catch(() => {/* silent */});
+rigModelCache.preload('/models/rig.bin.gz').catch(() => {/* silent */});
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

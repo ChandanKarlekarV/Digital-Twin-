@@ -19,7 +19,7 @@ import { useRigStore } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
-export const JarvisPipeSliceModal: React.FC = () => {
+export const PipeSliceModal: React.FC = () => {
   const isPipeSliceModalOpen = useRigStore((s) => s.isPipeSliceModalOpen);
   const setPipeSliceModalOpen = useRigStore((s) => s.setPipeSliceModalOpen);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
@@ -64,7 +64,7 @@ export const JarvisPipeSliceModal: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-reliance-cyan bg-reliance-cyan/20 px-2 py-0.5 rounded border border-reliance-cyan/40">
-                  JARVIS HOLOGRAPHIC DISSECTION
+                  VARUNA HOLOGRAPHIC DISSECTION
                 </span>
                 <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />

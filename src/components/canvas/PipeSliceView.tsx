@@ -10,7 +10,7 @@ import { Html } from '@react-three/drei';
 import { useRigStore } from '../../store/useRigStore';
 import { HOLO, holoMaterial } from '../../shaders/HoloPalette';
 
-export const JarvisSplitExplodedView: React.FC = () => {
+export const PipeSliceView: React.FC = () => {
   const isPipeSliced = useRigStore((s) => s.isPipeSliced);
   const isPipeSliceModalOpen = useRigStore((s) => s.isPipeSliceModalOpen);
   const activeHoloModal = useRigStore((s) => s.activeHoloModal);

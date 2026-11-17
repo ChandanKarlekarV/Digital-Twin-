@@ -106,16 +106,10 @@ export class MidnightSettlementEngineService {
     const grossValueInrCr = Number(((grossValueUsd * usdToInr) / 10000000).toFixed(2));
 
     const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgP.toFixed(1)}:${avgApi.toFixed(1)}`;
-    let hashSig = `CERT-DGH-${dateStr.replace(/-/g, '')}`;
-    try {
-      if (typeof btoa !== 'undefined') {
-        hashSig = `CERT-DGH-${btoa(rawPayload).slice(0, 16)}`;
-      } else if (typeof Buffer !== 'undefined') {
-        hashSig = `CERT-DGH-${Buffer.from(rawPayload).toString('base64').slice(0, 16)}`;
-      }
-    } catch {
-      hashSig = `CERT-DGH-${Math.random().toString(36).substring(2, 18).toUpperCase()}`;
-    }
+    // FNV-1a 64-bit digest of the settled figures: any change to a value changes the certificate
+    let h = 0xcbf29ce484222325n;
+    for (let i = 0; i < rawPayload.length; i++) h = ((h ^ BigInt(rawPayload.charCodeAt(i))) * 0x100000001b3n) & 0xffffffffffffffffn;
+    const hashSig = `CERT-DGH-${h.toString(16).toUpperCase().padStart(16, '0')}`;
 
     const summary: DailyProductionSummary = {
       date_str: dateStr,

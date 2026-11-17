@@ -14,28 +14,24 @@
     "test:integration": "npx tsx src/test/integration.test.ts",
     "test:voice": "npx tsx src/test/voiceParser.test.ts",
     "test:gestures": "npx tsx src/test/gestureClassifier.test.ts",
+    "test:physics": "npx tsx src/physics/verifyPhysics.ts",
+    "test": "npm run test:voice && npm run test:gestures && npm run test:physics && npm run test:integration",
     "convert:model": "node --max-old-space-size=8192 scripts/convert-rig-model.mjs",
     "postinstall": "node scripts/copy-mediapipe.mjs",
-    "prebuild": "node scripts/copy-mediapipe.mjs",
-    "tauri": "tauri"
+    "prebuild": "node scripts/copy-mediapipe.mjs"
   },
   "dependencies": {
     "@mediapipe/hands": "0.4.1675469240",
     "@react-three/drei": "^9.121.4",
     "@react-three/fiber": "^8.17.14",
-    "@tauri-apps/api": "^2.2.0",
-    "@tauri-apps/plugin-shell": "^2.2.0",
-    "clsx": "^2.1.1",
     "katex": "^0.16.11",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^3.0.1",
     "three": "^0.173.0",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@types/katex": "^0.16.7",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -43,7 +39,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.2",
-    "pptxgenjs": "^4.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.7.2",
     "vite": "^6.1.0"

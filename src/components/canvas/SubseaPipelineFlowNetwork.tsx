@@ -26,7 +26,6 @@ interface FlowPipeDefinition {
  */
 export const SubseaPipelineFlowNetwork: React.FC = () => {
   const setSelectedAssetId = useRigStore((s) => s.setSelectedAssetId);
-  const scannerMode = useRigStore((s) => s.scannerMode);
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
   const incidentPhase = useRigStore((s) => s.incidentPhase);
 

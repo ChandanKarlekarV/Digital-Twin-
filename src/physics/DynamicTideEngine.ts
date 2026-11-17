@@ -1,14 +1,15 @@
 /**
- * Dynamic 10-Second Metocean Tide & Current Phase Engine
- * Automatically transitions through 4 realistic physical oceanographic phases
- * every 10 seconds:
- *   Phase 0: FLOOD (Rising Inflow) -> 2.6 kt, NE (045°), 1.4m Swell
- *   Phase 1: HIGH SLACK (High Water) -> 0.8 kt, ENE (075°), 0.8m Swell
- *   Phase 2: EBB (Falling Outflow) -> 4.6 kt, SW (225°), 2.8m Swell
- *   Phase 3: STORM SURGE (Bay of Bengal Surge) -> 8.8 kt, SSW (205°), 6.5m Swell
+ * Metocean current engine.
+ *
+ * Primary source: live Open-Meteo marine data at the KG-D6 block (surface current speed and
+ * direction, wave height and period), refreshed every 10 minutes. The current shown in the
+ * twin eases toward those real values. Only when the feed is unreachable (offline, blocked)
+ * does it fall back to a four-phase tidal cycle, one minute per phase. Picking a phase by
+ * hand overrides the live feed until the next refresh.
  */
 
 import { useRigStore, CurrentFlowPower, MetoceanCondition, TidePhase } from '../store/useRigStore';
+import { KgD6WeatherService } from '../services/KgD6WeatherService';
 
 export interface DynamicTidePhaseDefinition {
   index: number;
@@ -25,147 +26,135 @@ export interface DynamicTidePhaseDefinition {
 }
 
 export const TIDE_PHASES_SCHEDULE: DynamicTidePhaseDefinition[] = [
-  {
-    index: 0,
-    id: 'flood',
-    power: 'moderate',
-    metocean: 'calm',
-    label: 'FLOOD PHASE (Rising Tide)',
-    speedKnots: 2.6,
-    directionDeg: 45,
-    swellHeightM: 1.4,
-    wavePeriodSec: 7.2,
-    waterCutAdjustmentPct: 0.0,
-    description: 'Lunar tidal flood driving deepwater current Northeast at 2.6 knots.',
-  },
-  {
-    index: 1,
-    id: 'slack',
-    power: 'slow',
-    metocean: 'calm',
-    label: 'HIGH SLACK (Peak Stand)',
-    speedKnots: 0.8,
-    directionDeg: 75,
-    swellHeightM: 0.8,
-    wavePeriodSec: 9.0,
-    waterCutAdjustmentPct: -1.2,
-    description: 'High water turnaround. Minimal hydrodynamic lateral drag on risers.',
-  },
-  {
-    index: 2,
-    id: 'ebb',
-    power: 'fast',
-    metocean: 'monsoon',
-    label: 'EBB PHASE (Monsoon Outflow)',
-    speedKnots: 4.6,
-    directionDeg: 225,
-    swellHeightM: 2.8,
-    wavePeriodSec: 6.4,
-    waterCutAdjustmentPct: +1.5,
-    description: 'Strong tidal ebb surging Southwest towards Godavari deep canyon at 4.6 knots.',
-  },
-  {
-    index: 3,
-    id: 'spring_surge',
-    power: 'storm',
-    metocean: 'cyclonic',
-    label: 'CYCLONIC STORM SURGE',
-    speedKnots: 8.8,
-    directionDeg: 205,
-    swellHeightM: 6.5,
-    wavePeriodSec: 5.2,
-    waterCutAdjustmentPct: +4.8,
-    description: 'Bay of Bengal tropical storm surge. Extreme surface swell and maximum column shear.',
-  },
+  { index: 0, id: 'flood', power: 'moderate', metocean: 'calm', label: 'FLOOD PHASE (Rising Tide)', speedKnots: 1.2, directionDeg: 45, swellHeightM: 1.4, wavePeriodSec: 7.2, waterCutAdjustmentPct: 0, description: 'Flood tide setting northeast along the shelf.' },
+  { index: 1, id: 'slack', power: 'slow', metocean: 'calm', label: 'HIGH SLACK (Peak Stand)', speedKnots: 0.3, directionDeg: 75, swellHeightM: 0.8, wavePeriodSec: 9.0, waterCutAdjustmentPct: -1.2, description: 'High-water turnaround. Minimal drag on the risers.' },
+  { index: 2, id: 'ebb', power: 'fast', metocean: 'monsoon', label: 'EBB PHASE (Monsoon Outflow)', speedKnots: 2.0, directionDeg: 225, swellHeightM: 2.8, wavePeriodSec: 6.4, waterCutAdjustmentPct: 1.5, description: 'Ebb tide plus monsoon outflow setting southwest.' },
+  { index: 3, id: 'spring_surge', power: 'storm', metocean: 'cyclonic', label: 'CYCLONIC STORM SURGE', speedKnots: 3.5, directionDeg: 205, swellHeightM: 6.5, wavePeriodSec: 9.5, waterCutAdjustmentPct: 4.8, description: 'Bay of Bengal cyclone surge. Extreme swell and column shear.' },
 ];
+
+/** Seawater density (kg/m³), gravity, model water depth to the wellheads/reservoir (m) */
+const RHO_SEA = 1025;
+const G = 9.81;
+const DEPTH_M = 2040;
+const P_ATM_BAR = 1.01325;
+const KNOT_MS = 0.514444;
+
+const LIVE_REFRESH_MS = 10 * 60 * 1000;
+
+interface LiveSea {
+  speedKt: number;
+  dirDeg: number;
+  waveM: number;
+  periodS: number;
+  at: number;
+}
+
+/** Closest tidal regime for a measured surface current speed */
+const phaseForSpeed = (kt: number, waveM: number) => (waveM >= 4 || kt >= 3 ? 3 : kt < 0.5 ? 1 : kt < 1.5 ? 0 : 2);
+
+export function compassLabel(deg: number): string {
+  const norm = ((deg % 360) + 360) % 360;
+  const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return `${names[Math.round(norm / 45) % 8]} (${Math.round(norm).toString().padStart(3, '0')}°)`;
+}
 
 class DynamicTideEngine {
   private timerId: number | null = null;
   private animTimerId: number | null = null;
+  private liveTimerId: number | null = null;
   private secondsInCurrentPhase = 0;
-  private readonly PHASE_DURATION_SECONDS = 60; // 1 minute per tidal cycle phase
+  private readonly PHASE_DURATION_SECONDS = 60;
 
-  // Interpolation targets for smooth transition
-  private targetSpeedKnots = 2.6;
-  private targetDirectionDeg = 45;
-  private currentLerpedSpeed = 2.6;
-  private currentLerpedDirection = 45;
+  private live: LiveSea | null = null;
+  private manualUntil = 0;
+  private targetSpeedKnots = TIDE_PHASES_SCHEDULE[0].speedKnots;
+  private targetDirectionDeg = TIDE_PHASES_SCHEDULE[0].directionDeg;
+  private speed = this.targetSpeedKnots;
+  private direction = this.targetDirectionDeg;
 
   public start(): void {
     if (this.timerId !== null) return;
-
     this.secondsInCurrentPhase = 0;
-    useRigStore.setState({
-      dynamicTideSecondsRemaining: this.PHASE_DURATION_SECONDS,
-    });
-
-    this.timerId = window.setInterval(() => {
-      this.tick();
-    }, 1000);
-
-    // Smooth continuous lerp loop (30 FPS) to prevent any sudden jumps
-    this.animTimerId = window.setInterval(() => {
-      this.smoothStep();
-    }, 33);
+    useRigStore.setState({ dynamicTideSecondsRemaining: this.PHASE_DURATION_SECONDS });
+    this.timerId = window.setInterval(() => this.tick(), 1000);
+    this.animTimerId = window.setInterval(() => this.smoothStep(), 50);
+    this.syncLive();
+    this.liveTimerId = window.setInterval(() => this.syncLive(), LIVE_REFRESH_MS);
   }
 
   public stop(): void {
-    if (this.timerId !== null) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
-    if (this.animTimerId !== null) {
-      clearInterval(this.animTimerId);
-      this.animTimerId = null;
+    for (const id of [this.timerId, this.animTimerId, this.liveTimerId]) if (id !== null) clearInterval(id);
+    this.timerId = this.animTimerId = this.liveTimerId = null;
+  }
+
+  /** True while the current comes from the real Open-Meteo feed */
+  public get isLive(): boolean {
+    return !!this.live && Date.now() > this.manualUntil;
+  }
+
+  private async syncLive(): Promise<void> {
+    try {
+      const r = await KgD6WeatherService.getLiveWeather(true);
+      if (!r.isLiveFetched) return;
+      this.live = { speedKt: r.oceanCurrentSpeedKt, dirDeg: r.oceanCurrentDirectionDeg, waveM: r.significantWaveHeightM, periodS: r.peakWavePeriodSec, at: Date.now() };
+      if (this.isLive) this.applyLive();
+    } catch {
+      // keep the tidal fallback
     }
   }
 
+  private applyLive(): void {
+    const l = this.live!;
+    this.targetSpeedKnots = l.speedKt;
+    this.targetDirectionDeg = l.dirDeg;
+    const phase = TIDE_PHASES_SCHEDULE[phaseForSpeed(l.speedKt, l.waveM)];
+    useRigStore.setState({ tidePhaseIndex: phase.index, tidePhase: phase.id, currentFlowPower: phase.power, metoceanCondition: phase.metocean });
+  }
+
+  /** Eases the displayed current toward its target (time constant ~1.2 s) */
   private smoothStep(): void {
     const store = useRigStore.getState();
-    if (!store.isDynamicTideCycling) return;
-
-    // Smoothly blend speed (lerp alpha 0.04)
-    const speedDelta = this.targetSpeedKnots - this.currentLerpedSpeed;
-    if (Math.abs(speedDelta) > 0.01) {
-      this.currentLerpedSpeed += speedDelta * 0.04;
-      useRigStore.setState({ currentSpeedKnots: Number(this.currentLerpedSpeed.toFixed(2)) });
+    if (!store.isDynamicTideCycling) {
+      // Manual mode: follow the sliders so re-enabling auto eases from where the user left it
+      this.speed = store.currentSpeedKnots;
+      this.direction = store.currentDirectionDeg;
+      return;
     }
-
-    // Smoothly blend angle across shortest circular arc
-    let angleDelta = ((this.targetDirectionDeg - this.currentLerpedDirection + 540) % 360) - 180;
-    if (Math.abs(angleDelta) > 0.1) {
-      this.currentLerpedDirection = (this.currentLerpedDirection + angleDelta * 0.03 + 360) % 360;
-      useRigStore.setState({
-        currentDirectionDeg: Math.round(this.currentLerpedDirection),
-        currentDirectionLabel: this.getCompassLabel(this.currentLerpedDirection),
-      });
-    }
+    const ds = this.targetSpeedKnots - this.speed;
+    const da = ((this.targetDirectionDeg - this.direction + 540) % 360) - 180;
+    if (Math.abs(ds) < 0.01 && Math.abs(da) < 0.1) return;
+    this.speed += ds * 0.04;
+    this.direction = (this.direction + da * 0.04 + 360) % 360;
+    useRigStore.setState({
+      currentSpeedKnots: Number(this.speed.toFixed(2)),
+      currentDirectionDeg: Math.round(this.direction),
+      currentDirectionLabel: compassLabel(this.direction),
+    });
   }
 
   public tick(): void {
     const store = useRigStore.getState();
     if (!store.isDynamicTideCycling) return;
-
+    if (this.isLive) {
+      if (this.manualUntil && Date.now() > this.manualUntil) this.manualUntil = 0;
+      if (this.targetSpeedKnots !== this.live!.speedKt || this.targetDirectionDeg !== this.live!.dirDeg) this.applyLive();
+      return;
+    }
     this.secondsInCurrentPhase++;
-    const remaining = Math.max(0, this.PHASE_DURATION_SECONDS - this.secondsInCurrentPhase);
-
-    useRigStore.setState({
-      dynamicTideSecondsRemaining: remaining,
-    });
-
+    useRigStore.setState({ dynamicTideSecondsRemaining: Math.max(0, this.PHASE_DURATION_SECONDS - this.secondsInCurrentPhase) });
     if (this.secondsInCurrentPhase >= this.PHASE_DURATION_SECONDS) {
-      this.secondsInCurrentPhase = 0;
-      const nextPhaseIndex = (store.tidePhaseIndex + 1) % TIDE_PHASES_SCHEDULE.length;
-      this.applyPhase(nextPhaseIndex);
+      this.applyPhase((store.tidePhaseIndex + 1) % TIDE_PHASES_SCHEDULE.length, false);
     }
   }
 
-  public applyPhase(phaseIndex: number): void {
+  /** Sets a tidal phase. Chosen by hand it overrides the live feed until the next refresh. */
+  public applyPhase(phaseIndex: number, manual = true): void {
     const phase = TIDE_PHASES_SCHEDULE[phaseIndex] || TIDE_PHASES_SCHEDULE[0];
+    if (manual && this.live) this.manualUntil = Date.now() + LIVE_REFRESH_MS;
+    if (manual) useRigStore.setState({ isDynamicTideCycling: true });
     this.secondsInCurrentPhase = 0;
     this.targetSpeedKnots = phase.speedKnots;
     this.targetDirectionDeg = phase.directionDeg;
-
     useRigStore.setState({
       tidePhaseIndex: phaseIndex,
       tidePhase: phase.id,
@@ -175,27 +164,18 @@ class DynamicTideEngine {
     });
   }
 
-  /**
-   * Generates a spoken diagnostic report for "varuna tell me the water status"
-   */
+  /** Spoken report for "Varuna, water status" */
   public getWaterStatusSpeech(): string {
     const store = useRigStore.getState();
-    const phase = TIDE_PHASES_SCHEDULE[store.tidePhaseIndex] || TIDE_PHASES_SCHEDULE[0];
-    const seabedPressureBar = Math.round(204 + (store.currentSpeedKnots * 1.8)); // Subsea hydrostatic + dynamic head at -2040m
-
-    return `Hydrodynamic water telemetry report: Current flow velocity is ${store.currentSpeedKnots.toFixed(1)} knots heading ${store.currentDirectionLabel}. Subsea seabed hydrostatic pressure is ${seabedPressureBar} bar at 2,040 meters depth. Ocean state is in ${phase.label}, with surface swell height at ${phase.swellHeightM} meters. Tidal cycle duration is set to 1 minute per phase with smooth hydrodynamic transitions active.`;
-  }
-
-  private getCompassLabel(deg: number): string {
-    const norm = ((deg % 360) + 360) % 360;
-    if (norm >= 337.5 || norm < 22.5) return `N (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 67.5) return `NE (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 112.5) return `E (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 157.5) return `SE (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 202.5) return `S (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 247.5) return `SW (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    if (norm < 292.5) return `W (${Math.round(norm).toString().padStart(3, '0')}°)`;
-    return `NW (${Math.round(norm).toString().padStart(3, '0')}°)`;
+    const kt = store.currentSpeedKnots;
+    // Absolute pressure at depth: P = Patm + ρgh. The current's dynamic head ½ρv² is shown separately: it is tiny.
+    const seabedBar = P_ATM_BAR + (RHO_SEA * G * DEPTH_M) / 1e5;
+    const dynamicMbar = (0.5 * RHO_SEA * (kt * KNOT_MS) ** 2) / 100;
+    const live = this.isLive && this.live;
+    const sea = live
+      ? `Significant wave height is ${live.waveM.toFixed(1)} metres with a ${live.periodS.toFixed(0)} second period, from the live Open-Meteo marine feed.`
+      : `The live marine feed is unavailable, so the twin is running the ${TIDE_PHASES_SCHEDULE[store.tidePhaseIndex]?.label.toLowerCase() ?? 'tidal'} model.`;
+    return `Surface current is ${kt.toFixed(1)} knots setting ${store.currentDirectionLabel}. ${sea} Hydrostatic pressure at ${DEPTH_M.toLocaleString('en-US')} metres is ${seabedBar.toFixed(1)} bar; the current adds only ${dynamicMbar.toFixed(1)} millibar of dynamic head.`;
   }
 }
 

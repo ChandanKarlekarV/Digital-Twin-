@@ -28,7 +28,6 @@ import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 import { KaTeXBlock } from '../common/KaTeXBlock';
 import { rigModelCache, RigPart, COMPONENT_TO_PART, DEFAULT_RIG_URL } from '../../services/RigModelCache';
 import { createHolographicMaterial } from '../../shaders/HolographicMaterial';
-import { buildHull } from '../canvas/SemiSubHull';
 import { HOLO, holoMaterial } from '../../shaders/HoloPalette';
 
 interface HoloRigSectionProps {
@@ -57,24 +56,7 @@ const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate
     if (isPipe || !partId) return;
     let cancelled = false;
     rigModelCache.preload(customObjUrl).then(() => {
-      if (cancelled) return;
-      const modelPart = rigModelCache.getPart(customObjUrl, partId);
-      if (modelPart || partId !== 'jackup_legs') {
-        setPart(modelPart);
-        return;
-      }
-      // Built-in rig: the legs are the generated semi-submersible hull, not a model part
-      const { hull, edges } = buildHull();
-      hull.computeBoundingBox();
-      setPart({
-        id: 'jackup_legs',
-        label: 'Hull · Columns & Pontoons',
-        component: 'jackup_legs',
-        geometry: hull,
-        edges,
-        center: hull.boundingBox!.getCenter(new THREE.Vector3()),
-        explodeOffset: new THREE.Vector3(),
-      });
+      if (!cancelled) setPart(rigModelCache.getPart(customObjUrl, partId));
     });
     return () => {
       cancelled = true;
@@ -637,7 +619,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-reliance-cyan bg-reliance-cyan/20 px-2 py-0.5 rounded border border-reliance-cyan/40">
-                  JARVIS HOLOGRAPHIC 3D DIAGNOSTICS
+                  VARUNA HOLOGRAPHIC 3D DIAGNOSTICS
                 </span>
                 <span className="text-[10px] font-mono text-cyan-300 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-ping" />

@@ -17,13 +17,12 @@ import {
   Crosshair,
 } from 'lucide-react';
 import { useRigStore, RecognizedGesture } from '../../store/useRigStore';
-import { jarvisGestureEngine } from '../../vision/JarvisGestureVisionEngine';
-import { jarvisVoiceCommander } from '../../voice/JarvisVoiceCommander';
+import { varunaGestureEngine } from '../../vision/VarunaGestureEngine';
+import { varunaVoiceCommander } from '../../voice/VarunaVoiceCommander';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
-export const JarvisGestureVoiceHUD: React.FC = () => {
+export const VarunaGestureVoiceHUD: React.FC = () => {
   const isGestureCameraActive = useRigStore((s) => s.isGestureCameraActive);
-  const isSyntheticCameraActive = useRigStore((s) => s.isSyntheticCameraActive);
   const cameraPermissionState = useRigStore((s) => s.cameraPermissionState);
   const cameraErrorMessage = useRigStore((s) => s.cameraErrorMessage);
   const gestureDetected = useRigStore((s) => s.gestureDetected);
@@ -51,10 +50,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    jarvisVoiceCommander.start();
+    varunaVoiceCommander.start();
     return () => {
-      jarvisVoiceCommander.stop();
-      jarvisGestureEngine.stop();
+      varunaVoiceCommander.stop();
+      varunaGestureEngine.stop();
     };
   }, []);
 
@@ -75,11 +74,11 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     return () => clearInterval(interval);
   }, [isVarunaAwake, varunaWakeExpiry]);
 
-  // Connect viewfinder canvas to dual-hand skeleton output with Jarvis Holographic UI
+  // Connect viewfinder canvas to dual-hand skeleton output with Varuna Holographic UI
   useEffect(() => {
     if (!isGestureCameraActive) return;
 
-    const unregister = jarvisGestureEngine.registerFrameCallback((result, video) => {
+    const unregister = varunaGestureEngine.registerFrameCallback((result, video) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -265,10 +264,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
   const handleToggleCamera = async () => {
     if (isGestureCameraActive) {
-      jarvisGestureEngine.stop();
+      varunaGestureEngine.stop();
       varunaVoice.speakCustom('Gesture camera disabled.');
     } else {
-      const ok = await jarvisGestureEngine.start();
+      const ok = await varunaGestureEngine.start();
       if (ok) {
         varunaVoice.speakCustom(
           'Gesture vision online. Move an open palm to rotate, hold it still to freeze, and point to aim.'
@@ -277,12 +276,6 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
     }
   };
 
-  const handleStartDemoVision = () => {
-    jarvisGestureEngine.startSynthetic();
-    varunaVoice.speakCustom(
-      'Jarvis decoupled dual-hand demo online: left hand zooming, right hand orbiting model.'
-    );
-  };
 
   const triggerGesture = (
     type: 'SPLIT' | 'MERGE' | 'MOVE' | 'POINT' | 'PALM' | 'SWIPE_LEFT' | 'INDEX'
@@ -336,7 +329,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-reliance-cyan animate-pulse" />
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-reliance-cyan flex items-center gap-1">
-              <span>JARVIS DUAL-HAND HOLOGRAPHIC VISION</span>
+              <span>VARUNA DUAL-HAND HOLOGRAPHIC VISION</span>
             </span>
           </div>
 
@@ -457,12 +450,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
                   {/* Mode & FPS info */}
                   <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/85 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                    {gestureSpatial?.activeMode === 'JARVIS_DECOUPLED_DUAL'
+                    {gestureSpatial?.activeMode === 'DECOUPLED_DUAL'
                       ? '🤖 RIGHT=ZOOM (✌️🤙) | LEFT=ORBIT (👆🤚)'
                       : gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
                       ? '⚡ SIMULTANEOUS MOVE+ZOOM'
-                      : isSyntheticCameraActive
-                      ? 'DEMO SIMULATOR 60 FPS'
                       : 'WEBCAM MULTI-TRACK 30 FPS'}
                   </div>
                 </div>
@@ -486,10 +477,10 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   </div>
                 )}
 
-                {/* JARVIS DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
+                {/* VARUNA DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
                 <div className="space-y-1 bg-black/40 p-1.5 rounded-lg border border-white/10">
                   <div className="flex items-center justify-between text-[8px] font-bold text-reliance-cyan">
-                    <span>JARVIS HOLOGRAPHIC GESTURES:</span>
+                    <span>VARUNA HOLOGRAPHIC GESTURES:</span>
                     <span className="text-white/60">MOVE / POINT / SPLIT / MERGE</span>
                   </div>
 
@@ -609,14 +600,6 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                     <span>
                       {cameraPermissionState === 'requesting' ? 'CONNECTING...' : 'START WEBCAM'}
                     </span>
-                  </button>
-
-                  <button
-                    onClick={handleStartDemoVision}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-400/40 text-[9px] font-bold text-emerald-200 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Sparkles className="w-3 h-3 text-emerald-300" />
-                    <span>JARVIS DEMO</span>
                   </button>
                 </div>
               </div>

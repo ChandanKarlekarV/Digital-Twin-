@@ -1,25 +1,40 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Suspense, lazy } from 'react';
 import { Scene } from './components/canvas/Scene';
 import { telemetryEmitter } from './physics/TelemetryEmitter';
 import { useRigStore, CameraViewMode } from './store/useRigStore';
 import { CommandDock } from './components/hud/CommandDock';
 import { TelemetryDrawer } from './components/hud/TelemetryDrawer';
-import { PhysicsAuditModal } from './components/hud/PhysicsAuditModal';
 import { EmergencyIncidentPanel } from './components/hud/EmergencyIncidentPanel';
 import { VarunaVoiceIndicator } from './components/hud/VarunaVoiceIndicator';
 import { CurrentControlWidget } from './components/hud/CurrentControlWidget';
 import { CriticalAnomaliesMonitor } from './components/hud/CriticalAnomaliesMonitor';
 import { IncidentControlManager } from './components/hud/IncidentControlManager';
-import { ElevenLabsConfigModal } from './components/hud/ElevenLabsConfigModal';
-import { HardwareLinkModal } from './components/hud/HardwareLinkModal';
-import { ComplianceReportModal } from './components/hud/ComplianceReportModal';
 import { KgD6WeatherSidePanel } from './components/hud/KgD6WeatherSidePanel';
-import { JarvisGestureVoiceHUD } from './components/hud/JarvisGestureVoiceHUD';
-import { JarvisPipeSliceModal } from './components/hud/JarvisPipeSliceModal';
-import { HolographicPartInspectionModal } from './components/hud/HolographicPartInspectionModal';
-import { MidnightSettlementModal } from './components/hud/MidnightSettlementModal';
-import { SihPresentationModal } from './components/hud/SihPresentationModal';
+import { VarunaGestureVoiceHUD } from './components/hud/VarunaGestureVoiceHUD';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
+
+/*
+ * Modals load on first open, so their code (KaTeX, reports, the slide deck) stays out of
+ * the start-up bundle. Each is mounted only while its store flag is set.
+ */
+type RigState = ReturnType<typeof useRigStore.getState>;
+const lazyNamed = (load: () => Promise<Record<string, unknown>>, name: string) =>
+  lazy(() => load().then((m) => ({ default: m[name] as React.ComponentType })));
+const LAZY_MODALS: [React.ComponentType, (s: RigState) => boolean][] = [
+  [lazyNamed(() => import('./components/hud/ElevenLabsConfigModal'), 'ElevenLabsConfigModal'), (s) => s.isVoiceModalOpen],
+  [lazyNamed(() => import('./components/hud/ComplianceReportModal'), 'ComplianceReportModal'), (s) => s.isReportModalOpen],
+  [lazyNamed(() => import('./components/hud/MidnightSettlementModal'), 'MidnightSettlementModal'), (s) => s.isEodModalOpen],
+  [lazyNamed(() => import('./components/hud/SihPresentationModal'), 'SihPresentationModal'), (s) => s.isSihModalOpen],
+  [lazyNamed(() => import('./components/hud/PipeSliceModal'), 'PipeSliceModal'), (s) => s.isPipeSliceModalOpen],
+  [lazyNamed(() => import('./components/hud/HolographicPartInspectionModal'), 'HolographicPartInspectionModal'), (s) => !!s.activeHoloModal],
+  [lazyNamed(() => import('./components/hud/PhysicsAuditModal'), 'PhysicsAuditModal'), (s) => s.isPhysicsModalOpen],
+];
+const LazyModal: React.FC<{ C: React.ComponentType; open: (s: RigState) => boolean }> = ({ C, open }) =>
+  useRigStore(open) ? (
+    <Suspense fallback={null}>
+      <C />
+    </Suspense>
+  ) : null;
 import {
   Compass,
   Radio,
@@ -44,7 +59,7 @@ import {
   Database,
 } from 'lucide-react';
 import { varunaVoice } from './voice/VarunaVoiceSynthesizer';
-import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
+import { varunaVoiceCommander } from './voice/VarunaVoiceCommander';
 
 import { telemetryDb } from './db/TelemetryDatabase';
 import { sixMonthDataEngine } from './db/SixMonthDataEngine';
@@ -93,14 +108,12 @@ export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
-  const scannerMode = useRigStore((s) => s.scannerMode);
   const isCommandDockOpen = useRigStore((s) => s.isCommandDockOpen);
   const toggleCommandDock = useRigStore((s) => s.toggleCommandDock);
 
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
   const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
-  const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
   const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
   const setSihModalOpen = useRigStore((s) => s.setSihModalOpen);
@@ -204,7 +217,6 @@ export default function App() {
                 <MenuLabel>Operations</MenuLabel>
                 <MenuItem icon={Zap} title="Command Dock" hint="Diagnostics, scenarios & sensors" onClick={() => runMenu(toggleCommandDock)} />
                 <MenuItem icon={Scissors} title={isPipeSliced ? 'Close Pipe 1 Section' : 'Slice Pipe 1'} hint="Cut-away of the multiphase core" active={isPipeSliced} onClick={() => runMenu(() => setPipeSliced(!isPipeSliced))} />
-                <MenuItem icon={Cpu} title="Hardware SCADA Gateway" hint="Serial, Modbus & WebSocket links" onClick={() => runMenu(() => setHardwareModalOpen(true))} />
                 <MenuItem icon={Wind} title="KG-D6 Weather & Metocean" hint="Bay of Bengal marine forecast" onClick={() => runMenu(toggleWeatherPanel)} />
                 <MenuLabel>Data & Reports</MenuLabel>
                 <MenuItem icon={Calendar} title="6-Month Production Ledger" hint="180-day database & midnight settlement" onClick={() => runMenu(() => setEodModalOpen(true))} />
@@ -294,7 +306,7 @@ export default function App() {
                   title="Voice listener"
                   hint={isVoiceCommanderActive ? 'Listening for “Varuna”' : 'Muted'}
                   active={isVoiceCommanderActive}
-                  onClick={() => runMenu(() => jarvisVoiceCommander.toggle())}
+                  onClick={() => runMenu(() => varunaVoiceCommander.toggle())}
                 />
                 <MenuItem icon={Volume2} title="ElevenLabs voice" hint="Use a studio-quality voice" onClick={() => runMenu(() => setVoiceModalOpen(true))} />
               </div>
@@ -314,29 +326,13 @@ export default function App() {
       {/* ================= INCIDENT CONTROL MANAGER MODAL ================= */}
       <IncidentControlManager />
 
-      {/* ================= ELEVENLABS VOICE CONFIG MODAL ================= */}
-      <ElevenLabsConfigModal />
+      {/* Voice config, compliance, ledger, deck, pipe slice, part inspection, physics audit */}
+      {LAZY_MODALS.map(([C, open], i) => (
+        <LazyModal key={i} C={C} open={open} />
+      ))}
 
-      {/* ================= HARDWARE LINK MODAL ================= */}
-      <HardwareLinkModal />
-
-      {/* ================= COMPLIANCE AUDIT REPORT MODAL ================= */}
-      <ComplianceReportModal />
-
-      {/* ================= 6-MONTH AI PRODUCTION LEDGER & MIDNIGHT SETTLEMENT MODAL ================= */}
-      <MidnightSettlementModal />
-
-      {/* ================= SIH 6-PAGE PRESENTATION & VIDEO DEMO MODAL ================= */}
-      <SihPresentationModal />
-
-      {/* ================= KG-D6 LIVE WEATHER & MARINE FORECAST SIDE PANEL ================= */}
+      {/* KG-D6 live weather & marine side panel */}
       <KgD6WeatherSidePanel />
-
-      {/* ================= JARVIS FULL-SCREEN PIPE 1 SLICE INSPECTION MODAL ================= */}
-      <JarvisPipeSliceModal />
-
-      {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
-      <HolographicPartInspectionModal />
 
       {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENT, ANOMALIES & GESTURE/VOICE ================= */}
       {/* Positioned at bottom-left so the entire top-left under SYSTEM TOOLS is 100% clear and unobstructed */}
@@ -350,15 +346,12 @@ export default function App() {
           <CriticalAnomaliesMonitor />
         </div>
 
-        {/* Right of Cluster: Jarvis Gesture Camera & Varuna Voice HUD */}
-        <JarvisGestureVoiceHUD />
+        {/* Right of Cluster: Varuna Gesture Camera & Varuna Voice HUD */}
+        <VarunaGestureVoiceHUD />
       </div>
 
       {/* ================= RIGHT SIDEBAR: SYSTEM TELEMETRY & PRODUCTION DATA ================= */}
       <TelemetryDrawer />
-
-      {/* ================= INTERACTIVE PHYSICS AUDIT MODAL ================= */}
-      <PhysicsAuditModal />
 
       {/* ================= 3D VIEWPORT (Occupies 100% of Screen) ================= */}
       <main id="canvas-container" className="relative w-full h-full flex-1 overflow-hidden">

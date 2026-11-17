@@ -6,14 +6,15 @@
  *    complete match wins instead of blindly taking alternative #0.
  * 2. Echo guard: while VARUNA is speaking (and ~700 ms after) results are ignored,
  *    so the assistant never re-triggers on its own voice ("Opening helipad...").
- * 3. Interim fast-path only fires for a complete, unambiguous intent that was stable
- *    across two interim results; the final result of the same utterance is then
- *    skipped, so a command never runs twice.
+ * 3. Interim fast-path: a complete intent that explains the whole utterance and cannot
+ *    grow into a longer command runs on the first interim result; anything else must be
+ *    stable across two interims. The final result of that utterance is then skipped, so
+ *    a command never runs twice.
  * 4. Automatic restart on end / network hiccups with exponential back-off.
  */
 
 import { useRigStore } from '../store/useRigStore';
-import { parseVoiceCommand, ParsedVoiceCommand, WAKE_WORD_REGEX, stripWakeWord } from './VoiceCommandParser';
+import { parseVoiceCommand, ParsedVoiceCommand, hasWakeWord, stripWakeWord, isUnambiguous } from './VoiceCommandParser';
 
 declare global {
   interface Window {
@@ -27,7 +28,7 @@ const DEBOUNCE_MS = 2500;
 
 const signature = (p: ParsedVoiceCommand) => `${p.id}:${p.num ?? ''}`;
 
-class JarvisVoiceCommander {
+class VarunaVoiceCommander {
   private recognizer: any = null;
   private isRunning = false;
   private autoRestart = true;
@@ -165,7 +166,7 @@ class JarvisVoiceCommander {
       if (alternatives.length === 0) continue;
 
       const top = alternatives[0];
-      const hasWake = alternatives.some((t) => WAKE_WORD_REGEX.test(t));
+      const hasWake = alternatives.some(hasWakeWord);
       const awake = store.isVarunaAwake && Date.now() < store.varunaWakeExpiry;
 
       if (awake || hasWake) store.setVoiceTranscript(top);
@@ -192,10 +193,10 @@ class JarvisVoiceCommander {
           store.wakeVaruna();
           continue;
         }
-        // Interim fast-path: complete intent, seen twice in a row
+        // Interim fast-path: unambiguous intent at once, otherwise complete and seen twice in a row
         if (!best.parsed || !best.parsed.complete || this.handledResultIndex === i) continue;
         const sig = signature(best.parsed);
-        if (this.interimCandidate === sig) {
+        if (isUnambiguous(best.parsed) || this.interimCandidate === sig) {
           this.handledResultIndex = i;
           this.interimCandidate = '';
           this.execute(best.text, best.parsed);
@@ -210,7 +211,7 @@ class JarvisVoiceCommander {
     let best = { text: alternatives[0], parsed: parseVoiceCommand(alternatives[0]) };
     for (const raw of alternatives.slice(1)) {
       // keep the wake word if any alternative contained it, so the store's wake gate passes
-      const text = wakeHeard && !WAKE_WORD_REGEX.test(raw) ? `varuna ${stripWakeWord(raw)}` : raw;
+      const text = wakeHeard && !hasWakeWord(raw) ? `varuna ${stripWakeWord(raw)}` : raw;
       const parsed = parseVoiceCommand(text);
       if (!parsed) continue;
       const cur = best.parsed;
@@ -218,7 +219,7 @@ class JarvisVoiceCommander {
         best = { text, parsed };
       }
     }
-    if (wakeHeard && !WAKE_WORD_REGEX.test(best.text)) best.text = `varuna ${best.text}`;
+    if (wakeHeard && !hasWakeWord(best.text)) best.text = `varuna ${best.text}`;
     return best;
   }
 
@@ -234,4 +235,4 @@ class JarvisVoiceCommander {
   }
 }
 
-export const jarvisVoiceCommander = new JarvisVoiceCommander();
+export const varunaVoiceCommander = new VarunaVoiceCommander();

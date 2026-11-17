@@ -25,7 +25,6 @@ import {
 import {
   useRigStore,
   CameraViewMode,
-  ScannerMode,
   MetoceanCondition,
   EmergencyScenario,
 } from '../../store/useRigStore';
@@ -41,8 +40,6 @@ export const CommandDock: React.FC = () => {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
 
-  const scannerMode = useRigStore((s) => s.scannerMode);
-  const setScannerMode = useRigStore((s) => s.setScannerMode);
 
   const metoceanCondition = useRigStore((s) => s.metoceanCondition);
   const setMetoceanCondition = useRigStore((s) => s.setMetoceanCondition);
@@ -58,7 +55,6 @@ export const CommandDock: React.FC = () => {
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
   const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
-  const setHardwareModalOpen = useRigStore((s) => s.setHardwareModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
   const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
   const setSihModalOpen = useRigStore((s) => s.setSihModalOpen);
@@ -446,18 +442,6 @@ export const CommandDock: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5" />
             <span>ElevenLabs Voice</span>
           </button>
-
-          <button
-            onClick={() => {
-              setHardwareModalOpen(true);
-              setCommandDockOpen(false);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-reliance-navy/80 hover:bg-reliance-blue/50 text-xs font-mono text-emerald-300 border border-emerald-400/30 transition-all cursor-pointer"
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            <span>Hardware Gateway</span>
-          </button>
-
           <button
             onClick={() => {
               setReportModalOpen(true);

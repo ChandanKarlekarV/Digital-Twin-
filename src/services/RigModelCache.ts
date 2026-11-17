@@ -3,7 +3,7 @@ import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { HolographicComponentType } from '../store/useRigStore';
 
 /** Built-in rig, pre-baked from rig.obj by scripts/convert-rig-model.mjs */
-export const DEFAULT_RIG_URL = '/models/rig.bin';
+export const DEFAULT_RIG_URL = '/models/rig.bin.gz';
 
 export interface CachedRigData {
   center: THREE.Vector3;
@@ -23,18 +23,8 @@ export interface CachedRigData {
 // ---- Model placement shared by the scene (OBJ units -> metres) ----
 export const MODEL_SCALE = 45.0;
 export const WATER_LINE_OBJ_Y = -0.22;
-/**
- * Extra water depth added to the built-in model (OBJ units). The original diorama had only
- * ~16 m of water; the jacket legs are stretched and everything subsea is lowered by this much.
- */
-export const EXTRA_DEPTH_OBJ = 0;
-/** Model y below which topside geometry is seabed equipment (moved down with the mudline) */
-const LEG_STRETCH_BOTTOM_OBJ = -0.46;
-const ORIGINAL_MUDLINE_OBJ = -0.585;
-/** World-space shift applied to everything subsea (≈ 36 m) */
-export const SUBSEA_SHIFT_M = EXTRA_DEPTH_OBJ * MODEL_SCALE;
-/** World Y of the mudline (≈ -16 m at the model's original depth) */
-export const SEABED_WORLD_Y = (ORIGINAL_MUDLINE_OBJ - EXTRA_DEPTH_OBJ - WATER_LINE_OBJ_Y) * MODEL_SCALE;
+/** World Y of the mudline (≈ -16 m) */
+export const SEABED_WORLD_Y = (-0.585 - WATER_LINE_OBJ_Y) * MODEL_SCALE;
 
 /** Physical sub-assemblies the rig is split into (for the exploded view and part inspection). */
 export type RigPartId =
@@ -79,9 +69,8 @@ interface BinMeshInfo {
   vertexCount: number;
   indexCount: number;
   indexType: 'u16' | 'u32';
-  position: { offset: number };
+  position: { offset: number; min?: number[]; step?: number[] };
   normal: { offset: number };
-  uv: { offset: number } | null;
   index: { offset: number };
   edgeCount?: number;
   edges?: { offset: number };
@@ -118,7 +107,7 @@ export const COMPONENT_TO_PART: Partial<Record<HolographicComponentType, RigPart
   industrial_pipes: 'main_deck',
   command_dock: 'main_deck',
   main_deck: 'main_deck',
-  jackup_legs: 'jackup_legs',
+  jackup_legs: 'columns',
   drill: 'casing',
   drill_string: 'drill',
   drill_bit: 'drill',
@@ -136,8 +125,8 @@ export const COMPONENT_TO_PART: Partial<Record<HolographicComponentType, RigPart
 function classifyTopside(x: number, y: number, z: number): RigPartId {
   const distXZ = Math.hypot(x, z);
   const distHelipad = Math.hypot(x - 0.12, z + 0.5);
-  // Diorama ground block under the (deepened) mudline: full footprint
-  if (y < -0.575 - EXTRA_DEPTH_OBJ) return 'seabed_block';
+  // Diorama ground block under the mudline: full footprint
+  if (y < -0.575) return 'seabed_block';
   if (y < 0.05) return 'jackup_legs';
   if (y > 0.28 && distHelipad < 0.28) return 'helipad';
   if (y > 0.32 && distXZ < 0.16) return 'upper_rig';
@@ -152,7 +141,7 @@ function classifyTopside(x: number, y: number, z: number): RigPartId {
 // drill string r ≈ 0.03–0.05, casing wall r ≥ 0.09, bit petals reach r ≈ 0.12 below y = -1.97
 const DRILL_AXIS = new THREE.Vector2(0.004, -0.031);
 const DRILL_STRING_MAX_R = 0.075;
-const BIT_TOP_Y = -1.97 - EXTRA_DEPTH_OBJ;
+const BIT_TOP_Y = -1.97;
 const BIT_MAX_R = 0.12;
 
 function getIndex(geo: THREE.BufferGeometry): ArrayLike<number> {
@@ -238,51 +227,6 @@ function splitByTriangle<K extends string>(
   return out;
 }
 
-/**
- * Gives the built-in rig realistic water depth: the seabed equipment, mudline block, well
- * casing and drill string are lowered rigidly by EXTRA_DEPTH_OBJ. Nothing is stretched — the
- * model's own underwater columns are replaced by the clean semi-submersible hull (SemiSubHull),
- * and moorings plus the marine riser span the water column.
- */
-function deepenWater(data: CachedRigData): CachedRigData {
-  const lower = (geo: THREE.BufferGeometry | null, shouldMove: (vertex: number, y: number) => boolean) => {
-    if (!geo) return;
-    const pos = geo.attributes.position as THREE.BufferAttribute;
-    const arr = pos.array as Float32Array;
-    for (let v = 0; v < pos.count; v++) if (shouldMove(v, arr[v * 3 + 1])) arr[v * 3 + 1] -= EXTRA_DEPTH_OBJ;
-    pos.needsUpdate = true;
-    geo.computeBoundingBox();
-    geo.computeBoundingSphere();
-  };
-
-  // Topside: move whole seabed-equipment triangles (by baked label), never split a triangle
-  // across the cut — that stretched straddling triangles into tall vertical slivers.
-  const topside = data.topsideGeo;
-  const labels = data.topsideTriLabels;
-  const names = data.labelNames;
-  if (topside && labels && names && topside.index) {
-    const subsea = new Set(['subsea', 'seabed_block'].map((n) => names.indexOf(n)));
-    const move = new Uint8Array(topside.attributes.position.count);
-    const index = topside.index.array;
-    for (let t = 0; t < labels.length; t++) {
-      if (!subsea.has(labels[t])) continue;
-      move[index[t * 3]] = move[index[t * 3 + 1]] = move[index[t * 3 + 2]] = 1;
-    }
-    // Duplicate vertices at the same position (split normals, edge endpoints) move together
-    const pos = topside.attributes.position;
-    const key = (v: number) => `${Math.round(pos.getX(v) * 1e5)},${Math.round(pos.getY(v) * 1e5)},${Math.round(pos.getZ(v) * 1e5)}`;
-    const moved = new Set<string>();
-    for (let v = 0; v < pos.count; v++) if (move[v]) moved.add(key(v));
-    for (let v = 0; v < pos.count; v++) if (!move[v] && pos.getY(v) < LEG_STRETCH_BOTTOM_OBJ + 0.06 && moved.has(key(v))) move[v] = 1;
-    lower(topside, (v) => move[v] === 1);
-  } else {
-    lower(topside, (_v, y) => y < LEG_STRETCH_BOTTOM_OBJ);
-  }
-  lower(data.manifoldGeo, () => true);
-  lower(data.drillGeo, () => true);
-  return data;
-}
-
 class RigModelCache {
   private cache: Map<string, CachedRigData> = new Map();
   private loadPromises: Map<string, Promise<CachedRigData>> = new Map();
@@ -302,7 +246,7 @@ class RigModelCache {
     const pending = this.loadPromises.get(url);
     if (pending) return pending;
 
-    const promise = (url === DEFAULT_RIG_URL ? this.loadBinary(url).then(deepenWater) : this.loadObj(url))
+    const promise = (url === DEFAULT_RIG_URL ? this.loadBinary(url) : this.loadObj(url))
       .then((data) => {
         this.cache.set(url, data);
         return data;
@@ -423,7 +367,12 @@ class RigModelCache {
   private async loadBinary(url: string): Promise<CachedRigData> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    const buf = await res.arrayBuffer();
+    let buf = await res.arrayBuffer();
+    // Gzip magic (1f 8b): inflate here. A host that already sent Content-Encoding: gzip hands over plain bytes.
+    const magic = new Uint8Array(buf, 0, 2);
+    if (magic[0] === 0x1f && magic[1] === 0x8b) {
+      buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+    }
 
     const headerLen = new DataView(buf).getUint32(0, true);
     const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, headerLen))) as {
@@ -437,10 +386,17 @@ class RigModelCache {
       const m = header.meshes[name];
       if (!m) return null;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute(
-        'position',
-        new THREE.BufferAttribute(new Float32Array(buf, base + m.position.offset, m.vertexCount * 3), 3)
-      );
+      // v3: uint16 per axis over the bounding box -> float metres
+      const { offset, min, step } = m.position;
+      let pos: Float32Array;
+      if (min && step) {
+        const q = new Uint16Array(buf, base + offset, m.vertexCount * 3);
+        pos = new Float32Array(q.length);
+        for (let i = 0; i < q.length; i++) pos[i] = min[i % 3] + q[i] * step[i % 3];
+      } else {
+        pos = new Float32Array(buf, base + offset, m.vertexCount * 3);
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute(
         'normal',
         new THREE.BufferAttribute(new Int8Array(buf, base + m.normal.offset, m.vertexCount * 3), 3, true)

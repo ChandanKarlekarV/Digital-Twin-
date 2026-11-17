@@ -26,7 +26,6 @@ export const EmergencyIncidentPanel: React.FC = () => {
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
   const incidentPhase = useRigStore((s) => s.incidentPhase);
   const setEmergencyScenario = useRigStore((s) => s.setEmergencyScenario);
-  const setScannerMode = useRigStore((s) => s.setScannerMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
   const nextIncidentPhase = useRigStore((s) => s.nextIncidentPhase);
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
@@ -46,19 +45,17 @@ export const EmergencyIncidentPanel: React.FC = () => {
         varunaVoice.speakIncidentAlert(emergencyScenario, incidentPhase);
 
         if (emergencyScenario === 'rupture') {
-          setScannerMode('acoustic');
           setCameraViewMode('riser');
         } else if (emergencyScenario === 'drill_damage' || emergencyScenario === 'stuck_drill') {
           setCameraViewMode('topside');
         } else if (emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug') {
-          setScannerMode('thermal');
           setCameraViewMode('manifold');
         }
       }
       prevScenario.current = emergencyScenario;
       prevPhase.current = incidentPhase;
     }
-  }, [emergencyScenario, incidentPhase, setScannerMode, setCameraViewMode]);
+  }, [emergencyScenario, incidentPhase, setCameraViewMode]);
 
   if (emergencyScenario === 'none') return null;
 

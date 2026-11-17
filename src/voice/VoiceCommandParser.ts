@@ -28,7 +28,6 @@ export type VoiceIntentId =
   | 'wells_all'
   | 'slice'
   | 'command_dock'
-  | 'hardware'
   | 'presentation'
   | 'database'
   | 'compliance'
@@ -38,11 +37,6 @@ export type VoiceIntentId =
   | 'view_topside'
   | 'view_subsea'
   | 'view_manifold'
-  | 'mode_realistic'
-  | 'mode_hologram'
-  | 'mode_thermal'
-  | 'mode_acoustic'
-  | 'mode_color'
   | 'start_camera'
   | 'stop_camera'
   | 'close'
@@ -56,7 +50,7 @@ export interface ParsedVoiceCommand {
   num?: number;
   /** false when a required number is still missing (e.g. "open crane") */
   complete: boolean;
-  /** 0..1 — how much of the utterance the matched phrase explains */
+  /** 0..1 â€” how much of the utterance the matched phrase explains */
   score: number;
   phrase: string;
 }
@@ -71,7 +65,7 @@ interface IntentDef {
 const INTENTS: IntentDef[] = [
   { id: 'drill_string', phrases: ['drill string', 'drilling string', 'subsea drill string'] },
   { id: 'drill_bit', phrases: ['drill bit', 'cutter bit', 'pdc bit', 'bit'] },
-  { id: 'split_view', phrases: ['split view', 'jarvis view', 'exploded view', 'explode', 'split', 'disassemble', 'take apart'] },
+  { id: 'split_view', phrases: ['split view', 'exploded view', 'explode', 'split', 'disassemble', 'take apart'] },
   { id: 'assemble', phrases: ['assemble', 'reassemble', 'merge', 'close split', 'put back together', 'join'] },
   { id: 'helipad', phrases: ['helipad', 'heli deck', 'helideck', 'helicopter', 'landing pad'] },
   { id: 'crane', phrases: ['crane', 'port crane', 'starboard crane', 'lattice boom', 'pedestal crane'], numbered: { max: 2 } },
@@ -87,7 +81,6 @@ const INTENTS: IntentDef[] = [
   { id: 'pipe', phrases: ['pipe', 'flow line', 'flowline', 'riser', 'line'], numbered: { max: 9 } },
   { id: 'slice', phrases: ['slice', 'cross section', 'cut pipe', 'slice pipe', 'slice it'] },
   { id: 'command_dock', phrases: ['command dock', 'tools dock', 'dock', 'command center'] },
-  { id: 'hardware', phrases: ['hardware', 'scada gateway', 'hardware gateway', 'scada'] },
   { id: 'presentation', phrases: ['presentation', 'ppt', 'slides', 'slide deck', 'sih deck'] },
   { id: 'database', phrases: ['database', 'data base', 'ledger', 'six month', 'production ledger', 'history'] },
   { id: 'compliance', phrases: ['compliance', 'audit report', 'compliance report', 'audit'] },
@@ -97,11 +90,6 @@ const INTENTS: IntentDef[] = [
   { id: 'view_subsea', phrases: ['dive', 'subsea view', 'underwater', 'go under water', 'below water'] },
   { id: 'view_manifold', phrases: ['manifold', 'seabed', 'sea bed', 'sea floor', 'seafloor'] },
   { id: 'view_topside', phrases: ['reset view', 'home view', 'default view', 'overview', 'full view', 'show whole rig', 'zoom out'] },
-  { id: 'mode_realistic', phrases: ['realistic', 'real mode', 'normal view', 'real view', 'photo mode', 'textured'] },
-  { id: 'mode_hologram', phrases: ['hologram', 'holographic', 'cyber twin', 'jarvis mode'] },
-  { id: 'mode_thermal', phrases: ['thermal', 'infrared', 'heat map', 'heat view'] },
-  { id: 'mode_acoustic', phrases: ['acoustic', 'sonar', 'sonic'] },
-  { id: 'mode_color', phrases: ['color coded', 'colour coded', 'color code', 'segregation'] },
   { id: 'start_camera', phrases: ['start camera', 'start webcam', 'enable gestures', 'gesture mode', 'turn on camera'] },
   { id: 'stop_camera', phrases: ['stop camera', 'stop webcam', 'disable gestures', 'turn off camera'] },
   { id: 'close', phrases: ['close', 'close window', 'close panel', 'dismiss', 'cancel', 'go back', 'exit'] },
@@ -133,10 +121,8 @@ const REPLACEMENTS: [RegExp, string][] = [
   [/\b(pipeline|pipelines|pipes|pype|type)\b/g, 'pipe'],
   [/\bjack[\s-]*up\b/g, 'jackup'],
   [/\b(drill|drills|dril|drew)\s+(bits?|bed|bid)\b/g, 'drill bit'],
-  [/\b(scuttle|scatter|skater)\b/g, 'scada'],
   [/\bp\s*p\s*t\b/g, 'ppt'],
   [/\bwells?\s+(head)\b/g, 'wellhead'],
-  [/\b(holo\s*gram|hollow\s*gram)\b/g, 'hologram'],
   [/\bx\s*mas\b/g, 'christmas'],
   [/\b(no\.?|number)\s+/g, ''],
   [/#/g, ' '],
@@ -145,14 +131,58 @@ const REPLACEMENTS: [RegExp, string][] = [
 const FILLER = new Set([
   'please', 'can', 'could', 'would', 'you', 'hey', 'hello', 'hi', 'ok', 'okay', 'the', 'a', 'an', 'me',
   'show', 'open', 'opening', 'display', 'go', 'goto', 'take', 'switch', 'turn', 'on', 'view', 'of',
-  'and', 'then', 'now', 'just', 'let', 'lets', 'see', 'look', 'at', 'into', 'mode', 'jarvis', 'varuna', 'i', 'want',
+  'and', 'then', 'now', 'just', 'let', 'lets', 'see', 'look', 'at', 'into', 'mode', 'varuna', 'i', 'want',
 ]);
 
-export const WAKE_WORD_REGEX =
-  /\b(?:hey |ok |okay )?(varuna|varun|varoona|veruna|verona|viruna|waruna|baruna|barun|varna|aruna|karuna|bharuna|varuna ai|varun ai)\b/i;
+/*
+ * Wake word "Varuna". Recognisers spell it many ways (Varun, Baruna, Veruna, Verna,
+ * "var una", "Varun a", "Bharuna"...), so words are compared by sound, not spelling:
+ * b/bh/w/ph -> v, h dropped, every vowel run -> "a". "Varuna" becomes "varana" and any
+ * word (or two short words joined) within one edit of that wakes it.
+ */
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+const wakeKey = (w: string) =>
+  w.toLowerCase().replace(/[^a-z]/g, '').replace(/bh|ph|b|w/g, 'v').replace(/h/g, '').replace(/[aeiouy]+/g, 'a').replace(/(.)\1+/g, '$1');
+// Must open with the v/f sound (or "ar", from a clipped "aruna") so rig words like "marine" never wake it
+const isWakeKey = (k: string) =>
+  k.length >= 4 && /^(v|f|ar)/.test(k) && k.includes('r') && k.includes('n') && levenshtein(k, 'varana') <= 1;
+
+/** [start, end) word spans that are the wake word, including a trailing "AI". */
+function wakeSpans(words: string[]): [number, number][] {
+  const spans: [number, number][] = [];
+  for (let i = 0; i < words.length; i++) {
+    const pair = words[i + 1] && words[i].length <= 5 && words[i + 1].length <= 4 ? words[i] + words[i + 1] : '';
+    let end = pair && isWakeKey(wakeKey(pair)) ? i + 2 : isWakeKey(wakeKey(words[i])) ? i + 1 : 0;
+    if (!end) continue;
+    if (/^a\.?i\.?$/i.test(words[end] ?? '')) end++;
+    spans.push([i, end]);
+    i = end - 1;
+  }
+  return spans;
+}
+
+const splitWords = (text: string) => text.replace(/[^\w\s'-]/g, ' ').split(/\s+/).filter(Boolean);
+
+export function hasWakeWord(text: string): boolean {
+  return wakeSpans(splitWords(text)).length > 0;
+}
 
 export function stripWakeWord(text: string): string {
-  return text.replace(new RegExp(WAKE_WORD_REGEX.source, 'gi'), ' ').replace(/\s+/g, ' ').trim();
+  const words = splitWords(text);
+  const drop = new Set<number>();
+  for (const [s, e] of wakeSpans(words)) for (let i = s; i < e; i++) drop.add(i);
+  return words.filter((_, i) => !drop.has(i)).join(' ');
 }
 
 export function normalizeTranscript(raw: string): string[] {
@@ -235,7 +265,7 @@ function matchPhrase(tokens: string[], phrase: string[]): { start: number; end: 
 export function parseVoiceCommand(raw: string): ParsedVoiceCommand | null {
   const tokens = normalizeTranscript(stripWakeWord(raw));
   if (tokens.length === 0) return null;
-  // Phrases may themselves contain filler words ("jarvis view"), so only use this for scoring
+  // Phrases may themselves contain filler words ("exploded view"), so only use this for scoring
   const meaningfulCount = Math.max(1, tokens.filter((t) => !FILLER.has(t)).length);
 
   let best: ParsedVoiceCommand | null = null;
@@ -275,6 +305,22 @@ export function parseVoiceCommand(raw: string): ParsedVoiceCommand | null {
   return best;
 }
 
+/** Phrases that are the start of another intent's longer phrase ("drill" -> "drill bit", "close" -> "close split"). */
+const PREFIX_PHRASES = new Set(
+  INTENTS.flatMap((a) =>
+    a.phrases.filter((p) => INTENTS.some((b) => b.id !== a.id && b.phrases.some((q) => q.startsWith(p + ' '))))
+  )
+);
+
+/**
+ * Safe to run on the first interim result: complete, explains the whole utterance, and
+ * cannot be the beginning of a longer, different command.
+ */
+export function isUnambiguous(p: ParsedVoiceCommand): boolean {
+  return p.complete && p.score >= 1 && !PREFIX_PHRASES.has(p.phrase);
+}
+
 export const VOICE_HELP_TEXT =
   'You can say: split view, assemble, helipad, crane one or two, accommodation, drill bit, drill string, ' +
-  'pipe one to nine, well one to seven, slice pipe, weather, water status, database, or reset view.';
+  'pipe one to nine, well one to seven, slice pipe, weather, water status, or reset view. ' +
+  'You can also ask me about the rig: pressure, temperature, flow, density, gas, water cut, drill speed, or rig status.';

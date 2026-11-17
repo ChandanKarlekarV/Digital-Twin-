@@ -244,7 +244,7 @@ export const CurrentControlWidget: React.FC = () => {
             <div className="w-full h-1 bg-reliance-navy rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-reliance-cyan to-emerald-400 transition-all duration-1000"
-                style={{ width: `${(dynamicTideSecondsRemaining / 10) * 100}%` }}
+                style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
               />
             </div>
           </div>
@@ -359,8 +359,8 @@ export const CurrentControlWidget: React.FC = () => {
               <span className="text-white font-bold capitalize">{tidePhase.replace('_', ' ')}</span>
             </div>
             <div className="flex items-center justify-between text-reliance-textMuted">
-              <span>Subsea Column Drag:</span>
-              <span className="text-emerald-400 font-bold">{(currentSpeedKnots * 18.2).toFixed(1)} kN</span>
+              <span>Riser Drag (Morison, D 0.5 m):</span>
+              <span className="text-emerald-400 font-bold">{(0.5 * 1025 * 1.2 * 0.5 * (currentSpeedKnots * 0.5144) ** 2).toFixed(0)} N/m</span>
             </div>
             <div className="flex items-center justify-between text-reliance-textMuted">
               <span>Surface Swell Height:</span>

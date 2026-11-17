@@ -9,36 +9,22 @@ import { createHolographicMaterial } from '../../shaders/HolographicMaterial';
 import { HOLO } from '../../shaders/HoloPalette';
 import { SubseaPipelineFlowNetwork } from './SubseaPipelineFlowNetwork';
 import { HoloSeabed } from './HoloSeabed';
-import { SemiSubHull } from './SemiSubHull';
 import {
   rigModelCache,
-  DEFAULT_RIG_URL,
   RigPart,
   RigParts,
   RigPartId,
   MODEL_SCALE,
   WATER_LINE_OBJ_Y,
   SEABED_WORLD_Y,
-  SUBSEA_SHIFT_M,
 } from '../../services/RigModelCache';
 
 interface CustomObjRigProps {
   objUrl: string;
 }
 
-
-
-/**
- * The model's ground block and base plate are not shown in the scene: they read as an oversized
- * glowing slab of land. It stays available as its own part in the inspection view.
- */
-/** Exploded view: hull drops this far (model units) below the deck */
-const HULL_EXPLODE_DROP = -0.22;
-
+/** Not drawn: the model's base slab and ground block (oversized glowing land) and loose debris */
 const HIDDEN_IN_SCENE = new Set<RigPartId>(['manifold', 'seabed_block', 'debris']);
-
-/** The model's own (original) legs are shown; the generated semi-sub hull is kept but switched off */
-const USE_GENERATED_HULL = false;
 
 /** Visual turns per real revolution: 120 RPM shown at a readable 1 rev/s */
 const SPIN_DISPLAY_SCALE = 0.5;
@@ -79,7 +65,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
       s.isEodModalOpen ||
       s.isSihModalOpen ||
       s.isReportModalOpen ||
-      s.isHardwareModalOpen ||
       s.isPhysicsModalOpen ||
       s.isPipeSliceModalOpen
   );
@@ -88,7 +73,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
   const wholeRigGroupRef = useRef<THREE.Group>(null);
   const partGroupRefs = useRef<Partial<Record<RigPartId, THREE.Group | null>>>({});
   const drillSpinRef = useRef<THREE.Group>(null);
-  const hullRef = useRef<THREE.Group>(null);
   const explode = useRef(0);
 
   // Three layers per part: a solid lit body (casts/receives shadows, gives depth when zoomed),
@@ -146,7 +130,6 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
       const g = partGroupRefs.current[p.id];
       if (g) g.position.copy(p.explodeOffset).multiplyScalar(ease);
     });
-    if (hullRef.current) hullRef.current.position.set(0, HULL_EXPLODE_DROP * ease, 0);
 
     // Drill string + bit spin about the bore axis at live RPM
     const spin = drillSpinRef.current;
@@ -249,52 +232,8 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
             )}
           </group>
         ))}
-
-        {/* Clean semi-submersible hull (built-in model): columns, pontoons, bracing, moorings, riser */}
-        {USE_GENERATED_HULL && objUrl === DEFAULT_RIG_URL && (
-          <group ref={hullRef}>
-            <SemiSubHull
-              materials={{
-                body: selectedSplitPartId === 'jackup_legs' ? materials.bodySelected : materials.body,
-                glow: selectedSplitPartId === 'jackup_legs' ? materials.glowHot : materials.glow,
-                edge: selectedSplitPartId === 'jackup_legs' ? materials.edgeHot : materials.edge,
-              }}
-              riserAxis={axis}
-              showMoorings={!isSplitViewActive}
-              onClick={(e: ThreeEvent<MouseEvent>) => {
-                e.stopPropagation();
-                const store = useRigStore.getState();
-                if (store.isSplitViewActive) {
-                  store.setSelectedSplitPartId('jackup_legs');
-                  store.openHoloModal('jackup_legs');
-                } else {
-                  store.setSelectedAssetId('PILLAR-FOUNDATION');
-                  varunaVoice.speakDiagnostic('PILLAR-FOUNDATION');
-                }
-              }}
-            />
-            {isSplitViewActive && !anyPanelOpen && (
-              <Html position={[-0.1, -0.45, -0.05]} center zIndexRange={[20, 0]}>
-                <button
-                  onClick={() => {
-                    const store = useRigStore.getState();
-                    store.setSelectedSplitPartId('jackup_legs');
-                    store.openHoloModal('jackup_legs');
-                  }}
-                  className="whitespace-nowrap px-2 py-0.5 rounded-md border font-mono text-[10px] tracking-wider uppercase backdrop-blur-sm bg-slate-950/70 text-cyan-200 border-cyan-400/40 hover:border-cyan-300 hover:text-white"
-                >
-                  Hull · Columns &amp; Pontoons
-                </button>
-              </Html>
-            )}
-          </group>
-        )}
       </group>
-
-      {/* Seabed flowlines were laid out for the original 16 m depth; lower them with the mudline */}
-      <group position={[0, -SUBSEA_SHIFT_M, 0]}>
-        <SubseaPipelineFlowNetwork />
-      </group>
+      <SubseaPipelineFlowNetwork />
       <HoloSeabed seabedY={SEABED_WORLD_Y} radius={50} />
     </group>
   );

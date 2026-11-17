@@ -1,8 +1,8 @@
 /**
- * JARVIS / VARUNA-AI Computer Vision Hand Gesture Recognition Engine
- * Real-Time Webcam & Complete Jarvis Decoupled Dual-Hand Spatial Holographic Matrix:
+ * VARUNA-AI Computer Vision Hand Gesture Recognition Engine
+ * Real-Time Webcam & Complete Varuna Decoupled Dual-Hand Spatial Holographic Matrix:
  *
- * 1. ASYMMETRIC DECOUPLED DUAL-HAND INTERACTION (Full Jarvis Copy):
+ * 1. ASYMMETRIC DECOUPLED DUAL-HAND INTERACTION :
  *    - Hand 1 (Zoom Controller): Operates continuous smooth ZOOM (Pinch In -> Zoom Out, Pinch Out -> Zoom In).
  *    - Hand 2 (Orbit Controller): Operates continuous smooth 3D MODEL MOVE & ORBIT (Translating in (x,y)).
  *    - Simultaneous, zero-drift, instant freeze in place when motion stops or palm is opened.
@@ -116,7 +116,7 @@ export interface GestureTrackingResult {
   secondaryHand: SingleHandData | null;
   landmarks: HandLandmark[];
   activeMode:
-    | 'JARVIS_DECOUPLED_DUAL'
+    | 'DECOUPLED_DUAL'
     | 'DUAL_MOVE_ZOOM'
     | 'ORBIT'
     | 'ZOOM'
@@ -126,7 +126,7 @@ export interface GestureTrackingResult {
     | 'IDLE';
 }
 
-class JarvisGestureVisionEngine {
+class VarunaGestureEngine {
   private videoElement: HTMLVideoElement | null = null;
   private canvasElement: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -169,11 +169,6 @@ class JarvisGestureVisionEngine {
   // Viewfinder callbacks
   private onFrameCallbacks: Set<(result: GestureTrackingResult, video: HTMLVideoElement) => void> = new Set();
 
-  // Synthetic / Demo simulator state
-  private isSynthetic = false;
-  private syntheticTime = 0;
-  private syntheticCanvas: HTMLCanvasElement | null = null;
-  private syntheticCtx: CanvasRenderingContext2D | null = null;
 
   // State deduplication & 60 FPS performance
   private lastReportedGesture: RecognizedGesture = null;
@@ -198,7 +193,7 @@ class JarvisGestureVisionEngine {
   };
 
   public async start(): Promise<boolean> {
-    if (this.isRunning && (this.stream?.active || this.isSynthetic)) return true;
+    if (this.isRunning && this.stream?.active) return true;
 
     const store = useRigStore.getState();
     store.setCameraPermissionState('requesting');
@@ -211,7 +206,6 @@ class JarvisGestureVisionEngine {
         );
       }
 
-      this.isSynthetic = false;
       this.stream = await this.acquireCameraStream();
 
       if (!this.videoElement) {
@@ -267,14 +261,13 @@ class JarvisGestureVisionEngine {
 
       this.isRunning = true;
       store.setGestureCameraActive(true);
-      store.setSyntheticCameraActive(false);
       store.setCameraPermissionState('active');
       store.setCameraErrorMessage(null);
 
       this.processLoop();
       return true;
     } catch (err: unknown) {
-      console.error('Failed to initialize Jarvis Vision Camera:', err);
+      console.error('Failed to initialize Varuna Vision Camera:', err);
       const errName = (err as { name?: string })?.name;
       const errMsg = (err as { message?: string })?.message || '';
 
@@ -337,7 +330,7 @@ class JarvisGestureVisionEngine {
   }
 
   /**
-   * MediaPipe Multi-Hand Pipeline: Decoupled Jarvis Dual-Hand Tracking & Instant Freeze
+   * MediaPipe Multi-Hand Pipeline: Decoupled Varuna Dual-Hand Tracking & Instant Freeze
    */
   private handleMediaPipeResults = (results: any): void => {
     if (!this.isRunning || !results) return;
@@ -819,31 +812,8 @@ class JarvisGestureVisionEngine {
     return { ...hand, gesture, isFist: gesture === 'FIST' };
   }
 
-  public startSynthetic(): boolean {
-    this.stop();
-    this.isSynthetic = true;
-    this.isRunning = true;
-
-    if (!this.syntheticCanvas) {
-      this.syntheticCanvas = document.createElement('canvas');
-      this.syntheticCanvas.width = 280;
-      this.syntheticCanvas.height = 160;
-      this.syntheticCtx = this.syntheticCanvas.getContext('2d');
-    }
-
-    const store = useRigStore.getState();
-    store.setGestureCameraActive(true);
-    store.setSyntheticCameraActive(true);
-    store.setCameraPermissionState('active');
-    store.setCameraErrorMessage(null);
-
-    this.processSyntheticLoop();
-    return true;
-  }
-
   public stop(): void {
     this.isRunning = false;
-    this.isSynthetic = false;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -884,7 +854,6 @@ class JarvisGestureVisionEngine {
 
     const store = useRigStore.getState();
     store.setGestureCameraActive(false);
-    store.setSyntheticCameraActive(false);
     store.setCameraPermissionState('idle');
     store.setGestureDetected(null, 0);
     store.setGestureSpatial({
@@ -899,164 +868,7 @@ class JarvisGestureVisionEngine {
     });
   }
 
-  /**
-   * Complete Synthetic Decoupled Jarvis Dual-Hand Simulator Loop
-   */
-  private processSyntheticLoop = (): void => {
-    if (!this.isRunning || !this.isSynthetic || !this.syntheticCanvas || !this.syntheticCtx) return;
-
-    this.syntheticTime += 0.025;
-    const t = this.syntheticTime;
-    const w = this.syntheticCanvas.width;
-    const h = this.syntheticCanvas.height;
-    const ctx = this.syntheticCtx;
-
-    ctx.fillStyle = '#06101e';
-    ctx.fillRect(0, 0, w, h);
-
-    // Cyberpunk grid
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < w; x += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-    for (let y = 0; y < h; y += 20) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-
-    // HAND 1 (LEFT): Pointing index finger (Laser pointer & Index 1 Helipad)
-    const h1x = 0.28 + Math.sin(t * 0.5) * 0.08;
-    const h1y = 0.45 + Math.cos(t * 0.4) * 0.06;
-
-    // HAND 2 (RIGHT): Moving in (x,y) -> Move / Orbit model
-    const h2x = 0.72 + Math.sin(t * 0.8) * 0.12;
-    const h2y = 0.5 + Math.cos(t * 0.6) * 0.09;
-    const deltaX = Math.cos(t * 0.8) * 0.007;
-    const deltaY = -Math.sin(t * 0.6) * 0.005;
-
-    const currentDist = Math.hypot(h2x - h1x, h2y - h1y);
-    const gesture: RecognizedGesture = 'MOVE';
-    const activeMode: GestureTrackingResult['activeMode'] = 'ORBIT';
-
-    // Broadcast Laser Pointer Cursor from Hand 1
-    useRigStore.getState().setPointerCursor({
-      x: h1x,
-      y: h1y - 0.2,
-      active: true,
-    });
-
-    // Left hand landmarks (pointing index)
-    const landmarks1: HandLandmark[] = [
-      { x: h1x, y: h1y + 0.16, type: 'wrist' },
-      { x: h1x, y: h1y, type: 'palm' },
-      { x: h1x - 0.06, y: h1y + 0.02, type: 'thumb' },
-      { x: h1x, y: h1y - 0.22, type: 'index' },
-      { x: h1x + 0.03, y: h1y + 0.02, type: 'middle' },
-      { x: h1x + 0.06, y: h1y + 0.04, type: 'ring' },
-      { x: h1x + 0.09, y: h1y + 0.06, type: 'pinky' },
-    ];
-
-    // Right hand landmarks (open palm moving)
-    const landmarks2: HandLandmark[] = [
-      { x: h2x, y: h2y + 0.18, type: 'wrist' },
-      { x: h2x, y: h2y, type: 'palm' },
-      { x: h2x - 0.1, y: h2y - 0.08, type: 'thumb' },
-      { x: h2x - 0.04, y: h2y - 0.18, type: 'index' },
-      { x: h2x, y: h2y - 0.20, type: 'middle' },
-      { x: h2x + 0.04, y: h2y - 0.18, type: 'ring' },
-      { x: h2x + 0.09, y: h2y - 0.12, type: 'pinky' },
-    ];
-
-    const result: GestureTrackingResult = {
-      gesture,
-      confidence: 0.98,
-      handsCount: 2,
-      handX: (h1x + h2x) / 2,
-      handY: (h1y + h2y) / 2,
-      handDistance: currentDist,
-      deltaX,
-      deltaY,
-      zoomDelta: 0,
-      isTwoHanded: true,
-      isPinching: false,
-      fingerCount: 6,
-      primaryHand: {
-        landmarks: landmarks1,
-        wrist: landmarks1[0],
-        thumbTip: landmarks1[2],
-        indexTip: landmarks1[3],
-        centroid: { x: h1x, y: h1y },
-        fingerCount: 1,
-        isPinching: false,
-        pinchDist: 1.0,
-        pinchDelta: 0,
-        isFist: false,
-        gesture: 'INDEX_1',
-        role: 'IDLE',
-      },
-      secondaryHand: {
-        landmarks: landmarks2,
-        wrist: landmarks2[0],
-        thumbTip: landmarks2[2],
-        indexTip: landmarks2[3],
-        centroid: { x: h2x, y: h2y },
-        fingerCount: 5,
-        isPinching: false,
-        pinchDist: 1.0,
-        pinchDelta: 0,
-        isFist: false,
-        gesture: 'MOVE',
-        role: 'ORBIT',
-      },
-      landmarks: [...landmarks1, ...landmarks2],
-      activeMode,
-    };
-
-    this.lastTrackingResult = result;
-
-    useRigStore.getState().setGestureSpatial({
-      deltaX,
-      deltaY,
-      zoomDelta: 0,
-      distance: currentDist,
-      handsCount: 2,
-      primaryHand: {
-        x: h1x,
-        y: h1y,
-        fingerCount: 1,
-        isPinching: false,
-        pinchDist: 1.0,
-        role: 'IDLE',
-      },
-      secondaryHand: {
-        x: h2x,
-        y: h2y,
-        fingerCount: 5,
-        isPinching: false,
-        pinchDist: 1.0,
-        role: 'ORBIT',
-      },
-      activeMode,
-    });
-
-    if (this.lastReportedGesture !== result.gesture) {
-      this.lastReportedGesture = result.gesture;
-      useRigStore.getState().setGestureDetected(result.gesture, result.confidence);
-    }
-    this.handleGestureAction(result);
-
-    this.onFrameCallbacks.forEach((cb) =>
-      cb(result, this.syntheticCanvas as unknown as HTMLVideoElement)
-    );
-
-    this.animFrameId = requestAnimationFrame(this.processSyntheticLoop);
-  };
+  /** Viewfinder hook: called every video frame with the latest tracking result. */
   public registerFrameCallback(
     cb: (result: GestureTrackingResult, video: HTMLVideoElement) => void
   ): () => void {
@@ -1095,4 +907,4 @@ class JarvisGestureVisionEngine {
   };
 }
 
-export const jarvisGestureEngine = new JarvisGestureVisionEngine();
+export const varunaGestureEngine = new VarunaGestureEngine();

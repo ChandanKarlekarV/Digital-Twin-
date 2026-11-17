@@ -134,7 +134,8 @@ export class AiIngestionPipelineService {
     }
   }
 
-  private logAnomaly(event: AiAnomalyEvent): void {
+  /** Adds an event to the AI log (also used by the leak detector) */
+  public logAnomaly(event: AiAnomalyEvent): void {
     // A condition that persists is one event, not 50 a second: log each asset+category at
     // most once per ANOMALY_REPEAT_MS so the 500-entry log keeps its history
     const key = `${event.asset_id}|${event.category}`;

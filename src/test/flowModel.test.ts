@@ -1,7 +1,7 @@
 /** Run: npx tsx src/test/flowModel.test.ts */
 import { productionAt, KGD6_QUARTERS, SCF_PER_SCM } from '../data/kgd6Production';
 import { solveNetwork, zFactor, gasDensity, STICK_SLIP_HZ, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
-import { steadyRecord } from '../physics/MeterComputer';
+import { steadyRecord, METER_BIAS } from '../physics/MeterComputer';
 import { telemetryEmitter, PHYSICS_HZ } from '../physics/TelemetryEmitter';
 import { telemetryDb } from '../db/TelemetryDatabase';
 
@@ -23,7 +23,7 @@ check(mid.gasMmscmd === 25.6, 'mid-Q3 FY26 = published 25.6 MMSCMD', mid.gasMmsc
 const net = solveNetwork(p);
 const exp = steadyRecord(net['TOPSIDE-MPFM-01'], WATER_CUT_PCT, Date.now());
 check(near(exp.net_oil_bpd, p.liquidsBpd, 0.002), 'export meter condensate within 0.2% of published', exp.net_oil_bpd);
-check(near((exp.associated_gas_mmscfd ?? 0) / SCF_PER_SCM, p.gasMmscmd, 1e-4), 'export gas = published MMSCMD', ((exp.associated_gas_mmscfd ?? 0) / SCF_PER_SCM).toFixed(3));
+check(near((exp.associated_gas_mmscfd ?? 0) / SCF_PER_SCM, p.gasMmscmd * (1 + METER_BIAS['TOPSIDE-MPFM-01']), 1e-4), 'export gas = published x meter calibration', ((exp.associated_gas_mmscfd ?? 0) / SCF_PER_SCM).toFixed(3));
 check(near(net['RISER-ALPHA'].gasMmscmd + net['RISER-BRAVO'].gasMmscmd, net['MANIFOLD-D6-MAIN'].gasMmscmd, 1e-9), 'risers carry exactly the manifold flow', 'balanced');
 check(Math.abs(exp.corrected_density - 807.2) < 0.05 && Math.abs(exp.api_gravity - 43.62) < 0.02, 'ASTM D1250 base density/API recovered exactly', `${exp.corrected_density} kg/m³, ${exp.api_gravity} °API`);
 

@@ -6,7 +6,9 @@ import {
   Radio,
   Sliders,
   RotateCcw,
+  Scale,
 } from 'lucide-react';
+import { useLeakStatus, leakDetector } from '../../services/LeakDetector';
 import {
   useRigStore,
   EmergencyScenario,
@@ -14,6 +16,49 @@ import {
 } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
+
+/** Pipeline mass balance (API RP 1130): manifold meter in, topside meter out, line-pack compensated */
+const LeakBalanceRow: React.FC = () => {
+  const s = useLeakStatus();
+  const tone =
+    s.state === 'alarm'
+      ? { box: 'bg-danger-950 border-danger-500', text: 'text-danger-300', bar: 'bg-danger-400', label: 'Leak alarm' }
+      : s.state === 'watch'
+      ? { box: 'bg-warning-950 border-warning-600', text: 'text-warning-300', bar: 'bg-warning-400', label: 'Watching' }
+      : { box: 'bg-surface-2 border-line', text: 'text-success-300', bar: 'bg-success-400', label: 'No leak' };
+  const progress = Math.min(100, (s.cusum / s.limit) * 100);
+  return (
+    <div className={`mt-2 p-2 rounded-md border ${tone.box}`} title="Compensated mass balance: subsea manifold meter in, topside export meter out, corrected for gas stored in the risers">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="flex items-center gap-1.5 text-ink">
+          <Scale className={`w-3.5 h-3.5 ${tone.text}`} />
+          Mass balance
+        </span>
+        <span className={`font-semibold ${tone.text}`}>{tone.label}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[10px] text-ink-muted">
+        <span>
+          Missing <strong className="text-ink font-medium">{Math.max(0, s.imbalancePct).toFixed(2)}%</strong>
+          {s.state !== 'normal' && <> · {s.lossMmscmd.toFixed(2)} MMSCMD</>}
+        </span>
+        <span>±{s.sigmaKgS.toFixed(1)} kg/s band</span>
+      </div>
+      <div className="mt-1 h-1 rounded-full bg-surface-3 overflow-hidden" aria-label="Evidence toward a leak alarm">
+        <div className={`h-full ${tone.bar} transition-all duration-500`} style={{ width: `${progress}%` }} />
+      </div>
+      {s.state !== 'normal' && (
+        <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+          <span className="text-ink truncate" title={s.location ?? ''}>
+            {s.location}
+          </span>
+          <button onClick={() => leakDetector.reset()} className="btn h-6 px-2 text-[10px]" title="Clear after the leak is isolated">
+            Reset
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const CriticalAnomaliesMonitor: React.FC = () => {
   const [isExpanded, setIsExpanded] = React.useState(false);
@@ -110,6 +155,8 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <LeakBalanceRow />
 
       {/* 3 Quick Alert Items */}
       {isExpanded && (

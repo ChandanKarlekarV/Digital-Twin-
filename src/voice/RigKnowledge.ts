@@ -6,10 +6,12 @@ import { telemetryDb } from '../db/TelemetryDatabase';
 import { useRigStore } from '../store/useRigStore';
 import type { TelemetryRecord } from '../types/telemetry';
 import type { ParsedVoiceCommand } from './VoiceCommandParser';
+import { leakDetector } from '../services/LeakDetector';
 
-type Metric = 'pressure' | 'temperature' | 'flow' | 'gas' | 'density' | 'api' | 'water_cut' | 'frequency' | 'drill' | 'depth' | 'about' | 'status';
+type Metric = 'leak' | 'pressure' | 'temperature' | 'flow' | 'gas' | 'density' | 'api' | 'water_cut' | 'frequency' | 'drill' | 'depth' | 'about' | 'status';
 
 const METRICS: [Metric, RegExp][] = [
+  ['leak', /\bleak|leaking|loss of containment|mass balance|missing (gas|flow)/],
   ['water_cut', /\bwater ?cut|water content|bs ?w\b/],
   ['pressure', /\bpressure|\bpsi\b|\bbar\b/],
   ['temperature', /\btemp|temperature|how hot\b/],
@@ -76,6 +78,13 @@ function rigStatus(): string {
   return parts.filter(Boolean).join(' ');
 }
 
+function leakAnswer(): string {
+  const s = leakDetector.getStatus();
+  if (s.state === 'alarm') return `Leak alarm. The mass balance is short by ${s.imbalancePct.toFixed(1)} percent, about ${s.lossMmscmd.toFixed(2)} million standard cubic metres a day. Suspected location: ${s.location}.`;
+  if (s.state === 'watch') return `Watching a possible leak: ${s.imbalancePct.toFixed(1)} percent of the flow is unaccounted for. Suspected location: ${s.location}.`;
+  return `No leak. The manifold and topside meters balance within ${s.imbalancePct.toFixed(2)} percent, inside the meters' uncertainty.`;
+}
+
 const ABOUT =
   'This is the digital twin of the KG-D6 block in the Krishna-Godavari basin, Bay of Bengal, off the Andhra Pradesh coast. ' +
   'It is operated by Reliance Industries with bp as partner. It is mainly a gas field: in the July to September 2026 quarter it averaged 24.0 million standard cubic metres of gas a day and about 15,900 barrels a day of oil and condensate. ' +
@@ -91,6 +100,7 @@ export function answerRigQuestion(raw: string, parsed: ParsedVoiceCommand | null
 
   const metric = METRICS.find(([, re]) => re.test(text))?.[0];
   if (!metric) return !parsed && QUESTION.test(text) ? 'I can only answer questions about the KG-D6 rig.' : null;
+  if (metric === 'leak') return leakAnswer();
   if (metric === 'status') return rigStatus();
   if (metric === 'about') return ABOUT;
   if (metric === 'depth') return 'The twin models 2,040 metres from sea level to the reservoir, the depth of the drill string and wells.';

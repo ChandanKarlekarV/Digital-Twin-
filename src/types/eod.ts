@@ -65,7 +65,7 @@ export interface AiAnomalyEvent {
   precise_time: string;
   asset_id: string;
   severity: 'INFO' | 'WARNING' | 'CRITICAL_ESD';
-  category: 'DRILL_OVERLOAD' | 'HYDRATE_RISK' | 'FLOW_RESTRICTION' | 'CORIOLIS_DRIFT' | 'PURITY_BREACH';
+  category: 'DRILL_OVERLOAD' | 'HYDRATE_RISK' | 'FLOW_RESTRICTION' | 'CORIOLIS_DRIFT' | 'PURITY_BREACH' | 'LEAK_DETECTED';
   detected_value: string;
   nominal_baseline: string;
   ai_inference_summary: string;

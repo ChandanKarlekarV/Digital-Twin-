@@ -16,6 +16,7 @@ import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 import { telemetryDb } from '../../db/TelemetryDatabase';
 import { solveNetwork } from '../../physics/KgD6FlowModel';
 import { productionAt } from '../../data/kgd6Production';
+import { useLeakStatus } from '../../services/LeakDetector';
 
 export const EmergencyIncidentPanel: React.FC = () => {
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
@@ -30,7 +31,11 @@ export const EmergencyIncidentPanel: React.FC = () => {
   // Measured manifold pressure against today's undisturbed network (re-evaluated on every telemetry update)
   useTelemetryStore((s) => s.currentRecord);
   const manifoldNow = telemetryDb.getLatest('MANIFOLD-D6-MAIN')?.p_line_bar;
-  const manifoldRiseBar = manifoldNow ? Math.max(0, manifoldNow - solveNetwork(productionAt())['MANIFOLD-D6-MAIN'].pBar) : 0;
+  const baseline = solveNetwork(productionAt());
+  const manifoldRiseBar = manifoldNow ? Math.max(0, manifoldNow - baseline['MANIFOLD-D6-MAIN'].pBar) : 0;
+  const riserAlphaBar = telemetryDb.getLatest('RISER-ALPHA')?.p_line_bar ?? baseline['RISER-ALPHA'].pBar;
+  const riserAlphaDrop = baseline['RISER-ALPHA'].pBar - riserAlphaBar;
+  const leak = useLeakStatus();
   const activeDrillResult = useTelemetryStore((s) => s.activeDrillResult);
   const activeMultiphaseResult = useTelemetryStore((s) => s.activeMultiphaseResult);
 
@@ -162,12 +167,17 @@ export const EmergencyIncidentPanel: React.FC = () => {
           {emergencyScenario === 'rupture' && (
             <>
               <div className="flex justify-between">
-                <span className="text-red-200">LINE DECOMPRESSION:</span>
-                <span className="text-white font-bold">{currentRecord?.p_line_bar.toFixed(1)} bar (-68 bar)</span>
+                <span className="text-red-200">RISER ALPHA PRESSURE:</span>
+                <span className="text-white font-bold">
+                  {riserAlphaBar.toFixed(1)} bar ({riserAlphaDrop >= 0 ? '-' : '+'}
+                  {Math.abs(riserAlphaDrop).toFixed(1)} bar)
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-red-200">SEAWATER INGRESS:</span>
-                <span className="text-white font-bold">{currentRecord?.water_cut_pct.toFixed(1)}%</span>
+                <span className="text-red-200">MASS BALANCE:</span>
+                <span className="text-white font-bold">
+                  {leak.state === 'normal' ? 'balanced' : `${leak.imbalancePct.toFixed(1)}% missing`}
+                </span>
               </div>
             </>
           )}

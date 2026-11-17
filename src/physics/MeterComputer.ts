@@ -14,6 +14,13 @@ import { AssetState, condensateDensity, mixDensity, CONDENSATE_RHO_15C, BRINE_RH
 export const tubeFrequency = (wcPct: number, tC: number, pBar: number) =>
   coriolisEngine.computeFrequencyFromDensity(mixDensity(wcPct, tC, pBar), tC);
 
+/**
+ * ASSUMPTION: fixed calibration offsets of the two custody meters (well inside the
+ * ±0.7% uncertainty of an AGA-9 ultrasonic gas meter). Real meters never agree exactly,
+ * so the leak detector has to tell this standing offset apart from a real loss.
+ */
+export const METER_BIAS: Record<string, number> = { 'MANIFOLD-D6-MAIN': 0.002, 'TOPSIDE-MPFM-01': -0.001 };
+
 export function meterRecord(
   id: string,
   s: AssetState,
@@ -21,9 +28,11 @@ export function meterRecord(
   status: number,
   timestamp = Date.now()
 ): TelemetryRecord {
+  const bias = 1 + (METER_BIAS[id] ?? 0);
+  const mass = m.mass * bias;
   const cor = coriolisEngine.computeDensityFromFrequency(m.f, m.t);
   const rhoMix = cor.temp_compensated_density_kg_m3;
-  const mp = multiphaseCutEngine.deconvolveFlow(rhoMix, condensateDensity(m.t, m.p), m.mass, CONDENSATE_RHO_15C, BRINE_RHO);
+  const mp = multiphaseCutEngine.deconvolveFlow(rhoMix, condensateDensity(m.t, m.p), mass, CONDENSATE_RHO_15C, BRINE_RHO);
   const wcf = mp.water_cut_vol_fraction;
   const rhoOil = wcf < 0.999 ? (rhoMix - wcf * BRINE_RHO) / (1 - wcf) : rhoMix;
   const astm = astm1250Engine.executeFullCorrection(rhoOil, m.t, m.p);
@@ -38,12 +47,12 @@ export function meterRecord(
     corrected_density: Number(astm.rho_base.toFixed(2)),
     api_gravity: Number(astm.api_gravity.toFixed(2)),
     water_cut_pct: Number(m.wc.toFixed(2)),
-    gross_mass_rate: Number(m.mass.toFixed(3)),
+    gross_mass_rate: Number(mass.toFixed(3)),
     gross_liquid_bpd: Number((mp.net_oil_bpd + mp.water_bpd).toFixed(1)),
     net_oil_bpd: Number(mp.net_oil_bpd.toFixed(1)),
     purified_oil_bpd: Number(mp.net_oil_bpd.toFixed(1)),
     produced_water_bpd: Number(mp.water_bpd.toFixed(1)),
-    associated_gas_mmscfd: Number((s.gasMmscmd * SCF_PER_SCM).toFixed(2)),
+    associated_gas_mmscfd: Number((s.gasMmscmd * SCF_PER_SCM * bias).toFixed(3)),
     status_flag: status,
   };
 }

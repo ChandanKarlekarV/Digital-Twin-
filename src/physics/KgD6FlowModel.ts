@@ -68,6 +68,8 @@ const RESERVOIR_TEMP_C = 140.0;
 const D_RISER = 0.3048; // 12"
 const D_FLOWLINE = 0.2032; // 8"
 const RISER_HEIGHT_M = MJ_FIELD.waterDepthM;
+/** Gas volume between the subsea meters and the topside export meter (two risers), m³ */
+export const RISER_VOLUME_M3 = 2 * (Math.PI / 4) * D_RISER ** 2 * RISER_HEIGHT_M;
 
 /** Design point = latest published quarter */
 const DESIGN_Q = KGD6_QUARTERS[KGD6_QUARTERS.length - 1].gasMmscmd;
@@ -144,6 +146,8 @@ export interface Disturbance {
   kFactor?: Record<string, number>;
   /** multiplies the block rate (choke-back, shut-in) */
   flowFactor?: number;
+  /** Fraction (0-1) of riser Alpha's flow lost to sea above its riser-base meter (loss of containment) */
+  leakFraction?: number;
 }
 
 const liquids = (block: BlockProduction, share: number) => {
@@ -228,7 +232,8 @@ export function solveNetwork(block: BlockProduction, d: Disturbance = {}): Recor
     return { id, pBar: p, tC: t, gasMmscmd: q * share, condensateBpd: l.cond, waterBpd: l.water, liquidKgS: l.kgS, pipeD, vertical };
   };
   return {
-    'TOPSIDE-MPFM-01': node('TOPSIDE-MPFM-01', n.pTop, n.tTop, 1, 0, false),
+    // A leak in riser Alpha removes part of its flow before it reaches the topside export meter
+    'TOPSIDE-MPFM-01': node('TOPSIDE-MPFM-01', n.pTop, n.tTop, 1 - n.split * Math.min(Math.max(d.leakFraction ?? 0, 0), 1), 0, false),
     'RISER-ALPHA': node('RISER-ALPHA', n.a.pR, n.a.tR, n.split, D_RISER, true),
     'RISER-BRAVO': node('RISER-BRAVO', n.b.pR, n.b.tR, 1 - n.split, D_RISER, true),
     'MANIFOLD-D6-MAIN': node('MANIFOLD-D6-MAIN', n.pMan, n.tMan, 1, D_FLOWLINE * 2, false),

@@ -3,6 +3,8 @@ import { useTelemetryStore } from '../store/useTelemetryStore';
 import { useRigStore } from '../store/useRigStore';
 import { KalmanFilter1D } from './KalmanFilter';
 import { meterRecord, drillRecord, tubeFrequency, DRILL_ASSET } from './MeterComputer';
+import { leakDetector } from '../services/LeakDetector';
+import type { TelemetryRecord } from '../types/telemetry';
 import { aiIngestionPipeline } from '../services/AiIngestionPipeline';
 import { midnightSettlementEngine } from '../services/MidnightSettlementEngine';
 import { productionAt } from '../data/kgd6Production';
@@ -13,6 +15,9 @@ import {
   WATER_CUT_PCT,
   DRILL,
   STICK_SLIP_HZ,
+  gasDensity,
+  GAS_RHO_STD,
+  RISER_VOLUME_M3,
   Disturbance,
 } from './KgD6FlowModel';
 
@@ -26,7 +31,9 @@ const DT = 1 / PHYSICS_HZ;
 const STORE_EVERY = PHYSICS_HZ / STORE_HZ;
 const UI_EVERY = PHYSICS_HZ / UI_HZ;
 /** Incident drills ease in/out with this time constant (s) */
-const INCIDENT_TAU = 1.5;
+const INCIDENT_TAU = 4;
+/** Fluid temperature follows the steady solution with the riser transit time (thermal inertia), s */
+const THERMAL_TAU = 60;
 /** Auto-advance an incident drill every 6 s */
 const INCIDENT_PHASE_S = 6;
 
@@ -85,9 +92,8 @@ function incidentTarget(scenario: string, phase: number): Incident {
       i.kManifold = [3, 10, 40, 250][ph - 1];
       i.dWC = 3.5 * ph;
       break;
-    case 'rupture': // loss of containment on riser Alpha
-      i.rupture = ph / 4;
-      i.flow = 0.2;
+    case 'rupture': // loss of containment in riser Alpha: this share of its flow escapes to sea
+      i.rupture = [0.02, 0.06, 0.15, 0.4][ph - 1];
       break;
     case 'stuck_drill':
     case 'drill_damage':
@@ -100,7 +106,7 @@ function incidentTarget(scenario: string, phase: number): Incident {
 const STATUS: Record<string, (ph: number) => number> = {
   pipe_blockage: (ph) => (ph >= 3 ? 2 : 1),
   hydrate_plug: (ph) => (ph >= 3 ? 2 : 3),
-  rupture: () => 2,
+  rupture: () => 0, // no flag from the drill itself: the mass-balance detector must find it
   stuck_drill: (ph) => (ph >= 3 ? 4 : 1),
   drill_damage: (ph) => (ph >= 3 ? 4 : 1),
 };
@@ -135,6 +141,8 @@ class TelemetryEmitterService {
   private kTorque = new KalmanFilter1D({ Q: 0.02, R: 0.05, initialState: DRILL.designTorqueKnm, maxResidualThreshold: 25 });
   private kRop = new KalmanFilter1D({ Q: 0.01, R: 0.05, initialState: DRILL.designRopMh, maxResidualThreshold: 15 });
   private phaseClock = 0;
+  private lastPack: number | null = null;
+  private fluidT = new Map<string, number>();
 
   constructor() {
     this.initSims();
@@ -228,15 +236,33 @@ class TelemetryEmitterService {
 
     const d: Disturbance = {
       flowFactor: this.incident.flow,
+      leakFraction: this.incident.rupture,
       kFactor: { 'RISER-ALPHA': this.incident.kRiserA, 'MANIFOLD-D6-MAIN': this.incident.kManifold },
     };
     const block = productionAt();
     const net = solveNetwork(block, d);
+    // Thermal inertia: the fluid in each line takes about a transit time to reach a new temperature
+    const aT = 1 - Math.exp(-dt / THERMAL_TAU);
+    for (const node of Object.values(net)) {
+      const prevT = this.fluidT.get(node.id) ?? node.tC;
+      node.tC = prevT + (node.tC - prevT) * aT;
+      this.fluidT.set(node.id, node.tC);
+    }
+    // Mass conservation in the risers: gas stored by rising pressure (line pack) is held back,
+    // gas released by falling pressure adds to the export flow
+    const man = net['MANIFOLD-D6-MAIN'];
+    const top = net['TOPSIDE-MPFM-01'];
+    const pack = gasDensity((man.pBar + top.pBar) / 2, (man.tC + top.tC) / 2) * RISER_VOLUME_M3;
+    const dPack = this.lastPack === null ? 0 : (pack - this.lastPack) / dt;
+    this.lastPack = pack;
+    const gasKgS = (top.gasMmscmd * 1e6 * GAS_RHO_STD) / 86400;
+    top.gasMmscmd = (Math.max(0, gasKgS - dPack) * 86400) / (1e6 * GAS_RHO_STD);
     const store_ = this.step % STORE_EVERY === 0;
     const ui = this.step % UI_EVERY === 0;
     const activeAsset = store.selectedAssetId || 'RISER-ALPHA';
     const statusFor = (id: string) => (scenario !== 'none' && AFFECTS[scenario]?.includes(id) ? STATUS[scenario]?.(phase) ?? 0 : 0);
 
+    const stored: Record<string, TelemetryRecord> = {};
     for (const id of PRODUCTION_ASSETS) {
       const sim = this.sims.get(id)!;
       const s = net[id];
@@ -244,7 +270,7 @@ class TelemetryEmitterService {
       const slug = slugging(s);
       sim.slugPhase = (sim.slugPhase + 2 * Math.PI * slug.freqHz * dt) % (2 * Math.PI);
       let pTrue = s.pBar + slug.ampBar * Math.sin(sim.slugPhase);
-      if (id === 'RISER-ALPHA' && this.incident.rupture > 0.001) pTrue = Math.max(12, pTrue * (1 - 0.8 * this.incident.rupture));
+      if (id === 'RISER-ALPHA' && this.incident.rupture > 0.001) pTrue = Math.max(12, pTrue * (1 - 0.3 * this.incident.rupture));
       const wcTrue = WATER_CUT_PCT + this.incident.dWC;
 
       const p = sim.p.step(pTrue, dt);
@@ -265,10 +291,16 @@ class TelemetryEmitterService {
         const L = sim.last;
         const raw = meterRecord(id, s, { p: L.p, t: L.t, f: L.f, mass: L.mass, wc: L.wc }, statusFor(id));
         const filtered = meterRecord(id, s, { p: L.fp, t: L.ft, f: L.ff, mass: L.fm, wc: L.fwc }, statusFor(id));
-        if (store_) telemetryDb.insert(filtered);
+        if (store_) {
+          telemetryDb.insert(filtered);
+          stored[id] = filtered;
+        }
         if (ui && id === activeAsset) useTelemetryStore.getState().updateTelemetry(raw, filtered);
       }
     }
+
+    // Pipeline leak detection runs on the measured (filtered) meter records only
+    if (store_) leakDetector.update(stored, this.simTime);
 
     // Drilling: torque, ROP and standpipe pressure from the drill-string model
     const rpm = this.incident.rpm;

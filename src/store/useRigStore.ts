@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  parseVoiceCommand,
+  normalizeTranscript,
+  stripWakeWord,
+  WAKE_WORD_REGEX,
+  VOICE_HELP_TEXT,
+} from '../voice/VoiceCommandParser';
 
 export type CameraViewMode =
   | 'topside'
@@ -71,7 +78,7 @@ export type HolographicComponentType =
   | 'well7'
   | 'wells1_7'
   | 'command_dock';
-export type ScannerMode = 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
+export type ScannerMode = 'realistic' | 'normal' | 'thermal' | 'acoustic' | 'gamma' | 'hologram';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
 
 export type RecognizedGesture =
@@ -668,16 +675,17 @@ export const useRigStore = create<RigState>((set, get) => ({
   selectedAssetId: 'RISER-ALPHA',
   setSelectedAssetId: (id) => set({ selectedAssetId: id, isTelemetryDrawerOpen: !!id }),
 
-  customObjUrl: '/models/untitled.obj',
-  customObjFileName: 'untitled.obj',
+  customObjUrl: '/models/rig.bin',
+  customObjFileName: 'KG-D6 rig (built-in)',
   setCustomObjUrl: (url, fileName) =>
     set({
       customObjUrl: url,
       customObjFileName: fileName || (url ? 'Custom Rig Model (.obj)' : null),
     }),
 
+  // The twin is hologram-only; other modes are kept in the type for older callers but render as hologram
   scannerMode: 'hologram',
-  setScannerMode: (mode) => set({ scannerMode: mode }),
+  setScannerMode: () => set({ scannerMode: 'hologram' }),
 
   metoceanCondition: 'calm',
   setMetoceanCondition: (condition) => set({ metoceanCondition: condition }),
@@ -1023,7 +1031,8 @@ export const useRigStore = create<RigState>((set, get) => ({
     const expiry = Date.now() + 10000; // 10 second active listening window
     set({ isVarunaAwake: true, varunaWakeExpiry: expiry });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      varunaVoice.speakCustom('Give me the command');
+      // Short reply: the recogniser ignores input while VARUNA talks (echo guard)
+      varunaVoice.speakCustom('Yes?');
     });
   },
 
@@ -1084,400 +1093,181 @@ export const useRigStore = create<RigState>((set, get) => ({
     });
   },
 
-  /**
-   * VARUNA-AI Voice Command Execution Pipeline
-   * Strict Wake Word Protocol:
-   * 1. If asleep, remains silent and passive until "Varuna" is spoken.
-   * 2. If user says "Varuna", AI wakes up, replies: "Give me the command", and opens 10-second window.
-   * 3. If user says "Varuna open [command]" in one breath, executes immediately and confirms.
-   * 4. Supports all 28+ commands requested.
-   */
+  /** VARUNA-AI voice pipeline: wake word gate -> intent parser (src/voice/VoiceCommandParser.ts) -> action. */
   executeVoiceCommand: (rawCommand: string) => {
-    const rawLower = rawCommand.toLowerCase().trim();
     set({ lastVoiceCommand: rawCommand });
 
-    // Detect Wake Word variations (Varuna, Varun, Verona, Viruna, Waruna, Baruna, Varna)
-    const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna|aruna|karuna|veruna|barun|varun a|varun ai|varuna ai|hey varuna|ok varuna)\b/i;
-    const hasWakeWord = wakeWordRegex.test(rawLower);
+    const say = (text: string) => {
+      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => varunaVoice.speakCustom(text));
+    };
 
-    const now = Date.now();
-    const isCurrentlyAwake = get().isVarunaAwake && now < get().varunaWakeExpiry;
+    const hasWakeWord = WAKE_WORD_REGEX.test(rawCommand);
+    const isCurrentlyAwake = get().isVarunaAwake && Date.now() < get().varunaWakeExpiry;
 
-    // If asleep and no wake word detected, stay silent and do not execute
-    if (!hasWakeWord && !isCurrentlyAwake) {
-      return;
-    }
+    // Asleep and no wake word: stay silent
+    if (!hasWakeWord && !isCurrentlyAwake) return;
 
-    // Strip wake word to extract the actual command
-    let cmd = rawLower.replace(wakeWordRegex, '').trim();
+    const parsed = parseVoiceCommand(rawCommand);
 
-    // Remove leading filler words like "please", "can you", "hey", "hello", "hi"
-    cmd = cmd.replace(/^(please|can you|could you|hey|hello|hi|ai|a\.i\.)\s+/i, '').trim();
-
-    // If user said ONLY "Varuna" (no actual command), wake up and speak "Give me the command"
-    if (!cmd || cmd === 'wake up' || cmd === 'online' || cmd === 'start' || cmd === 'hello' || cmd === 'hi') {
-      get().wakeVaruna();
-      return;
-    }
-
-    // Refresh wake window: 8s per command = instant back-to-back commands (no gap)
-    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 8000, voiceTranscript: null });
-
-    // ==================== 28 VOICE COMMAND HANDLERS ====================
-
-    // 1 & 2. JARVIS VIEW / SPLIT VIEW
-    if (cmd.includes('jarvis view') || cmd.includes('split view') || cmd === 'open split' || cmd === 'split') {
-      set({
-        isSplitViewActive: true,
-        splitFactor: 1.0,
-        cameraViewMode: 'split',
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Jarvis exploded split view. All 12 structural assemblies decoupled.');
-      });
-      return;
-    }
-
-    // 3. HELIPAD VIEW
-    if (cmd.includes('helipad') || cmd.includes('heli deck') || cmd.includes('helicopter')) {
-      set({
-        cameraViewMode: 'helipad',
-        selectedAssetId: 'HELIPAD-DECK',
-        activeHoloModal: 'helipad',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening CAP 437 offshore helipad holographic view.');
-      });
-      return;
-    }
-
-    // 4. CRANE 1 VIEW (LATTICE BOOM)
-    if (cmd.includes('crane 1') || cmd.includes('crane one') || cmd.includes('port crane')) {
-      set({
-        cameraViewMode: 'crane1',
-        selectedAssetId: 'CRANE-PORT',
-        activeHoloModal: 'crane1',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Heavy-Lift Pedestal Crane 1 view.');
-      });
-      return;
-    }
-
-    // 5. CRANE 2 VIEW (PEDESTAL)
-    if (cmd.includes('crane 2') || cmd.includes('crane two') || cmd.includes('starboard crane')) {
-      set({
-        cameraViewMode: 'crane2',
-        selectedAssetId: 'CRANE-STARBOARD',
-        activeHoloModal: 'crane2',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Auxiliary Deck Crane 2 view.');
-      });
-      return;
-    }
-
-    // 6. ACCOMMODATION MODULE
-    if (cmd.includes('accommodation') || cmd.includes('living quarters') || cmd.includes('quarters')) {
-      set({
-        cameraViewMode: 'accommodation',
-        selectedAssetId: 'ACCOMMODATION-MODULE',
-        activeHoloModal: 'accommodation',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening offshore accommodation module diagnostics.');
-      });
-      return;
-    }
-
-    // 7. INDUSTRIAL PIPE FITTING
-    if (cmd.includes('industrial pipe') || cmd.includes('industrial pipe fitting') || cmd.includes('pipe fitting') || cmd.includes('process piping')) {
-      set({
-        cameraViewMode: 'industrial_pipes',
-        selectedAssetId: 'INDUSTRIAL-PIPES',
-        activeHoloModal: 'industrial_pipes',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening industrial pipe fitting and valve manifold view.');
-      });
-      return;
-    }
-
-    // 8. JACK-UP LEGS
-    if (cmd.includes('jack-up legs') || cmd.includes('jack up legs') || cmd.includes('jackup legs') || cmd.includes('legs') || cmd.includes('stability columns')) {
-      set({
-        cameraViewMode: 'jackup_legs',
-        selectedAssetId: 'PILLAR-FOUNDATION',
-        activeHoloModal: 'jackup_legs',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening buoyant jack-up stability legs and foundation columns.');
-      });
-      return;
-    }
-
-    // 9. SUBSEA DRILL STRING
-    if (cmd.includes('subsea drill string') || cmd.includes('drill string')) {
-      set({
-        cameraViewMode: 'drill_string',
-        selectedAssetId: 'DRILL-SYSTEM',
-        activeHoloModal: 'drill_string',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening subsea rotary drill string mechanics.');
-      });
-      return;
-    }
-
-    // 10. DRILL BIT
-    if (cmd.includes('drill bit') || cmd.includes('cutter bit') || cmd.includes('pdc bit')) {
-      set({
-        cameraViewMode: 'drill_bit',
-        selectedAssetId: 'DRILL-SYSTEM',
-        activeHoloModal: 'drill_bit',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening PDC diamond cutter drill bit inspection deck.');
-      });
-      return;
-    }
-
-    // General drill command fallback
-    if (cmd.includes('drill') || cmd.includes('drilling')) {
-      set({
-        cameraViewMode: 'drill',
-        selectedAssetId: 'DRILL-SYSTEM',
-        activeHoloModal: 'drill',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening rotary drilling derrick and subsea drill system.');
-      });
-      return;
-    }
-
-    // 11. MAIN DECK STRUCTURE
-    if (cmd.includes('main deck') || cmd.includes('main deck structure') || cmd.includes('deck structure') || cmd.includes('platform deck')) {
-      set({
-        cameraViewMode: 'main_deck',
-        selectedAssetId: 'TOPSIDE-DRILL-RIG',
-        activeHoloModal: 'main_deck',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening platform main deck structure and topside quarters.');
-      });
-      return;
-    }
-
-    // 12-20. PIPES 1 TO 9 MATCHING
-    for (let i = 1; i <= 9; i++) {
-      const numWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-      const digitStr = `pipe ${i}`;
-      const wordStr = `pipe ${numWords[i - 1]}`;
-      const lineStr = `line ${i}`;
-
-      if (cmd.includes(digitStr) || cmd.includes(wordStr) || cmd.includes(lineStr)) {
-        const pipeKey = `pipe${i}` as HolographicComponentType;
-        set({
-          cameraViewMode: pipeKey,
-          selectedAssetId: `PIPE-${i}`,
-          activeHoloModal: pipeKey,
-          isTelemetryDrawerOpen: true,
-        });
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom(`Opening Subsea Flowline Pipe ${i} holographic cross-section.`);
-        });
+    // Wake word alone ("Varuna", "hey Varuna, hello") opens the listening window
+    if (!parsed) {
+      const rest = normalizeTranscript(stripWakeWord(rawCommand)).filter(
+        (t) => !['hello', 'hi', 'hey', 'ok', 'okay', 'wake', 'up', 'online', 'start', 'please'].includes(t)
+      );
+      if (rest.length === 0) {
+        get().wakeVaruna();
         return;
       }
-    }
-
-    // 21. COMMAND DOCK
-    if (cmd.includes('command dock') || cmd.includes('dock') || cmd.includes('tools dock')) {
-      set({ isCommandDockOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Tactical Command Dock.');
-      });
+      // Something was said but nothing matched: keep listening and ask once
+      set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 10000, voiceTranscript: null, lastVoiceCommand: null });
+      import('../voice/JarvisVoiceCommander').then(({ jarvisVoiceCommander }) => jarvisVoiceCommander.resetDebounce());
+      say("Sorry, I didn't catch that. Say help to hear what I can do.");
       return;
     }
 
-    // 22. HARDWARE SCADA GATEWAY
-    if (cmd.includes('hardware scada gateway') || cmd.includes('hardware gateway') || cmd.includes('scada gateway') || cmd.includes('hardware')) {
-      set({ isHardwareModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Hardware SCADA Gateway.');
-      });
-      return;
-    }
+    // Keep the session open for quick follow-up commands
+    set({ isVarunaAwake: true, varunaWakeExpiry: Date.now() + 12000, voiceTranscript: null });
 
-    // 23. OPEN PPT / SIH PRESENTATION
-    if (cmd.includes('open ppt') || cmd.includes('open presentation') || cmd.includes('sih ppt') || cmd.includes('ppt') || cmd.includes('presentation')) {
-      set({ isSihModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Smart India Hackathon 6-page presentation deck.');
-      });
-      return;
-    }
+    const openPanel = (patch: Partial<RigState>, speech: string) => {
+      set(patch);
+      say(speech);
+    };
+    const focus = (mode: CameraViewMode, assetId: string, modal: HolographicComponentType, speech: string) =>
+      openPanel({ cameraViewMode: mode, selectedAssetId: assetId, activeHoloModal: modal, isTelemetryDrawerOpen: true }, speech);
 
-    // 24. DATABASE
-    if (cmd.includes('database') || cmd.includes('data base') || cmd.includes('ledger') || cmd.includes('6 month') || cmd.includes('telemetry db')) {
-      set({ isTelemetryDrawerOpen: true, isEodModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening 6-Month Time-Series Telemetry Database and Production Ledger.');
-      });
-      return;
-    }
-
-    // 25. COMPLIANCE AUDIT REPORT
-    if (cmd.includes('compliance audit report') || cmd.includes('compliance report') || cmd.includes('audit report') || cmd.includes('compliance')) {
-      set({ isReportModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening DGH and ISO Regulatory Compliance Audit Report.');
-      });
-      return;
-    }
-
-    // 26. CURRENT WEATHER REPORT & FORECAST
-    if (cmd.includes('weather report') || cmd.includes('current weather') || cmd.includes('weather forecast') || cmd.includes('weather')) {
-      set({ isWeatherPanelOpen: true });
-      import('../services/KgD6WeatherService').then(({ KgD6WeatherService }) => {
-        KgD6WeatherService.getSpokenWeatherForecast().then((speech) => {
-          import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-            varunaVoice.speakCustom(speech);
-          });
-        });
-      });
-      return;
-    }
-
-    // 27. WATER STATUS
-    if (cmd.includes('water status') || cmd.includes('ocean status') || cmd.includes('tide status') || cmd.includes('water current')) {
-      import('../physics/DynamicTideEngine').then(({ dynamicTideEngine }) => {
-        const speech = dynamicTideEngine.getWaterStatusSpeech();
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom(speech);
-        });
-      });
-      return;
-    }
-
-    // 28. LATEX REPORT / PHYSICS REPORT
-    if (cmd.includes('latex report') || cmd.includes('latex') || cmd.includes('physics report') || cmd.includes('math report') || cmd.includes('equations')) {
-      set({ isPhysicsModalOpen: true });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Displaying real-time LaTeX Mathematical and Physical Governing Equations Report.');
-      });
-      return;
-    }
-
-    // REASSEMBLE / ASSEMBLE RIG
-    if (cmd.includes('assemble') || cmd.includes('reassemble') || cmd.includes('merge') || cmd.includes('close split')) {
-      set({
-        isSplitViewActive: false,
-        splitFactor: 0.0,
-        isPipeSliced: false,
-        isPipeSliceModalOpen: false,
-        activeHoloModal: null,
-        cameraViewMode: 'free',
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Reassembling digital twin subsystems. Full operational alignment restored.');
-      });
-      return;
-    }
-
-    // SLICE PIPE
-    if (cmd.includes('slice it') || cmd.includes('slice pipe') || cmd.includes('cut pipe') || cmd.includes('cross section') || cmd.includes('slice')) {
-      set({
-        isPipeSliced: true,
-        isPipeSliceModalOpen: true,
-        cameraViewMode: 'pipe1_slice',
-        selectedAssetId: 'RISER-ALPHA',
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Longitudinal pipe cut initiated. Opening full-screen cross-section inspection deck.');
-      });
-      return;
-    }
-
-    // MOTOR & TOP DRIVE
-    if (cmd.includes('motor') || cmd.includes('top drive') || cmd.includes('mud pump')) {
-      set({
-        cameraViewMode: 'motor',
-        selectedAssetId: 'TOP-DRIVE-MOTOR',
-        activeHoloModal: 'motor',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening 1,200 Horsepower Top-Drive Induction Motor diagnostics.');
-      });
-      return;
-    }
-
-    // WELLS 1 TO 7
-    for (let w = 1; w <= 7; w++) {
-      const wellNumWords = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
-      if (cmd.includes(`well ${w}`) || cmd.includes(`well ${wellNumWords[w - 1]}`)) {
-        const wellKey = `well${w}` as HolographicComponentType;
-        set({
-          cameraViewMode: wellKey,
-          selectedAssetId: `WELL-${w}`,
-          activeHoloModal: wellKey,
-          isTelemetryDrawerOpen: true,
-        });
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom(`Opening Subsea Production Well ${w} Christmas Tree diagnostics.`);
-        });
-        return;
+    switch (parsed.id) {
+      case 'split_view':
+        return openPanel(
+          { isSplitViewActive: true, splitFactor: 1.0, cameraViewMode: 'split' },
+          'Opening exploded split view. All structural assemblies decoupled.'
+        );
+      case 'assemble':
+        return openPanel(
+          {
+            isSplitViewActive: false,
+            splitFactor: 0.0,
+            isPipeSliced: false,
+            isPipeSliceModalOpen: false,
+            activeHoloModal: null,
+            cameraViewMode: 'topside',
+          },
+          'Reassembling the digital twin. Full alignment restored.'
+        );
+      case 'helipad':
+        return focus('helipad', 'HELIPAD-DECK', 'helipad', 'Opening the CAP 437 helipad.');
+      case 'crane':
+        if (!parsed.num) {
+          set({ varunaWakeExpiry: Date.now() + 10000 });
+          return say('Which crane? Say crane one or crane two.');
+        }
+        return parsed.num === 1
+          ? focus('crane1', 'CRANE-PORT', 'crane1', 'Opening port crane one, the lattice boom.')
+          : focus('crane2', 'CRANE-STARBOARD', 'crane2', 'Opening starboard crane two, the pedestal crane.');
+      case 'accommodation':
+        return focus('accommodation', 'ACCOMMODATION-MODULE', 'accommodation', 'Opening the accommodation module.');
+      case 'industrial_pipes':
+        return focus('industrial_pipes', 'INDUSTRIAL-PIPES', 'industrial_pipes', 'Opening industrial pipe fitting and valve manifold.');
+      case 'jackup_legs':
+        return focus('jackup_legs', 'PILLAR-FOUNDATION', 'jackup_legs', 'Opening jack-up legs and foundation columns.');
+      case 'drill_string':
+        return focus('drill_string', 'DRILL-SYSTEM', 'drill_string', 'Opening the subsea drill string.');
+      case 'drill_bit':
+        return focus('drill_bit', 'DRILL-SYSTEM', 'drill_bit', 'Opening the PDC drill bit.');
+      case 'drill':
+        return focus('drill', 'DRILL-SYSTEM', 'drill', 'Opening the drilling derrick and drill system.');
+      case 'motor':
+        return focus('motor', 'TOP-DRIVE-MOTOR', 'motor', 'Opening the top drive motor.');
+      case 'main_deck':
+        return focus('main_deck', 'TOPSIDE-DRILL-RIG', 'main_deck', 'Opening the main deck structure.');
+      case 'upper_rig':
+        return focus('upper_rig', 'TOPSIDE-DRILL-RIG', 'upper_rig', 'Opening the upper rig superstructure.');
+      case 'pipe': {
+        if (!parsed.num) {
+          set({ varunaWakeExpiry: Date.now() + 10000 });
+          return say('Which pipe? Say a number from one to nine.');
+        }
+        const key = `pipe${parsed.num}` as HolographicComponentType;
+        return focus(key as CameraViewMode, `PIPE-${parsed.num}`, key, `Opening flowline pipe ${parsed.num}.`);
       }
+      case 'well': {
+        if (!parsed.num) {
+          set({ varunaWakeExpiry: Date.now() + 10000 });
+          return say('Which well? Say a number from one to seven.');
+        }
+        const key = `well${parsed.num}` as HolographicComponentType;
+        return focus(key as CameraViewMode, `WELL-${parsed.num}`, key, `Opening production well ${parsed.num}.`);
+      }
+      case 'wells_all':
+        return focus('wells1_7', 'WELL-CLUSTER', 'wells1_7', 'Opening wells one through seven.');
+      case 'slice':
+        return openPanel(
+          { isPipeSliced: true, isPipeSliceModalOpen: true, cameraViewMode: 'pipe1_slice', selectedAssetId: 'RISER-ALPHA' },
+          'Opening the pipe cross-section.'
+        );
+      case 'command_dock':
+        return openPanel({ isCommandDockOpen: true }, 'Opening the command dock.');
+      case 'hardware':
+        return openPanel({ isHardwareModalOpen: true }, 'Opening the hardware SCADA gateway.');
+      case 'presentation':
+        return openPanel({ isSihModalOpen: true }, 'Opening the presentation deck.');
+      case 'database':
+        return openPanel({ isTelemetryDrawerOpen: true, isEodModalOpen: true }, 'Opening the six month production ledger.');
+      case 'compliance':
+        return openPanel({ isReportModalOpen: true }, 'Opening the compliance audit report.');
+      case 'physics_report':
+        return openPanel({ isPhysicsModalOpen: true }, 'Showing the physics and equations report.');
+      case 'weather':
+        set({ isWeatherPanelOpen: true });
+        import('../services/KgD6WeatherService').then(({ KgD6WeatherService }) =>
+          KgD6WeatherService.getSpokenWeatherForecast().then(say).catch(() => say('Opening the weather panel.'))
+        );
+        return;
+      case 'water_status':
+        import('../physics/DynamicTideEngine').then(({ dynamicTideEngine }) => say(dynamicTideEngine.getWaterStatusSpeech()));
+        return;
+      case 'view_topside':
+        return openPanel({ cameraViewMode: 'topside', activeHoloModal: null }, 'Returning to the full rig view.');
+      case 'view_subsea':
+        return openPanel({ cameraViewMode: 'subsea' }, 'Diving below the waterline.');
+      case 'view_manifold':
+        return openPanel({ cameraViewMode: 'manifold' }, 'Moving to the seabed manifold.');
+      case 'mode_hologram':
+        return say("You're already in the hologram view.");
+      case 'mode_realistic':
+      case 'mode_thermal':
+      case 'mode_acoustic':
+      case 'mode_color':
+        return say('The twin runs in hologram view only.');
+      case 'start_camera':
+        import('../vision/JarvisGestureVisionEngine').then(({ jarvisGestureEngine }) => jarvisGestureEngine.start());
+        return say('Starting the gesture camera.');
+      case 'stop_camera':
+        import('../vision/JarvisGestureVisionEngine').then(({ jarvisGestureEngine }) => jarvisGestureEngine.stop());
+        return say('Gesture camera off.');
+      case 'close':
+        return openPanel(
+          {
+            activeHoloModal: null,
+            isSihModalOpen: false,
+            isEodModalOpen: false,
+            isReportModalOpen: false,
+            isHardwareModalOpen: false,
+            isPhysicsModalOpen: false,
+            isWeatherPanelOpen: false,
+            isPipeSliceModalOpen: false,
+            isCommandDockOpen: false,
+          },
+          'Closed.'
+        );
+      case 'repeat':
+        return say(get().voiceStatus.lastMessage || 'I am ready for your command.');
+      case 'help':
+        set({ varunaWakeExpiry: Date.now() + 20000 });
+        return say(VOICE_HELP_TEXT);
+      case 'sleep':
+        set({ isVarunaAwake: false, varunaWakeExpiry: 0 });
+        return say('Standing by. Say Varuna when you need me.');
     }
-
-    if (cmd.includes('wells') || cmd.includes('wells 1-7') || cmd.includes('wellhead cluster')) {
-      set({
-        cameraViewMode: 'wells1_7',
-        selectedAssetId: 'WELL-CLUSTER',
-        activeHoloModal: 'wells1_7',
-        isTelemetryDrawerOpen: true,
-      });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Opening Subsea Wells 1 through 7 Field Cluster diagnostics.');
-      });
-      return;
-    }
-
-    // REPEAT / SAY AGAIN HANDLER
-    if (cmd.includes('repeat') || cmd.includes('say again') || cmd.includes('what did you say')) {
-      const last = get().voiceStatus.lastMessage;
-      set({ voiceTranscript: null });
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom(last || 'I am ready for your command.');
-      });
-      return;
-    }
-
-    // GENERIC UNRECOGNIZED COMMAND ERROR RECOVERY:
-    // Reset stuck transcript buffer, clear old error command, keep Varuna awake for 10s listening window,
-    // and ask "What did you mean? Could you repeat that again?"
-    set({
-      isVarunaAwake: true,
-      varunaWakeExpiry: Date.now() + 10000,
-      voiceTranscript: null,
-      lastVoiceCommand: null,
-    });
-    import('../voice/JarvisVoiceCommander').then(({ jarvisVoiceCommander }) => {
-      jarvisVoiceCommander.resetDebounce();
-    });
-    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      varunaVoice.speakCustom('What did you mean? Could you repeat that again?');
-    });
   },
 
   voiceStatus: {

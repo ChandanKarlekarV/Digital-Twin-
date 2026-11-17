@@ -271,7 +271,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
       const ok = await jarvisGestureEngine.start();
       if (ok) {
         varunaVoice.speakCustom(
-          'Jarvis spatial holographic vision online. Pinch in to zoom out, pinch out to zoom in, and move model with your other hand.'
+          'Gesture vision online. Move an open palm to rotate, hold it still to freeze, and point to aim.'
         );
       }
     }
@@ -563,13 +563,13 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
 
                   {/* Subsystem Index Quick Bar */}
                   <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1 text-[7.5px]">
-                    <span className="text-white/60 font-bold">1-5 FINGERS:</span>
+                    <span className="text-white/60 font-bold" title="Hold the pose steady for under a second">HOLD:</span>
                     {[
-                      { idx: 1, name: '☝️ 1: Helipad' },
+                      { idx: 1, name: '☝️ Point: Helipad' },
                       { idx: 2, name: '✌️ 2: Crane 1' },
-                      { idx: 3, name: '🤟 3: Crane 2' },
-                      { idx: 4, name: '🖖 4: Dock' },
-                      { idx: 5, name: '🖐️ 5: Quarters' },
+                      { idx: 3, name: '3: Crane 2' },
+                      { idx: 4, name: '4: Dock' },
+                      { idx: 5, name: '🤙 Quarters' },
                     ].map((item) => (
                       <button
                         key={item.idx}
@@ -595,7 +595,7 @@ export const JarvisGestureVoiceHUD: React.FC = () => {
                   {cameraErrorMessage ? (
                     <span className="text-amber-300">⚠️ {cameraErrorMessage}</span>
                   ) : (
-                    'Jarvis Holographic Tracking Ready: Pinch In/Out & Decoupled Hands'
+                    'Open palm moves the view, still palm freezes it, point to aim and hold to open, fist to reassemble.'
                   )}
                 </div>
 

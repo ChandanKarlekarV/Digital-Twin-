@@ -25,6 +25,36 @@ import { useRigStore, RecognizedGesture } from '../store/useRigStore';
 
 export type { RecognizedGesture };
 
+const MEDIAPIPE_HANDS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240';
+let mediaPipeLoad: Promise<void> | null = null;
+
+function loadMediaPipeHands(): Promise<void> {
+  if ((window as any).Hands) return Promise.resolve();
+  if (!mediaPipeLoad) {
+    mediaPipeLoad = new Promise<void>((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `${MEDIAPIPE_HANDS_CDN}/hands.js`;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => resolve();
+      script.onerror = () => {
+        mediaPipeLoad = null;
+        reject(new Error('Could not load the hand-tracking model (check the internet connection), or use Demo Vision mode.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return mediaPipeLoad;
+}
+
+/** Frames a raw pose must persist before it is reported (debounces flicker at ~30 fps). */
+const POSE_STABLE_FRAMES = 4;
+/** Hold time for count gestures (2-4 fingers, shaka) before a subsystem opens. */
+const INDEX_HOLD_MS = 700;
+/** Pointer dwell time on a targeted part before it opens. */
+const POINTER_DWELL_MS = 1100;
+/** Centroid speed (screen widths / frame) below which a hand counts as still. */
+const STILL_SPEED = 0.006;
+
 export interface HandLandmark {
   x: number;
   y: number;
@@ -104,6 +134,15 @@ class JarvisGestureVisionEngine {
   private lastSliceTime = 0;
   private lastSwipeLeftTime = 0;
   private lastIndexTriggerTime = 0;
+  private prevHandsCount = 0;
+  /** Recent raw poses per hand slot, for frame-voting */
+  private poseHistory: RecognizedGesture[][] = [[], []];
+  /** Recent single-hand centroid samples, for swipe detection */
+  private motionHistory: { x: number; y: number; t: number }[] = [];
+  private pointerDwellTarget: string | null = null;
+  private pointerDwellStart = 0;
+  private handIsStill = false;
+  private stablePoses: RecognizedGesture[] = [null, null];
 
   // Viewfinder callbacks
   private onFrameCallbacks: Set<(result: GestureTrackingResult, video: HTMLVideoElement) => void> = new Set();
@@ -185,23 +224,23 @@ class JarvisGestureVisionEngine {
         this.ctx = this.canvasElement.getContext('2d', { willReadFrequently: true });
       }
 
-      // Initialize MediaPipe Hands for multi-hand tracking (max 2 hands)
-      if (typeof window !== 'undefined' && (window as any).Hands) {
-        try {
-          this.mediaPipeHands = new (window as any).Hands({
-            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-          });
-          this.mediaPipeHands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.52,
-            minTrackingConfidence: 0.52,
-          });
-          this.mediaPipeHands.onResults(this.handleMediaPipeResults);
-        } catch (mpErr) {
-          console.warn('MediaPipe Hands initialization fallback to CV color space:', mpErr);
-          this.mediaPipeHands = null;
-        }
+      // Initialize MediaPipe Hands for multi-hand tracking (max 2 hands).
+      // Loaded on demand (pinned version) so it never blocks page start-up.
+      if (!this.mediaPipeHands) {
+        await loadMediaPipeHands();
+        const Hands = (window as any).Hands;
+        this.mediaPipeHands = new Hands({
+          locateFile: (file: string) => `${MEDIAPIPE_HANDS_CDN}/${file}`,
+        });
+        this.mediaPipeHands.setOptions({
+          maxNumHands: 2,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.6,
+          minTrackingConfidence: 0.55,
+        });
+        this.mediaPipeHands.onResults(this.handleMediaPipeResults);
+        // Downloads the wasm + model now, so the first frames are not lost
+        await this.mediaPipeHands.initialize();
       }
 
       this.isRunning = true;
@@ -235,6 +274,9 @@ class JarvisGestureVisionEngine {
 
       store.setCameraErrorMessage(userFriendlyMsg);
       store.setGestureCameraActive(false);
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      this.mediaPipeHands = null;
       return false;
     }
   }
@@ -282,6 +324,7 @@ class JarvisGestureVisionEngine {
     const handsCount = multiHandLandmarks.length;
 
     if (handsCount === 0) {
+      this.prevHandsCount = 0;
       this.prevHand1Pos = null;
       this.prevHand2Pos = null;
       this.prevPinchDist1 = null;
@@ -342,9 +385,23 @@ class JarvisGestureVisionEngine {
       hand1Raw = this.extractLandmarks(multiHandLandmarks[0]);
     }
 
+    // Hand slots are re-assigned when a hand enters/leaves: drop history so the
+    // smoother never blends two different hands (that produced phantom swipes)
+    if (handsCount !== this.prevHandsCount) {
+      this.prevHandsCount = handsCount;
+      this.smoothedLandmarks1 = [];
+      this.smoothedLandmarks2 = [];
+      this.prevHand1Pos = null;
+      this.prevHand2Pos = null;
+      this.prevDistance = null;
+      this.poseHistory = [[], []];
+      this.stablePoses = [null, null];
+      this.motionHistory = [];
+    }
+
     // Process Hand 1
     this.smoothedLandmarks1 = this.smoothLandmarks(this.smoothedLandmarks1, hand1Raw);
-    const hand1Data = this.analyzeSingleHand(this.smoothedLandmarks1, this.prevPinchDist1);
+    const hand1Data = this.stabilizePose(0, this.analyzeSingleHand(this.smoothedLandmarks1, this.prevPinchDist1));
     const dH1_x = this.prevHand1Pos ? hand1Data.centroid.x - this.prevHand1Pos.x : 0;
     const dH1_y = this.prevHand1Pos ? hand1Data.centroid.y - this.prevHand1Pos.y : 0;
     this.prevHand1Pos = { x: hand1Data.centroid.x, y: hand1Data.centroid.y, time: now };
@@ -357,7 +414,7 @@ class JarvisGestureVisionEngine {
 
     if (hand2Raw) {
       this.smoothedLandmarks2 = this.smoothLandmarks(this.smoothedLandmarks2, hand2Raw);
-      hand2Data = this.analyzeSingleHand(this.smoothedLandmarks2, this.prevPinchDist2);
+      hand2Data = this.stabilizePose(1, this.analyzeSingleHand(this.smoothedLandmarks2, this.prevPinchDist2));
       dH2_x = this.prevHand2Pos ? hand2Data.centroid.x - this.prevHand2Pos.x : 0;
       dH2_y = this.prevHand2Pos ? hand2Data.centroid.y - this.prevHand2Pos.y : 0;
       this.prevHand2Pos = { x: hand2Data.centroid.x, y: hand2Data.centroid.y, time: now };
@@ -369,11 +426,7 @@ class JarvisGestureVisionEngine {
 
     // 2. 2D / 3D Laser Pointer Cursor: check if EITHER hand is pointing (INDEX_1 or _isPoint)
     const pointingHand =
-      (hand1Data.gesture === 'INDEX_1' || (hand1Data as any)._isPoint)
-        ? hand1Data
-        : (hand2Data && (hand2Data.gesture === 'INDEX_1' || (hand2Data as any)._isPoint))
-          ? hand2Data
-          : null;
+      hand1Data.gesture === 'INDEX_1' ? hand1Data : hand2Data?.gesture === 'INDEX_1' ? hand2Data : null;
 
     if (pointingHand) {
       useRigStore.getState().setPointerCursor({
@@ -395,15 +448,26 @@ class JarvisGestureVisionEngine {
     let midX = hand1Data.centroid.x;
     let midY = hand1Data.centroid.y;
 
-    // Fast Right-to-Left Swipe Detection (Opens targeted / next subsystem view)
-    const isSwipeLeft =
-      (dH1_x < -0.07 || (hand2Data && dH2_x < -0.07)) &&
-      now - this.lastSwipeLeftTime > 1200;
+    // Swipe = open-hand or point moving fast and mostly horizontally right-to-left
+    // (on screen) over the last ~350 ms. Requires real travel, not a single noisy frame.
+    let isSwipeLeft = false;
+    if (handsCount === 1 && (hand1Data.gesture === 'PALM' || hand1Data.gesture === 'INDEX_1')) {
+      this.motionHistory.push({ x: hand1Data.centroid.x, y: hand1Data.centroid.y, t: now });
+      while (this.motionHistory.length && now - this.motionHistory[0].t > 350) this.motionHistory.shift();
+      const first = this.motionHistory[0];
+      const dx = hand1Data.centroid.x - first.x;
+      const dy = hand1Data.centroid.y - first.y;
+      isSwipeLeft =
+        this.motionHistory.length >= 5 && dx < -0.22 && Math.abs(dy) < Math.abs(dx) * 0.5 && now - this.lastSwipeLeftTime > 1500;
+    } else {
+      this.motionHistory = [];
+    }
 
     if (isSwipeLeft) {
       gesture = 'SWIPE_LEFT';
       activeMode = 'INDEX_SELECT';
       this.lastSwipeLeftTime = now;
+      this.motionHistory = [];
     }
     // 3. DUAL-HAND INTERACTION
     else if (handsCount >= 2 && hand2Data) {
@@ -413,107 +477,58 @@ class JarvisGestureVisionEngine {
         hand2Data.centroid.x - hand1Data.centroid.x,
         hand2Data.centroid.y - hand1Data.centroid.y
       );
-
-      const dDistance = this.prevDistance !== null ? currentDistance - this.prevDistance : 0;
       this.prevDistance = currentDistance;
       this.prevMidpoint = { x: midX, y: midY, time: now };
 
-      const totalFingers = hand1Data.fingerCount + hand2Data.fingerCount;
-      const bothFists = hand1Data.isFist && hand2Data.isFist;
+      const bothOpen = hand1Data.gesture === 'PALM' && hand2Data.gesture === 'PALM';
+      const bothFists = hand1Data.gesture === 'FIST' && hand2Data.gesture === 'FIST';
+      const moving = Math.hypot(dH1_x + dH2_x, dH1_y + dH2_y) / 2 > STILL_SPEED * 0.5;
 
-      // 3.1. MERGE: Both fists or hands brought close together
-      if (bothFists || currentDistance < 0.16) {
+      if (bothFists || (currentDistance < 0.14 && !bothOpen)) {
+        // MERGE: two fists, or hands brought together
         gesture = 'MERGE';
         activeMode = 'MERGE';
-        deltaX = 0;
-        deltaY = 0;
-      }
-      // 3.2. SPLIT: Both hands spread apart or moving apart with open hands
-      else if (currentDistance > 0.40 || (dDistance > 0.035 && totalFingers >= 6)) {
+      } else if (bothOpen && currentDistance > 0.55) {
+        // SPLIT: two open palms spread wide apart
         gesture = 'SPLIT';
         activeMode = 'SPLIT';
-        deltaX = 0;
-        deltaY = 0;
-      }
-      // 3.3. DUAL-HAND MOVE / ORBIT: Hands translating across screen
-      else if (
-        Math.abs(dH1_x) > 0.0022 ||
-        Math.abs(dH1_y) > 0.0022 ||
-        Math.abs(dH2_x) > 0.0022 ||
-        Math.abs(dH2_y) > 0.0022
-      ) {
+      } else if (bothOpen && moving) {
+        // Both palms moving together -> orbit
         deltaX = (dH1_x + dH2_x) / 2.0;
         deltaY = (dH1_y + dH2_y) / 2.0;
         gesture = 'MOVE';
         activeMode = 'ORBIT';
-      }
-      // 3.4. PALM / FREEZE: Hands open and static
-      else {
-        gesture = 'PALM';
+      } else {
+        gesture = bothOpen ? 'PALM' : null;
         activeMode = 'IDLE';
-        deltaX = 0;
-        deltaY = 0;
       }
     }
-    // 4. SINGLE HAND INTERACTION (Works on EITHER hand)
+    // 4. SINGLE HAND INTERACTION (either hand)
     else {
       this.prevDistance = null;
-      const activeHand = hand1Data;
-      const dH_x = dH1_x;
-      const dH_y = dH1_y;
+      const pose = hand1Data.gesture;
 
-      if (activeHand.isFist) {
-        gesture = 'FIST';
-        activeMode = 'MERGE';
-        deltaX = 0;
-        deltaY = 0;
-      } else if (activeHand.fingerCount >= 4 || activeHand.gesture === 'PALM') {
-        // 5 Fingers / Open Palm:
-        // If moving -> MOVE / ORBIT!
-        // If static -> PALM (Freeze camera with zero drift)
-        if (Math.abs(dH_x) > 0.0022 || Math.abs(dH_y) > 0.0022) {
+      if (pose === 'PALM') {
+        // Open palm: moving -> orbit, still -> freeze with zero drift
+        if (Math.hypot(dH1_x, dH1_y) > STILL_SPEED * 0.4) {
           gesture = 'MOVE';
           activeMode = 'ORBIT';
-          deltaX = dH_x;
-          deltaY = dH_y;
+          deltaX = dH1_x;
+          deltaY = dH1_y;
         } else {
           gesture = 'PALM';
           activeMode = 'IDLE';
-          deltaX = 0;
-          deltaY = 0;
         }
-      } else {
-        // Subsystem Index Selection via Finger Count (1 to 4)
-        deltaX = 0;
-        deltaY = 0;
-        switch (activeHand.fingerCount) {
-          case 1:
-            gesture = 'INDEX_1'; // 1 Finger: Helideck CAP 437 + Laser Pointer
-            activeMode = 'INDEX_SELECT';
-            break;
-          case 2:
-            gesture = 'INDEX_2'; // 2 Fingers: Port Crane 1 Boom
-            activeMode = 'INDEX_SELECT';
-            break;
-          case 3:
-            gesture = 'INDEX_3'; // 3 Fingers: Starboard Crane 2
-            activeMode = 'INDEX_SELECT';
-            break;
-          case 4:
-            gesture = 'INDEX_4'; // 4 Fingers: Tactical Command Dock
-            activeMode = 'INDEX_SELECT';
-            break;
-          case 5:
-            gesture = 'INDEX_5'; // 5 Fingers: Living Quarters / Accommodation
-            activeMode = 'INDEX_SELECT';
-            break;
-          default:
-            gesture = 'PALM';
-            activeMode = 'IDLE';
-            break;
-        }
+      } else if (pose === 'FIST') {
+        gesture = 'FIST';
+        activeMode = 'MERGE';
+      } else if (pose) {
+        gesture = pose; // INDEX_1 (pointer) .. INDEX_5
+        activeMode = 'INDEX_SELECT';
       }
     }
+    // Hand stillness drives hold-to-select (count gestures fire only on a steady hand)
+    this.handIsStill = Math.hypot(dH1_x, dH1_y) < STILL_SPEED;
 
     const result: GestureTrackingResult = {
       gesture,
@@ -625,63 +640,66 @@ class JarvisGestureVisionEngine {
     const thumbIp = landmarks[3];
     const thumbTip = landmarks[4];
     const indexMcp = landmarks[5];
-    const indexPip = landmarks[6];
     const indexTip = landmarks[8];
     const middleMcp = landmarks[9];
-    const middlePip = landmarks[10];
-    const middleTip = landmarks[12];
-    const ringMcp = landmarks[13];
-    const ringPip = landmarks[14];
-    const ringTip = landmarks[16];
     const pinkyMcp = landmarks[17];
-    const pinkyPip = landmarks[18];
-    const pinkyTip = landmarks[20];
 
-    const distSq = (a: HandLandmark, b: HandLandmark) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+    const dist = (a: HandLandmark, b: HandLandmark) =>
+      Math.hypot(a.x - b.x, a.y - b.y, ((a.z || 0) - (b.z || 0)) * 0.5);
 
-    // Extension classification with robust hysteresis
-    const isIndexExtended = distSq(wrist, indexTip) > distSq(wrist, indexPip) * 1.12;
-    const isMiddleExtended = distSq(wrist, middleTip) > distSq(wrist, middlePip) * 1.12;
-    const isRingExtended = distSq(wrist, ringTip) > distSq(wrist, ringPip) * 1.12;
-    const isPinkyExtended = distSq(wrist, pinkyTip) > distSq(wrist, pinkyPip) * 1.12;
-    const isThumbExtended = distSq(thumbTip, pinkyMcp) > distSq(thumbIp, pinkyMcp) * 1.15;
+    // Scale-invariant reference: palm length (wrist -> middle MCP)
+    const palm = Math.max(dist(wrist, middleMcp), 1e-4);
 
-    let fingerCount = 0;
-    if (isThumbExtended) fingerCount++;
-    if (isIndexExtended) fingerCount++;
-    if (isMiddleExtended) fingerCount++;
-    if (isRingExtended) fingerCount++;
-    if (isPinkyExtended) fingerCount++;
+    /**
+     * A finger is extended when it is straight (MCP->PIP and PIP->TIP point the same way)
+     * AND its tip is clearly farther from the wrist than its PIP joint. Using both cues
+     * works for hands pointing toward the camera, where 2D lengths alone collapse.
+     */
+    const fingerExtended = (mcpI: number, pipI: number, tipI: number) => {
+      const mcp = landmarks[mcpI];
+      const pip = landmarks[pipI];
+      const tip = landmarks[tipI];
+      const ax = pip.x - mcp.x, ay = pip.y - mcp.y;
+      const bx = tip.x - pip.x, by = tip.y - pip.y;
+      const la = Math.hypot(ax, ay) || 1e-6;
+      const lb = Math.hypot(bx, by) || 1e-6;
+      const straightness = (ax * bx + ay * by) / (la * lb);
+      const reach = dist(wrist, tip) - dist(wrist, pip);
+      return straightness > 0.55 && reach > palm * 0.12;
+    };
 
-    const isFist =
-      !isIndexExtended &&
-      !isMiddleExtended &&
-      !isRingExtended &&
-      !isPinkyExtended;
+    const isIndexExtended = fingerExtended(5, 6, 8);
+    const isMiddleExtended = fingerExtended(9, 10, 12);
+    const isRingExtended = fingerExtended(13, 14, 16);
+    const isPinkyExtended = fingerExtended(17, 18, 20);
+    // Thumb: tip well away from the index knuckle and from the palm's pinky side
+    const isThumbExtended =
+      dist(thumbTip, indexMcp) > palm * 0.55 && dist(thumbTip, pinkyMcp) > dist(thumbIp, pinkyMcp) * 1.1;
 
-    const isPoint =
-      isIndexExtended &&
-      !isMiddleExtended &&
-      !isRingExtended &&
-      !isPinkyExtended;
+    const fingerCount =
+      Number(isThumbExtended) +
+      Number(isIndexExtended) +
+      Number(isMiddleExtended) +
+      Number(isRingExtended) +
+      Number(isPinkyExtended);
 
-    // Pure gesture classification without zoom interference
-    let gesture: RecognizedGesture = 'PALM';
-    if (isFist) {
-      gesture = 'FIST';
-    } else if (isPoint || (fingerCount === 1 && isIndexExtended)) {
-      gesture = 'INDEX_1'; // 1 Finger: Helideck & Laser Pointer
-    } else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-      gesture = 'INDEX_2'; // 2 Fingers: Port Crane 1 Boom
-    } else if (isIndexExtended && isMiddleExtended && isRingExtended && !isPinkyExtended) {
-      gesture = 'INDEX_3'; // 3 Fingers: Starboard Crane 2
-    } else if (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended && !isThumbExtended) {
-      gesture = 'INDEX_4'; // 4 Fingers: Tactical Command Dock
-    } else if (fingerCount >= 5 || (isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended && isThumbExtended)) {
-      gesture = 'INDEX_5'; // 5 Fingers: Living Quarters (or Move if moving)
-    } else {
-      gesture = fingerCount === 1 ? 'INDEX_1' : fingerCount === 2 ? 'INDEX_2' : fingerCount === 3 ? 'INDEX_3' : fingerCount === 4 ? 'INDEX_4' : fingerCount === 5 ? 'INDEX_5' : 'PALM';
-    }
+    const isFist = !isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended;
+    const isPoint = isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended;
+    const fourUp = isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended;
+    const isShaka = isThumbExtended && isPinkyExtended && !isIndexExtended && !isMiddleExtended && !isRingExtended;
+
+    // Unambiguous pose vocabulary:
+    //  FIST, INDEX_1 (point / laser), INDEX_2 (V), INDEX_3 (three), INDEX_4 (four, thumb tucked),
+    //  INDEX_5 (shaka: thumb + pinky), PALM (all five open)
+    let gesture: RecognizedGesture;
+    if (isShaka) gesture = 'INDEX_5';
+    else if (isFist) gesture = 'FIST';
+    else if (isPoint) gesture = 'INDEX_1';
+    else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) gesture = 'INDEX_2';
+    else if (isIndexExtended && isMiddleExtended && isRingExtended && !isPinkyExtended) gesture = 'INDEX_3';
+    else if (fourUp && !isThumbExtended) gesture = 'INDEX_4';
+    else if (fourUp) gesture = 'PALM';
+    else gesture = null; // in-between pose: report nothing rather than guess
 
     return {
       landmarks,
@@ -734,24 +752,49 @@ class JarvisGestureVisionEngine {
       return;
     }
 
-    // 4. Gesture 6: SUBSYSTEM INDEX SELECTION (Indexes 1 to 5)
-    if (res.gesture && (res.gesture.startsWith('INDEX_') || res.gesture === 'INDEX_5')) {
-      if (this.sustainedGesture !== res.gesture) {
+    // 4. POINTER DWELL: hold the laser on a part to open it (no part -> helipad shortcut)
+    if (res.gesture === 'INDEX_1') {
+      const target = store.targetedPartId;
+      if (target !== this.pointerDwellTarget || this.sustainedGesture !== 'INDEX_1') {
+        this.pointerDwellTarget = target;
+        this.pointerDwellStart = now;
+      }
+      this.sustainedGesture = 'INDEX_1';
+      const needed = target ? POINTER_DWELL_MS : POINTER_DWELL_MS + 500;
+      if (now - this.pointerDwellStart > needed && now - this.lastIndexTriggerTime > 2500 && (target || this.handIsStill)) {
+        this.lastIndexTriggerTime = now;
+        this.pointerDwellStart = now;
+        if (target) store.openNextSubsystemView();
+        else store.openSubsystemByIndex(1);
+      }
+      return;
+    }
+
+    // 5. SUBSYSTEM SHORTCUTS: hold a count pose steadily (2 = crane 1, 3 = crane 2, 4 = dock, shaka = quarters)
+    if (res.gesture && res.gesture.startsWith('INDEX_')) {
+      if (this.sustainedGesture !== res.gesture || !this.handIsStill) {
         this.sustainedGesture = res.gesture;
         this.sustainedGestureStartTime = now;
-      } else if (
-        now - this.sustainedGestureStartTime > 450 &&
-        now - this.lastIndexTriggerTime > 2500
-      ) {
+      } else if (now - this.sustainedGestureStartTime > INDEX_HOLD_MS && now - this.lastIndexTriggerTime > 2500) {
         this.lastIndexTriggerTime = now;
         const indexNum = parseInt(res.gesture.replace('INDEX_', ''), 10);
-        if (indexNum >= 1 && indexNum <= 5) {
-          store.openSubsystemByIndex(indexNum);
-        }
+        if (indexNum >= 2 && indexNum <= 5) store.openSubsystemByIndex(indexNum);
       }
     } else {
       this.sustainedGesture = null;
+      this.pointerDwellTarget = null;
     }
+  }
+
+  /** Reports a pose only after it has been seen POSE_STABLE_FRAMES frames in a row. */
+  private stabilizePose(slot: 0 | 1, hand: SingleHandData): SingleHandData {
+    const history = this.poseHistory[slot];
+    history.push(hand.gesture);
+    if (history.length > POSE_STABLE_FRAMES) history.shift();
+    const stable = history.length === POSE_STABLE_FRAMES && history.every((g) => g === history[0]);
+    if (stable) this.stablePoses[slot] = history[0];
+    const gesture = this.stablePoses[slot];
+    return { ...hand, gesture, isFist: gesture === 'FIST' };
   }
 
   public startSynthetic(): boolean {

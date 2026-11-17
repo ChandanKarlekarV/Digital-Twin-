@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HOLO } from './HoloPalette';
 
 /**
  * Custom GLSL Gerstner Wave Ocean Shader
@@ -18,6 +19,7 @@ varying vec3 vWorldPosition;
 varying vec3 vNormal;
 varying vec2 vUv;
 varying float vWaveHeight;
+#include <fog_pars_vertex>
 
 vec3 GerstnerWave(
   vec4 wave, 
@@ -69,81 +71,65 @@ void main() {
 
   vec4 worldPos = modelMatrix * vec4(p, 1.0);
   vWorldPosition = worldPos.xyz;
-  gl_Position = projectionMatrix * viewMatrix * worldPos;
+  vec4 mvPosition = viewMatrix * worldPos;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <fog_vertex>
 }
 `;
 
 export const OceanFragmentShader = `
-uniform vec3 uDeepColor;
-uniform vec3 uShallowColor;
-uniform vec3 uFoamColor;
-uniform vec3 uSunDirection;
-uniform vec3 uSunColor;
-uniform vec3 uCameraPosition;
-uniform float uIsUnderwater;
+uniform vec3 uColor;
+uniform float uTime;
 
 varying vec3 vWorldPosition;
-varying vec3 vNormal;
 varying vec2 vUv;
 varying float vWaveHeight;
+#include <fog_pars_fragment>
+
+// Anti-aliased thin line where fract(v) crosses 0.5
+float isoLine(float v, float width) {
+  float d = abs(fract(v) - 0.5);
+  float w = fwidth(v) * width;
+  return 1.0 - smoothstep(0.0, w, d);
+}
 
 void main() {
-  vec3 normal = normalize(vNormal);
-  if (uIsUnderwater > 0.5) {
-    normal = -normal;
-  }
+  // One uniform tone for the whole sea (no depth/fresnel colour split)
+  vec3 color = uColor * 0.06;
 
-  vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+  // Glowing wave-height contour lines that ride with the swell
+  float contour = isoLine(vWaveHeight * 1.6, 1.2);
+  // Faint 10 m survey grid anchored to the world
+  float grid = max(isoLine(vWorldPosition.x / 10.0 + 0.5, 1.0), isoLine(vWorldPosition.z / 10.0 + 0.5, 1.0));
 
-  // 1. Fresnel Reflection Factor
-  float fresnel = dot(viewDir, normal);
-  fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
-  fresnel = pow(fresnel, 2.5) * 0.75 + 0.15;
-
-  // 2. Subsurface Scattering / Single-Tone Dark Navy Water Color
-  float heightFactor = clamp((vWaveHeight + 1.2) / 2.4, 0.0, 1.0);
-  vec3 waterBaseColor = mix(uDeepColor, uShallowColor, heightFactor * 0.35);
-
-  // 3. Sun Specular Highlights
-  vec3 lightDir = normalize(uSunDirection);
-  vec3 halfVector = normalize(lightDir + viewDir);
-  float NdotH = max(dot(normal, halfVector), 0.0);
-  float specular = pow(NdotH, 96.0) * 1.5;
-  vec3 specularColor = uSunColor * specular;
-
-  // 4. Subtle Crest Wave Highlights
-  float foamFactor = smoothstep(0.95, 1.5, vWaveHeight);
-  vec3 finalColor = mix(waterBaseColor, uFoamColor, foamFactor * 0.3);
-
-  finalColor = mix(finalColor, uShallowColor * 1.1, fresnel * 0.3);
-  finalColor += specularColor;
-
-  // Transparent Water: Allows seeing submerged drill string and columns seamlessly in unified dark navy
-  float opacity = uIsUnderwater > 0.5 ? 0.40 : 0.45;
-  gl_FragColor = vec4(finalColor, opacity);
+  color += uColor * (contour * 0.35 + grid * 0.08);
+  gl_FragColor = vec4(color, 1.0);
+  #include <fog_fragment>
 }
 `;
 
+/**
+ * Hologram sea: additive, so it tints everything below evenly and never darkens part of
+ * the view; colour is a single hue, wave shape shows only through contour lines.
+ */
 export function createOceanMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader: OceanVertexShader,
     fragmentShader: OceanFragmentShader,
     transparent: true,
-    depthWrite: false, // Prevents depth occlusion of transparent water
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
     side: THREE.DoubleSide,
+    fog: true,
     uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: { value: 0 },
       uWaveHeightScale: { value: 1.0 },
       uWaveA: { value: new THREE.Vector4(1.0, 0.2, 0.22, 45.0) },
       uWaveB: { value: new THREE.Vector4(0.8, 0.6, 0.15, 28.0) },
       uWaveC: { value: new THREE.Vector4(-0.4, 0.9, 0.10, 16.0) },
       uWaveD: { value: new THREE.Vector4(0.3, -0.95, 0.06, 9.0) },
-      uDeepColor: { value: new THREE.Color('#010C1E') },
-      uShallowColor: { value: new THREE.Color('#021838') },
-      uFoamColor: { value: new THREE.Color('#00E5FF') },
-      uSunDirection: { value: new THREE.Vector3(60, 100, 50).normalize() },
-      uSunColor: { value: new THREE.Color('#FFFFFF') },
-      uCameraPosition: { value: new THREE.Vector3(0, 0, 0) },
+      uColor: { value: new THREE.Color(HOLO.primary) },
       uIsUnderwater: { value: 0.0 },
     },
   });

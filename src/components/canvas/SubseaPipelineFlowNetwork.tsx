@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Html } from '@react-three/drei';
 import { useRigStore, HolographicComponentType } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
+import { HOLO, holoMaterial } from '../../shaders/HoloPalette';
 
 interface FlowPipeDefinition {
   id: string;
@@ -212,79 +213,51 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
     return geo;
   }, []);
 
-  // Dynamic Flow Arrow Material based on Emergency State
-  const dynamicArrowMat = useMemo(() => {
-    const isBlockage = emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug';
-    const isOverload = emergencyScenario === 'oil_overload';
-
-    let coreColor = '#001F66';
-    let emissiveColor = '#0044FF';
-    let intensity = 3.5;
-
-    if (isBlockage) {
-      if (incidentPhase >= 3) {
-        coreColor = '#7F1D1D'; // Critical Dark Red
-        emissiveColor = '#EF4444'; // Flashing Red
-        intensity = 4.5;
-      } else {
-        coreColor = '#78350F'; // Amber warning
-        emissiveColor = '#F59E0B';
-        intensity = 3.8;
-      }
-    } else if (isOverload) {
-      coreColor = '#FF4500'; // Orange-Red Surge
-      emissiveColor = '#FFAA00'; // Bright Gold Glow
-      intensity = 5.0;
-    }
-
-    return new THREE.MeshStandardMaterial({
-      color: new THREE.Color(coreColor),
-      emissive: new THREE.Color(emissiveColor),
-      emissiveIntensity: intensity,
-      roughness: 0.15,
-      metalness: 0.85,
-      transparent: true,
-      opacity: 0.95,
-      side: THREE.DoubleSide,
-    });
-  }, [emergencyScenario, incidentPhase]);
-
-  // Steel Pipe Material with Holographic & Blockage Warning support
-  const pipeMaterial = useMemo(() => {
-    const isHolo = scannerMode === 'hologram';
-    const isBlockage = (emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug') && incidentPhase >= 2;
-
-    let base = isHolo ? '#002B4D' : '#64748B';
-    let emissive = isHolo ? '#00E5FF' : '#001122';
-    let emissiveIntensity = isHolo ? 0.35 : 0.1;
-
-    if (isBlockage) {
-      base = '#450A0A';
-      emissive = '#DC2626';
-      emissiveIntensity = 0.8;
-    }
-
-    return new THREE.MeshStandardMaterial({
-      color: new THREE.Color(base),
-      roughness: 0.38,
-      metalness: 0.75,
-      emissive: new THREE.Color(emissive),
-      emissiveIntensity,
-      transparent: isHolo,
-      opacity: isHolo ? 0.75 : 1.0,
-      side: THREE.DoubleSide,
-    });
-  }, [scannerMode, emergencyScenario, incidentPhase]);
-
+  // Hologram materials: state is shown by brightness, not colour.
+  // Blockage dims the flow arrows and makes the pipe walls flare; overload brightens the flow.
+  const isBlockageActive = emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug';
+  const isOverloadActive = emergencyScenario === 'oil_overload';
+  const dynamicArrowMat = holoMaterial({
+    color: isOverloadActive ? HOLO.hot : HOLO.primary,
+    opacity: isBlockageActive ? (incidentPhase >= 3 ? 0.2 : 0.45) : isOverloadActive ? 0.95 : 0.8,
+  });
+  const pipeMaterial = holoMaterial({
+    color: isBlockageActive && incidentPhase >= 2 ? HOLO.hot : HOLO.mid,
+    opacity: isBlockageActive && incidentPhase >= 2 ? 0.55 : 0.3,
+  });
+  const flangeMaterial = holoMaterial({ color: HOLO.primary, opacity: 0.6 });
   // References for all moving arrows across all 9 pipes
   const arrowMeshRefs = useRef<(THREE.Mesh | null)[][]>(
     pipeData.map((p) => new Array(p.arrowCount).fill(null))
   );
 
   const blockageBeaconRef = useRef<THREE.Group>(null);
+  const pipeGroupRefs = useRef<(THREE.Group | null)[]>([]);
+  const explode = useRef(0);
+  const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
+  const anyPanelOpen = useRigStore((s) => !!s.activeHoloModal || s.isEodModalOpen || s.isSihModalOpen || s.isReportModalOpen);
 
-  useFrame(({ clock }) => {
+  // Exploded view: each of the 9 pipes slides away from the manifold on its own line —
+  // outward along the direction it comes from, and slightly down; the header drops below.
+  const explodeOffsets = useMemo(
+    () =>
+      pipeDefinitions.map((def) => {
+        const start = def.points[0];
+        const dir = new THREE.Vector2(start.x, start.z);
+        if (def.id === 'MANIFOLD-HEADER' || dir.lengthSq() < 1) return new THREE.Vector3(0, -10, 0);
+        dir.normalize().multiplyScalar(def.id.startsWith('JUMPER') ? 16 : 24);
+        return new THREE.Vector3(dir.x, -4, dir.y);
+      }),
+    [pipeDefinitions]
+  );
+
+  useFrame(({ clock }, delta) => {
     const time = clock.getElapsedTime();
+
+    const target = useRigStore.getState().isSplitViewActive ? 1 : 0;
+    explode.current += (target - explode.current) * Math.min(1, delta * 4);
+    const ease = explode.current * explode.current * (3 - 2 * explode.current);
+    pipeGroupRefs.current.forEach((g, i) => g && g.position.copy(explodeOffsets[i]).multiplyScalar(ease));
     const upVector = new THREE.Vector3(0, 1, 0);
 
     // Speed multiplier based on incident
@@ -345,13 +318,23 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
         const midPoint = pipe.points[Math.floor(pipe.points.length / 2)] || pipe.points[0];
 
         return (
-          <group key={pipe.id}>
+          <group key={pipe.id} ref={(el) => (pipeGroupRefs.current[pipeIdx] = el)}>
+            {isSplitViewActive && !anyPanelOpen && (
+              <Html position={midPoint.toArray()} center zIndexRange={[20, 0]}>
+                <button
+                  onClick={() => {
+                    useRigStore.getState().openHoloModal(pipeKey);
+                  }}
+                  className="whitespace-nowrap px-2 py-0.5 rounded-md border font-mono text-[10px] tracking-wider uppercase backdrop-blur-sm bg-slate-950/70 text-cyan-200 border-cyan-400/40 hover:border-cyan-300 hover:text-white"
+                >
+                  Pipe {pipeIdx + 1}
+                </button>
+              </Html>
+            )}
             {/* Static Subsea Pipe Tube */}
             <mesh
               geometry={pipe.tubeGeo}
               material={pipeMaterial}
-              receiveShadow
-              castShadow
               onClick={(e) => {
                 e.stopPropagation();
                 useRigStore.getState().openHoloModal(pipeKey);
@@ -362,15 +345,8 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
             />
 
             {/* Wellhead / Pipeline Ground Connection Flanges */}
-            <mesh position={pipe.points[0]}>
+            <mesh position={pipe.points[0]} material={flangeMaterial}>
               <cylinderGeometry args={[pipe.radius * 1.6, pipe.radius * 1.6, 0.8, 16]} />
-              <meshStandardMaterial
-                color={isBlockage ? '#EF4444' : '#F59E0B'}
-                metalness={0.8}
-                roughness={0.2}
-                emissive={isBlockage ? '#DC2626' : '#FF8800'}
-                emissiveIntensity={isBlockage ? 1.5 : 0.3}
-              />
             </mesh>
 
             {/* Animated Thick Glowing Dark Blue / Alert Arrows moving along the pipe */}
@@ -394,19 +370,11 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
       {/* 3D Pulsing Obstruction Beacon at the Manifold Blockage Junction */}
       {isBlockage && (
         <group ref={blockageBeaconRef} position={[0, -14.8, 0]}>
-          <mesh>
-            <sphereGeometry args={[1.2, 16, 16]} />
-            <meshStandardMaterial
-              color="#FF0033"
-              emissive="#FF0000"
-              emissiveIntensity={4.0}
-              transparent
-              opacity={0.85}
-            />
+          <mesh material={holoMaterial({ color: HOLO.hot, opacity: 0.9, wireframe: true })}>
+            <sphereGeometry args={[1.2, 16, 12]} />
           </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[1.8, 2.4, 32]} />
-            <meshBasicMaterial color="#FF3300" transparent opacity={0.7} side={THREE.DoubleSide} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} material={holoMaterial({ color: HOLO.hot, opacity: 0.8 })}>
+            <ringGeometry args={[1.8, 2.4, 48]} />
           </mesh>
         </group>
       )}

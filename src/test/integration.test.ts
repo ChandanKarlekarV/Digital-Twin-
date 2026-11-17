@@ -333,7 +333,7 @@ async function runEndToEndVerification() {
   // 17. One-breath: "varuna assemble"
   useRigStore.getState().executeVoiceCommand('varuna assemble');
   assert(
-    useRigStore.getState().isSplitViewActive === false && useRigStore.getState().cameraViewMode === 'free',
+    useRigStore.getState().isSplitViewActive === false && useRigStore.getState().cameraViewMode === 'topside',
     'Varuna One-Breath: "varuna assemble"',
     'Subsea digital twin reassembled successfully'
   );

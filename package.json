@@ -12,6 +12,9 @@
     "start": "node start-desktop.js",
     "desktop": "node start-desktop.js",
     "test:integration": "npx tsx src/test/integration.test.ts",
+    "test:voice": "npx tsx src/test/voiceParser.test.ts",
+    "test:gestures": "npx tsx src/test/gestureClassifier.test.ts",
+    "convert:model": "node --max-old-space-size=8192 scripts/convert-rig-model.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

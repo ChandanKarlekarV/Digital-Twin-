@@ -10,6 +10,9 @@ import { telemetryDb } from '../db/TelemetryDatabase';
 import { sixMonthDataEngine } from '../db/SixMonthDataEngine';
 import { varunaVoice } from '../voice/VarunaVoiceSynthesizer';
 
+/** Healthy Coriolis tube frequency for KG-D6 fluids (same calibration as TelemetryEmitter) */
+const CORIOLIS_BAND_HZ: [number, number] = [715, 760];
+
 export class AiIngestionPipelineService {
   private static instance: AiIngestionPipelineService;
   private isRunning = false;
@@ -110,7 +113,9 @@ export class AiIngestionPipelineService {
     }
 
     // 4. Coriolis Resonant Tube Density Drift
-    if (record.f_osc_hz < 1180.0 || record.f_osc_hz > 1420.0) {
+    // KG-D6 condensate resonates at ~730-742 Hz (790-815 kg/m³); outside 715-760 Hz the
+    // mixture density has left the oil/brine range (free gas or a sensor fault)
+    if (record.f_osc_hz < CORIOLIS_BAND_HZ[0] || record.f_osc_hz > CORIOLIS_BAND_HZ[1]) {
       this.logAnomaly({
         timestamp: record.timestamp,
         precise_time: record.precise_time_iso || new Date().toISOString(),
@@ -118,7 +123,7 @@ export class AiIngestionPipelineService {
         severity: 'INFO',
         category: 'CORIOLIS_DRIFT',
         detected_value: `Frequency: ${record.f_osc_hz.toFixed(1)} Hz`,
-        nominal_baseline: 'Nominal Band: 1240 - 1310 Hz',
+        nominal_baseline: `Nominal Band: ${CORIOLIS_BAND_HZ[0]} - ${CORIOLIS_BAND_HZ[1]} Hz`,
         ai_inference_summary: 'Entrained free gas bubbles causing Coriolis tube dampening.',
         recommended_action: 'Apply Net Oil Computer (NOC) dual-phase mathematical correction algorithm.',
         is_automated_logged: true,

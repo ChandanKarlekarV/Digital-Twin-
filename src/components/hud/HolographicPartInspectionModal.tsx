@@ -26,7 +26,10 @@ import { useRigStore, HolographicComponentType } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 import { KaTeXBlock } from '../common/KaTeXBlock';
-import { rigModelCache } from '../../services/RigModelCache';
+import { rigModelCache, RigPart, COMPONENT_TO_PART, DEFAULT_RIG_URL } from '../../services/RigModelCache';
+import { createHolographicMaterial } from '../../shaders/HolographicMaterial';
+import { buildHull } from '../canvas/SemiSubHull';
+import { HOLO, holoMaterial } from '../../shaders/HoloPalette';
 
 interface HoloRigSectionProps {
   type: HolographicComponentType;
@@ -34,354 +37,176 @@ interface HoloRigSectionProps {
   orbitControlsRef: React.RefObject<any>;
 }
 
+const MODEL_SCALE = 45.0;
+
 /**
- * 3D Model Section Cropper & Selective Component Highlighting
- * - Long Rotatable Cylindrical Subsea Pipes with Multiphase Fluid Core
- * - Vibrant White Glowing Helipad with green perimeter lights
- * - Radiant Orange Crane 1 & Crane 2
- * - Emerald Cyan Upper Derrick Mast & Top Drive
- * - Full 360° OrbitControls & Smooth Drag Zoom
+ * Dedicated part view: only the selected sub-assembly of the real model is shown, centred
+ * and auto-framed, as a cyan hologram inside a scan cage sized to the part. Pipes (which are
+ * not part of the model mesh) are shown as a cut-away pipe spool.
  */
 const HoloRigCroppedSection: React.FC<HoloRigSectionProps> = ({ type, autoRotate, orbitControlsRef }) => {
-  const [modelGroup, setModelGroup] = useState<THREE.Group | null>(null);
-  const customObjUrl = useRigStore((s) => s.customObjUrl || '/models/untitled.obj');
-  const groupRef = useRef<THREE.Group>(null);
+  const customObjUrl = useRigStore((s) => s.customObjUrl || DEFAULT_RIG_URL);
+  const [part, setPart] = useState<RigPart | null>(null);
   const pipeFluidMeshRef = useRef<THREE.Mesh>(null);
+  const laserRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
-
-  const MODEL_SCALE = 45.0;
-  const WATER_LINE_OBJ_Y = -0.22;
-
   const isPipe = type.startsWith('pipe');
+  const partId = COMPONENT_TO_PART[type];
 
-  // Compute focal target and initial camera offset for each section
-  const sectionConfig = useMemo(() => {
-    switch (type) {
-      case 'helipad':
-        return {
-          focalOffset: new THREE.Vector3(-22.03, 32.37, -3.23),
-          camPos: new THREE.Vector3(-8.0, 42.0, 13.0),
-          targetBounds: [24.0, 14.0, 22.0] as [number, number, number],
-          camDistance: 20,
-          label: 'CAP 437 HELIDECK SECTION',
-          wireColor: '#00FF66',
-        };
-      case 'crane1':
-        return {
-          focalOffset: new THREE.Vector3(-3.90, 33.14, 8.54),
-          camPos: new THREE.Vector3(-20.0, 43.0, 25.0),
-          targetBounds: [28.0, 24.0, 20.0] as [number, number, number],
-          camDistance: 22,
-          label: 'PORT CRANE 1 (LATTICE BOOM) SECTION',
-          wireColor: '#FF9900',
-        };
-      case 'crane2':
-        return {
-          focalOffset: new THREE.Vector3(-9.94, 28.40, -9.70),
-          camPos: new THREE.Vector3(4.0, 38.0, -24.0),
-          targetBounds: [24.0, 20.0, 18.0] as [number, number, number],
-          camDistance: 20,
-          label: 'STARBOARD CRANE 2 (PEDESTAL) SECTION',
-          wireColor: '#FF007F',
-        };
-      case 'command_dock':
-        return {
-          focalOffset: new THREE.Vector3(0.0, 16.0, 0.0),
-          camPos: new THREE.Vector3(0.0, 26.0, 22.0),
-          targetBounds: [28.0, 14.0, 28.0] as [number, number, number],
-          camDistance: 22,
-          label: 'TACTICAL COMMAND DOCK & COCKPIT BRIDGE',
-          wireColor: '#00E5FF',
-        };
-      case 'accommodation':
-        return {
-          focalOffset: new THREE.Vector3(15.09, 18.90, -5.68),
-          camPos: new THREE.Vector3(29.0, 27.0, 8.0),
-          targetBounds: [22.0, 14.0, 18.0] as [number, number, number],
-          camDistance: 18,
-          label: 'ACCOMMODATION MODULE (LIVING QUARTERS)',
-          wireColor: '#9933FF',
-        };
-      case 'industrial_pipes':
-        return {
-          focalOffset: new THREE.Vector3(0.0, 18.0, 0.0),
-          camPos: new THREE.Vector3(14.0, 25.0, 14.0),
-          targetBounds: [16.0, 14.0, 16.0] as [number, number, number],
-          camDistance: 18,
-          label: 'INDUSTRIAL PROCESS PIPE FITTING & MANIFOLD',
-          wireColor: '#00FFFF',
-        };
-      case 'jackup_legs':
-        return {
-          focalOffset: new THREE.Vector3(-0.18, -4.0, -0.15),
-          camPos: new THREE.Vector3(28.0, 12.0, 28.0),
-          targetBounds: [36.0, 28.0, 36.0] as [number, number, number],
-          camDistance: 32,
-          label: 'BUOYANT JACK-UP LEGS & FOUNDATION COLUMNS',
-          wireColor: '#00B4D8',
-        };
-      case 'drill_string':
-        return {
-          focalOffset: new THREE.Vector3(-1.52, -18.0, 0.11),
-          camPos: new THREE.Vector3(10.5, -12.0, 16.0),
-          targetBounds: [14.0, 36.0, 14.0] as [number, number, number],
-          camDistance: 24,
-          label: 'SUBSEA DRILL STRING CONDUIT',
-          wireColor: '#00D2FF',
-        };
-      case 'drill_bit':
-        return {
-          focalOffset: new THREE.Vector3(-1.52, -16.4, 0.11),
-          camPos: new THREE.Vector3(4.5, -12.4, 8.0),
-          targetBounds: [10.0, 10.0, 10.0] as [number, number, number],
-          camDistance: 12,
-          label: '8-1/2" PDC DIAMOND DRILL BIT HEAD',
-          wireColor: '#FF3300',
-        };
-      case 'main_deck':
-        return {
-          focalOffset: new THREE.Vector3(-3.45, 14.85, 2.94),
-          camPos: new THREE.Vector3(-3.45, 30.85, 26.94),
-          targetBounds: [32.0, 12.0, 32.0] as [number, number, number],
-          camDistance: 26,
-          label: 'PLATFORM MAIN DECK STRUCTURE',
-          wireColor: '#1976D2',
-        };
-      case 'upper_rig':
-        return {
-          focalOffset: new THREE.Vector3(0.68, 36.44, 0.47),
-          camPos: new THREE.Vector3(14.68, 44.44, 16.47),
-          targetBounds: [16.0, 24.0, 16.0] as [number, number, number],
-          camDistance: 22,
-          label: 'TOPSIDE DERRICK MAST SECTION',
-          wireColor: '#00F5D4',
-        };
-      case 'motor':
-        return {
-          focalOffset: new THREE.Vector3(0.68, 26.0, 0.47),
-          camPos: new THREE.Vector3(8.68, 30.0, 10.47),
-          targetBounds: [12.0, 14.0, 12.0] as [number, number, number],
-          camDistance: 14,
-          label: '1,200 HP TOP DRIVE MOTOR SECTION',
-          wireColor: '#38BDF8',
-        };
-      case 'drill':
-        return {
-          focalOffset: new THREE.Vector3(-1.52, -12.0, 0.11),
-          camPos: new THREE.Vector3(10.5, -4.0, 16.0),
-          targetBounds: [14.0, 32.0, 14.0] as [number, number, number],
-          camDistance: 22,
-          label: 'ROTARY DRILL STRING & CASING SECTION',
-          wireColor: '#00FFFF',
-        };
-      case 'well1':
-      case 'well2':
-      case 'well3':
-      case 'well4':
-      case 'well5':
-      case 'well6':
-      case 'well7':
-      case 'wells1_7':
-        return {
-          focalOffset: new THREE.Vector3(-0.85, -13.41, 4.57),
-          camPos: new THREE.Vector3(13.15, -5.41, 20.57),
-          targetBounds: [26.0, 14.0, 26.0] as [number, number, number],
-          camDistance: 22,
-          label: 'SUBSEA WELLHEAD & MANIFOLD SECTION',
-          wireColor: '#A855F7',
-        };
-      default: // pipe1 to pipe9
-        return {
-          focalOffset: new THREE.Vector3(0, 0, 0),
-          camPos: new THREE.Vector3(0, 0, 14),
-          targetBounds: [8, 18, 8] as [number, number, number],
-          camDistance: 14,
-          label: `SUBSEA PRODUCTION PIPE ${type.replace('pipe', '')} CYLINDER`,
-          wireColor: '#00E5FF',
-        };
-    }
-  }, [type]);
-
-  // Load and apply exact selective highlight shaders to model meshes with 0ms cache
   useEffect(() => {
-    if (isPipe) return;
-
-    // 1. Instant synchronous cache lookup (0ms)
-    const cachedGroup = rigModelCache.getHoloRigGroup(customObjUrl, type);
-    if (cachedGroup) {
-      setModelGroup(cachedGroup);
-      return;
-    }
-
-    // 2. Preload on demand if not yet cached
+    if (isPipe || !partId) return;
+    let cancelled = false;
     rigModelCache.preload(customObjUrl).then(() => {
-      const g = rigModelCache.getHoloRigGroup(customObjUrl, type);
-      if (g) setModelGroup(g);
+      if (cancelled) return;
+      const modelPart = rigModelCache.getPart(customObjUrl, partId);
+      if (modelPart || partId !== 'jackup_legs') {
+        setPart(modelPart);
+        return;
+      }
+      // Built-in rig: the legs are the generated semi-submersible hull, not a model part
+      const { hull, edges } = buildHull();
+      hull.computeBoundingBox();
+      setPart({
+        id: 'jackup_legs',
+        label: 'Hull · Columns & Pontoons',
+        component: 'jackup_legs',
+        geometry: hull,
+        edges,
+        center: hull.boundingBox!.getCenter(new THREE.Vector3()),
+        explodeOffset: new THREE.Vector3(),
+      });
     });
-  }, [customObjUrl, type, isPipe]);
+    return () => {
+      cancelled = true;
+    };
+  }, [customObjUrl, partId, isPipe]);
 
-  // Set camera view centered on this section
+  const material = useMemo(
+    () => createHolographicMaterial({ baseColor: '#000000', glowColor: HOLO.primary, opacity: 0.6, scanlineFreq: 1.4, glowIntensity: 1.4 }),
+    []
+  );
+  // Solid lit body + rim glow + crisp edges: stays sharp when zoomed in
+  const bodyMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#0B2A3A',
+        emissive: '#03141D',
+        roughness: 0.55,
+        metalness: 0.35,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      }),
+    []
+  );
+  const edgeMaterial = useMemo(
+    () => new THREE.LineBasicMaterial({ color: HOLO.primary, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
+    []
+  );
+  const wireMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({ color: HOLO.primary, wireframe: true, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }),
+    []
+  );
+
+  // World-space size of the part (model is rotated -90° about Y, so X/Z swap)
+  const frame = useMemo(() => {
+    if (isPipe) return { size: new THREE.Vector3(5, 16.5, 5), center: new THREE.Vector3() };
+    const box = part?.geometry.boundingBox;
+    if (!box) return null;
+    const s = box.getSize(new THREE.Vector3()).multiplyScalar(MODEL_SCALE);
+    return { size: new THREE.Vector3(s.z, s.y, s.x), center: box.getCenter(new THREE.Vector3()) };
+  }, [part, isPipe]);
+
+  // Auto-fit the camera to the part
   useEffect(() => {
-    if (isPipe) {
-      camera.position.set(0, 0, 14);
-      camera.lookAt(0, 0, 0);
-    } else {
-      camera.position.set(
-        sectionConfig.camPos.x - sectionConfig.focalOffset.x,
-        sectionConfig.camPos.y - sectionConfig.focalOffset.y,
-        sectionConfig.camPos.z - sectionConfig.focalOffset.z
-      );
-      camera.lookAt(0, 0, 0);
-    }
-
+    if (!frame) return;
+    const radius = frame.size.length() / 2;
+    const dist = radius * 2.1 + 2;
+    camera.position.set(dist * 0.62, dist * 0.42, dist * 0.66);
+    camera.lookAt(0, 0, 0);
     if (orbitControlsRef.current) {
       orbitControlsRef.current.target.set(0, 0, 0);
+      orbitControlsRef.current.maxDistance = dist * 3;
       orbitControlsRef.current.update();
+      orbitControlsRef.current.saveState?.();
     }
-  }, [sectionConfig, camera, orbitControlsRef, isPipe]);
+  }, [frame, camera, orbitControlsRef]);
 
-  // Gentle laser scanning beam animation & continuous fluid flow
-  const laserRef = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
-    if (laserRef.current) {
-      const halfH = sectionConfig.targetBounds[1] / 2;
-      laserRef.current.position.y = Math.sin(t * 2.5) * halfH;
-    }
-    if (pipeFluidMeshRef.current) {
-      pipeFluidMeshRef.current.rotation.y = t * 1.5;
-    }
+    material.uniforms.uTime.value = t;
+    if (laserRef.current && frame) laserRef.current.position.y = Math.sin(t * 1.6) * (frame.size.y / 2);
+    if (pipeFluidMeshRef.current) pipeFluidMeshRef.current.rotation.y = t * 1.5;
   });
 
   return (
-    <group ref={groupRef}>
-      {/* 1. LONG ROTATABLE CYLINDRICAL PIPE RENDERER (For Pipes 1-9) */}
+    <group>
       {isPipe ? (
-        <group position={[0, 0, 0]}>
-          {/* Outer Glowing High-Tech Cylindrical Wireframe Cage */}
-          <mesh>
+        <group>
+          {/* Pipe wall cage */}
+          <mesh material={holoMaterial({ color: HOLO.primary, opacity: 0.4, wireframe: true })}>
             <cylinderGeometry args={[2.0, 2.0, 16.0, 36, 18, true]} />
-            <meshBasicMaterial color="#00E5FF" wireframe transparent opacity={0.65} />
           </mesh>
-
-          {/* Inner Translucent High-Pressure Oil & Gas Multiphase Core */}
-          <mesh ref={pipeFluidMeshRef}>
+          {/* Multiphase core */}
+          <mesh ref={pipeFluidMeshRef} material={holoMaterial({ color: HOLO.mid, opacity: 0.45 })}>
             <cylinderGeometry args={[1.5, 1.5, 15.8, 28, 1]} />
-            <meshStandardMaterial
-              color="#FFA500"
-              emissive="#FF7700"
-              emissiveIntensity={2.8}
-              transparent
-              opacity={0.85}
-              roughness={0.15}
-              metalness={0.85}
-            />
           </mesh>
-
-          {/* Heavy Structural Connection Flange Rings Along the Cylinder */}
-          {[-6.5, -3.2, 0, 3.2, 6.5].map((yPos) => (
-            <group key={yPos} position={[0, yPos, 0]}>
-              <mesh>
-                <torusGeometry args={[2.3, 0.22, 16, 36]} />
-                <meshStandardMaterial
-                  color="#00FFFF"
-                  emissive="#00FFFF"
-                  emissiveIntensity={1.8}
-                  metalness={0.9}
-                  roughness={0.2}
-                />
-              </mesh>
-              {/* Radial Bolt Couplers */}
-              {[0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3].map((angle, idx) => (
-                <mesh key={idx} position={[Math.cos(angle) * 2.3, 0, Math.sin(angle) * 2.3]}>
-                  <sphereGeometry args={[0.2, 8, 8]} />
-                  <meshBasicMaterial color="#00FFFF" />
-                </mesh>
-              ))}
-            </group>
+          {/* Flanges */}
+          {[-6.5, -3.2, 0, 3.2, 6.5].map((y) => (
+            <mesh key={y} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]} material={holoMaterial({ color: HOLO.hot, opacity: 0.8 })}>
+              <torusGeometry args={[2.3, 0.18, 12, 48]} />
+            </mesh>
           ))}
-
-          {/* Optical Fiber Sensor Strain Line */}
-          <mesh position={[2.05, 0, 0]}>
+          {/* Fibre-optic strain line */}
+          <mesh position={[2.05, 0, 0]} material={holoMaterial({ color: HOLO.hot, opacity: 0.95 })}>
             <cylinderGeometry args={[0.06, 0.06, 16.0, 8]} />
-            <meshStandardMaterial color="#FF0055" emissive="#FF0033" emissiveIntensity={4.0} />
           </mesh>
         </group>
       ) : (
-        /* 2. REAL MODEL SECTION WITH PRECISION SELECTIVE HIGHLIGHTING */
-        modelGroup && (
-          <group
-            position={[
-              -sectionConfig.focalOffset.x,
-              -sectionConfig.focalOffset.y,
-              -sectionConfig.focalOffset.z,
-            ]}
-          >
-            <primitive object={modelGroup} />
+        part &&
+        frame && (
+          <group scale={MODEL_SCALE} rotation={[0, -Math.PI / 2, 0]}>
+            <group position={[-frame.center.x, -frame.center.y, -frame.center.z]}>
+              <mesh geometry={part.geometry} material={bodyMaterial} />
+              <mesh geometry={part.geometry} material={material} />
+              {part.edges ? (
+                <lineSegments geometry={part.edges} material={edgeMaterial} />
+              ) : (
+                <mesh geometry={part.geometry} material={wireMaterial} />
+              )}
+            </group>
           </group>
         )
       )}
 
-      {/* Holographic 3D Section Crop Bounding Cage */}
-      <group position={[0, 0, 0]}>
-        <lineSegments>
-          <edgesGeometry
-            args={[
-              new THREE.BoxGeometry(
-                sectionConfig.targetBounds[0],
-                sectionConfig.targetBounds[1],
-                sectionConfig.targetBounds[2]
-              ),
-            ]}
-          />
-          <lineBasicMaterial
-            color={sectionConfig.wireColor}
-            transparent
-            opacity={0.7}
-            linewidth={2}
-          />
-        </lineSegments>
+      {/* Scan cage sized to the part + sweeping scan plane */}
+      {frame && (
+        <group>
+          <lineSegments>
+            <edgesGeometry args={[new THREE.BoxGeometry(frame.size.x * 1.08, frame.size.y * 1.08, frame.size.z * 1.08)]} />
+            <lineBasicMaterial color={HOLO.primary} transparent opacity={0.6} />
+          </lineSegments>
+          <mesh ref={laserRef} rotation={[-Math.PI / 2, 0, 0]} material={holoMaterial({ color: HOLO.primary, opacity: 0.12 })}>
+            <planeGeometry args={[frame.size.x * 1.06, frame.size.z * 1.06]} />
+          </mesh>
+        </group>
+      )}
 
-        {/* Animated Laser Scanning Plane */}
-        <mesh ref={laserRef} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry
-            args={[
-              sectionConfig.targetBounds[0] * 0.98,
-              sectionConfig.targetBounds[2] * 0.98,
-            ]}
-          />
-          <meshBasicMaterial
-            color={sectionConfig.wireColor}
-            transparent
-            opacity={0.18}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-
-        {/* Outer Corner Reticle Markers */}
-        <mesh position={[0, sectionConfig.targetBounds[1] / 2 + 0.4, 0]}>
-          <ringGeometry args={[1.2, 1.4, 32]} />
-          <meshBasicMaterial color={sectionConfig.wireColor} side={THREE.DoubleSide} />
-        </mesh>
-      </group>
-
-      {/* Orbit Controls with Full 360 Rotation, Zoom, and Pan */}
       <OrbitControls
         ref={orbitControlsRef}
         makeDefault
-        enableRotate={true}
-        enableZoom={true}
-        enablePan={true}
+        enableRotate
+        enableZoom
+        enablePan
         autoRotate={autoRotate}
         autoRotateSpeed={1.8}
-        minDistance={2.0}
-        maxDistance={45.0}
+        minDistance={1.0}
         dampingFactor={0.08}
       />
     </group>
   );
 };
-
 export const HolographicPartInspectionModal: React.FC = () => {
   const activeHoloModal = useRigStore((s) => s.activeHoloModal);
   const closeHoloModal = useRigStore((s) => s.closeHoloModal);
@@ -802,7 +627,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-reliance-dark/90 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-200">
-      <div className="relative w-full max-w-6xl h-[92vh] glass-panel-alert border-2 border-reliance-cyan/60 bg-reliance-deepnavy/98 rounded-3xl shadow-cyan-glow flex flex-col overflow-hidden text-white font-sans">
+      <div className="relative w-full max-w-6xl h-[92vh] glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/98 rounded-3xl shadow-cyan-glow flex flex-col overflow-hidden text-white font-sans">
         {/* Top Header Bar */}
         <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-reliance-cyan/30 bg-reliance-blue/20 shrink-0">
           <div className="flex items-center gap-3">
@@ -814,9 +639,9 @@ export const HolographicPartInspectionModal: React.FC = () => {
                 <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-reliance-cyan bg-reliance-cyan/20 px-2 py-0.5 rounded border border-reliance-cyan/40">
                   JARVIS HOLOGRAPHIC 3D DIAGNOSTICS
                 </span>
-                <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  REAL 3D MODEL SECTION • 360° ORBIT
+                <span className="text-[10px] font-mono text-cyan-300 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-300 animate-ping" />
+                  DEDICATED PART VIEW • 360° ORBIT
                 </span>
               </div>
               <h2 className="text-sm sm:text-base md:text-lg font-extrabold text-white mt-0.5 font-mono">
@@ -854,11 +679,10 @@ export const HolographicPartInspectionModal: React.FC = () => {
 
               {/* 3D Canvas Rendering */}
               <div className="absolute inset-0">
-                <Canvas camera={{ position: [0, 0, 18], fov: 45 }}>
-                  <ambientLight intensity={1.4} />
-                  <pointLight position={[20, 25, 20]} intensity={3.0} color="#00ffff" />
-                  <pointLight position={[-20, -20, -20]} intensity={2.0} color="#ff8800" />
-                  <pointLight position={[0, 30, 0]} intensity={2.5} color="#ffffff" />
+                <Canvas camera={{ position: [0, 0, 18], fov: 45, near: 0.1, far: 2000 }} dpr={[1, 2]}>
+                  <ambientLight intensity={0.35} color={HOLO.primary} />
+                  <hemisphereLight args={['#9FEFFF', '#02101A', 0.6]} />
+                  <directionalLight position={[30, 60, 20]} intensity={2.2} color="#E6FBFF" />
                   <HoloRigCroppedSection
                     type={activeHoloModal}
                     autoRotate={autoRotate}
@@ -873,7 +697,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
                   <span className="text-reliance-cyan font-bold">TAG: </span>
                   <span className="text-white">{data.tag}</span>
                 </div>
-                <div className="bg-reliance-deepnavy/90 border border-reliance-cyan/40 px-2.5 py-1 rounded-lg backdrop-blur-md text-emerald-400 font-bold pointer-events-auto">
+                <div className="bg-reliance-deepnavy/90 border border-reliance-cyan/40 px-2.5 py-1 rounded-lg backdrop-blur-md text-cyan-200 font-bold pointer-events-auto">
                   <span>DEPTH: {data.depth}</span>
                 </div>
               </div>
@@ -890,7 +714,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
                   title="Toggle 360° Auto-Rotation"
                 >
                   <span>🔄 360° ROTATE</span>
-                  <span className={`w-1.5 h-1.5 rounded-full ${autoRotate ? 'bg-emerald-400 animate-ping' : 'bg-white/30'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${autoRotate ? 'bg-cyan-300 animate-ping' : 'bg-white/30'}`} />
                 </button>
 
                 <div className="flex items-center gap-1">
@@ -921,7 +745,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
               {/* Bottom HUD Badges & 360 Navigation Tip */}
               <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[9px] font-mono text-reliance-cyan/90 bg-reliance-deepnavy/85 p-2 rounded-xl border border-reliance-cyan/20 gap-1 backdrop-blur-md">
                 <span>SPEC: {data.spec}</span>
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <span className="text-cyan-300 font-bold flex items-center gap-1">
                   <span>🖱️ DRAG TO ROTATE 360° • SCROLL TO ZOOM</span>
                   <span>• 60 FPS</span>
                 </span>
@@ -951,9 +775,9 @@ export const HolographicPartInspectionModal: React.FC = () => {
                     >
                       <div className="flex items-center justify-between text-[10px] text-reliance-textMuted mb-1">
                         <span className="truncate">{m.label}</span>
-                        <Icon className={`w-3.5 h-3.5 ${m.color}`} />
+                        <Icon className="w-3.5 h-3.5 text-cyan-400" />
                       </div>
-                      <div className={`text-sm sm:text-base font-extrabold ${m.color}`}>
+                      <div className="text-sm sm:text-base font-extrabold text-cyan-100">
                         {m.val}
                       </div>
                     </div>

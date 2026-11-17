@@ -1,15 +1,19 @@
 /**
- * VARUNA-AI Voice Commander — Rock-Solid Single-Instance Web Speech Engine
+ * VARUNA-AI Voice Commander — single-instance Web Speech recogniser.
  *
- * Key features:
- * 1. Single reliable SpeechRecognition instance (no dual-instance mic crash).
- * 2. Instant wake-up upon hearing "Varuna" (or phonetic matches).
- * 3. Interim fast-track execution for instant response.
- * 4. Automatic smooth restart on pause or end with zero gaps.
- * 5. Broad phonetic wake word matching (varuna, varun, verona, aruna, karuna, etc.)
+ * Accuracy measures:
+ * 1. Up to 5 recognition alternatives are scored by the intent parser; the best
+ *    complete match wins instead of blindly taking alternative #0.
+ * 2. Echo guard: while VARUNA is speaking (and ~700 ms after) results are ignored,
+ *    so the assistant never re-triggers on its own voice ("Opening helipad...").
+ * 3. Interim fast-path only fires for a complete, unambiguous intent that was stable
+ *    across two interim results; the final result of the same utterance is then
+ *    skipped, so a command never runs twice.
+ * 4. Automatic restart on end / network hiccups with exponential back-off.
  */
 
 import { useRigStore } from '../store/useRigStore';
+import { parseVoiceCommand, ParsedVoiceCommand, WAKE_WORD_REGEX, stripWakeWord } from './VoiceCommandParser';
 
 declare global {
   interface Window {
@@ -18,15 +22,34 @@ declare global {
   }
 }
 
+const ECHO_TAIL_MS = 700;
+const DEBOUNCE_MS = 2500;
+
+const signature = (p: ParsedVoiceCommand) => `${p.id}:${p.num ?? ''}`;
+
 class JarvisVoiceCommander {
   private recognizer: any = null;
   private isRunning = false;
   private autoRestart = true;
-  private restartTimeout: any = null;
+  private restartTimeout: ReturnType<typeof setTimeout> | undefined;
+  private restartDelay = 120;
 
-  private lastExecutedText = '';
-  private lastExecutedTime = 0;
-  private readonly DEBOUNCE_MS = 1100;
+  private speakingUntil = 0;
+  private lastSignature = '';
+  private lastSignatureTime = 0;
+  private interimCandidate = '';
+  /** resultIndex of the utterance already handled by the interim fast-path */
+  private handledResultIndex = -1;
+  /** resultIndex whose bare wake word already woke VARUNA */
+  private wokeResultIndex = -1;
+
+  constructor() {
+    // Track VARUNA's own speech for the echo guard
+    useRigStore.subscribe((state, prev) => {
+      if (state.voiceStatus.isSpeaking) this.speakingUntil = Number.POSITIVE_INFINITY;
+      else if (prev.voiceStatus.isSpeaking) this.speakingUntil = Date.now() + ECHO_TAIL_MS;
+    });
+  }
 
   public start(): boolean {
     if (typeof window === 'undefined') return false;
@@ -47,72 +70,32 @@ class JarvisVoiceCommander {
       const rec = new SpeechRec();
       rec.continuous = true;
       rec.interimResults = true;
-      rec.lang = 'en-US';
-      rec.maxAlternatives = 1;
+      // Use the user's English locale (e.g. en-IN recognises "Varuna" far better than en-US)
+      rec.lang = navigator.language?.startsWith('en') ? navigator.language : 'en-US';
+      rec.maxAlternatives = 5;
 
       rec.onstart = () => {
+        this.restartDelay = 120;
         useRigStore.getState().setIsListeningSpeech(true);
         useRigStore.getState().setVoiceCommanderActive(true);
       };
 
-      rec.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += text;
-          } else {
-            interimTranscript += text;
-          }
-        }
-
-        const rawText = (finalTranscript || interimTranscript).trim();
-        if (!rawText) return;
-
-        const store = useRigStore.getState();
-        const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna|aruna|karuna|veruna|barun|varun a|varun ai|varuna ai|hey varuna|ok varuna)\b/i;
-        const hasWakeWord = wakeWordRegex.test(rawText);
-
-        // Update transcript UI if awake or wake word detected
-        if (store.isVarunaAwake || hasWakeWord) {
-          store.setVoiceTranscript(rawText);
-        }
-
-        // If user says ONLY wake word while asleep, WAKE UP IMMEDIATELY
-        if (hasWakeWord && !store.isVarunaAwake) {
-          const stripped = rawText.replace(wakeWordRegex, '').trim();
-          if (!stripped) {
-            store.wakeVaruna();
-            this.lastExecutedText = rawText;
-            this.lastExecutedTime = Date.now();
-            return;
-          }
-        }
-
-        // Execute on final transcript
-        if (finalTranscript.trim()) {
-          this.tryExecute(finalTranscript.trim());
-          return;
-        }
-
-        // Fast-track interim execution
-        if (interimTranscript.trim().length > 3) {
-          this.tryExecuteInterim(interimTranscript.trim());
-        }
-      };
+      rec.onresult = (event: any) => this.handleResult(event);
 
       rec.onerror = (event: any) => {
         if (event.error === 'no-speech' || event.error === 'aborted') return;
         console.warn('[VoiceCommander] Speech error:', event.error);
-        if (event.error === 'not-allowed') {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
           useRigStore.getState().setIsListeningSpeech(false);
           this.autoRestart = false;
+        } else if (event.error === 'network') {
+          this.restartDelay = Math.min(this.restartDelay * 2, 5000);
         }
       };
 
       rec.onend = () => {
+        this.handledResultIndex = -1;
+        this.wokeResultIndex = -1;
         if (!this.isRunning || !this.autoRestart) {
           useRigStore.getState().setIsListeningSpeech(false);
           return;
@@ -123,10 +106,10 @@ class JarvisVoiceCommander {
             try {
               this.recognizer.start();
             } catch {
-              // Ignore if already active
+              // already started
             }
           }
-        }, 80);
+        }, this.restartDelay);
       };
 
       this.recognizer = rec;
@@ -145,8 +128,9 @@ class JarvisVoiceCommander {
     clearTimeout(this.restartTimeout);
 
     if (this.recognizer) {
-      try { this.recognizer.abort(); } catch {}
-      try { this.recognizer.stop(); } catch {}
+      try {
+        this.recognizer.abort();
+      } catch {}
       this.recognizer = null;
     }
 
@@ -155,53 +139,98 @@ class JarvisVoiceCommander {
   }
 
   public toggle(): void {
-    if (this.isRunning) {
-      this.stop();
-    } else {
-      this.start();
-    }
+    if (this.isRunning) this.stop();
+    else this.start();
   }
 
   public resetDebounce(): void {
-    this.lastExecutedText = '';
-    this.lastExecutedTime = 0;
+    this.lastSignature = '';
+    this.lastSignatureTime = 0;
+    this.interimCandidate = '';
   }
 
-  private tryExecute(text: string): void {
-    const now = Date.now();
-    if (text.toLowerCase() === this.lastExecutedText.toLowerCase() && now - this.lastExecutedTime < this.DEBOUNCE_MS) return;
-    this.lastExecutedText = text;
-    this.lastExecutedTime = now;
-    useRigStore.getState().executeVoiceCommand(text);
-  }
+  private handleResult(event: any): void {
+    // Echo guard: ignore everything heard while VARUNA itself is talking
+    if (Date.now() < this.speakingUntil) return;
 
-  private tryExecuteInterim(text: string): void {
-    const lower = text.toLowerCase();
-    const now = Date.now();
+    const store = useRigStore.getState();
 
-    const wakeWordRegex = /\b(varuna|varun|verona|viruna|waruna|baruna|varna|aruna|karuna|veruna|barun|varun a|varun ai|varuna ai|hey varuna|ok varuna)\b/i;
-    const wakePresent = wakeWordRegex.test(lower);
-    const commandPresent = /\b(helipad|crane|split|merge|jarvis|pipe |accommodation|drill|deck|scada|command dock|subsea|open ppt|jack.up|slice)\b/i.test(lower);
-
-    if (!wakePresent && !commandPresent) return;
-    if (lower === this.lastExecutedText.toLowerCase() && now - this.lastExecutedTime < this.DEBOUNCE_MS) return;
-
-    const stripped = lower.replace(wakeWordRegex, '').trim();
-    if (wakePresent && !stripped) {
-      const store = useRigStore.getState();
-      if (!store.isVarunaAwake) {
-        store.wakeVaruna();
-        this.lastExecutedText = text;
-        this.lastExecutedTime = now;
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const alternatives: string[] = [];
+      for (let a = 0; a < result.length; a++) {
+        const t = (result[a]?.transcript || '').trim();
+        if (t) alternatives.push(t);
       }
-      return;
-    }
+      if (alternatives.length === 0) continue;
 
-    if (commandPresent) {
-      this.lastExecutedText = text;
-      this.lastExecutedTime = now;
-      useRigStore.getState().executeVoiceCommand(text);
+      const top = alternatives[0];
+      const hasWake = alternatives.some((t) => WAKE_WORD_REGEX.test(t));
+      const awake = store.isVarunaAwake && Date.now() < store.varunaWakeExpiry;
+
+      if (awake || hasWake) store.setVoiceTranscript(top);
+      if (!awake && !hasWake) continue;
+
+      // Pick the alternative that parses into the most complete intent
+      const best = this.bestAlternative(alternatives, hasWake);
+
+      if (result.isFinal) {
+        this.interimCandidate = '';
+        const woke = this.wokeResultIndex === i;
+        this.wokeResultIndex = -1;
+        if (this.handledResultIndex === i) {
+          this.handledResultIndex = -1;
+          continue; // already executed from the interim fast-path
+        }
+        // Bare wake word already handled on the interim result
+        if (woke && !best.parsed && !stripWakeWord(top)) continue;
+        this.execute(best.text, best.parsed);
+      } else {
+        // Bare wake word: wake immediately without waiting for the final result
+        if (!awake && hasWake && !stripWakeWord(top) && this.wokeResultIndex !== i) {
+          this.wokeResultIndex = i;
+          store.wakeVaruna();
+          continue;
+        }
+        // Interim fast-path: complete intent, seen twice in a row
+        if (!best.parsed || !best.parsed.complete || this.handledResultIndex === i) continue;
+        const sig = signature(best.parsed);
+        if (this.interimCandidate === sig) {
+          this.handledResultIndex = i;
+          this.interimCandidate = '';
+          this.execute(best.text, best.parsed);
+        } else {
+          this.interimCandidate = sig;
+        }
+      }
     }
+  }
+
+  private bestAlternative(alternatives: string[], wakeHeard: boolean) {
+    let best = { text: alternatives[0], parsed: parseVoiceCommand(alternatives[0]) };
+    for (const raw of alternatives.slice(1)) {
+      // keep the wake word if any alternative contained it, so the store's wake gate passes
+      const text = wakeHeard && !WAKE_WORD_REGEX.test(raw) ? `varuna ${stripWakeWord(raw)}` : raw;
+      const parsed = parseVoiceCommand(text);
+      if (!parsed) continue;
+      const cur = best.parsed;
+      if (!cur || (parsed.complete && !cur.complete) || (parsed.complete === cur.complete && parsed.score > cur.score + 0.2)) {
+        best = { text, parsed };
+      }
+    }
+    if (wakeHeard && !WAKE_WORD_REGEX.test(best.text)) best.text = `varuna ${best.text}`;
+    return best;
+  }
+
+  private execute(text: string, parsed: ParsedVoiceCommand | null): void {
+    const now = Date.now();
+    if (parsed) {
+      const sig = signature(parsed);
+      if (sig === this.lastSignature && now - this.lastSignatureTime < DEBOUNCE_MS) return;
+      this.lastSignature = sig;
+      this.lastSignatureTime = now;
+    }
+    useRigStore.getState().executeVoiceCommand(text);
   }
 }
 

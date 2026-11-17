@@ -1,196 +1,106 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { useRigStore } from '../../store/useRigStore';
-import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
+import { HOLO, holoMaterial } from '../../shaders/HoloPalette';
+
+const VECTOR_COUNT = 36;
+const BOUNDS_XZ = 95.0;
+const KNOTS_TO_MS = 0.5144;
+/** Streamlines are shown 4x real speed so a 1-knot current is still visibly moving */
+const VISUAL_SPEED_GAIN = 4.0;
+
+const UP = new THREE.Vector3(0, 1, 0);
+const flowDir = new THREE.Vector3();
 
 /**
- * 3D Ocean Current & Tidal Flow Visualizer
- * Renders:
- * - Dynamic moving 3D water current streamline arrows showing exact flow direction
- * - Real-time speed-adjusted particle drift across the sea surface and subsea column
- * - Floating 3D holographic Metocean Current Compass Beacon
+ * Ocean current streamlines and a floating current compass, in hologram style.
+ * Drift is integrated per frame from the live current speed (knots -> m/s), so changing
+ * the speed or heading changes the motion smoothly. Brightness rises with flow power.
  */
 export const OceanCurrentVisualizer: React.FC = () => {
-  const currentSpeedKnots = useRigStore((s) => s.currentSpeedKnots);
-  const currentDirectionDeg = useRigStore((s) => s.currentDirectionDeg);
   const currentFlowPower = useRigStore((s) => s.currentFlowPower);
-  const scannerMode = useRigStore((s) => s.scannerMode);
 
-  const VECTOR_COUNT = 36;
-  const BOUNDS_XZ = 95.0; // 95m x 95m coverage area
-
-  // Compute direction vector in XZ plane
-  const dirRad = (currentDirectionDeg * Math.PI) / 180;
-  const dirX = Math.sin(dirRad);
-  const dirZ = Math.cos(dirRad);
-
-  // 3D Arrow / Streamline Geometry (Sleek marine hydrodynamic chevron)
   const chevronGeo = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    const cone = new THREE.ConeGeometry(0.55, 1.6, 12);
+    const cone = new THREE.ConeGeometry(0.55, 1.6, 10);
     cone.translate(0, 0.8, 0);
-
-    const stem = new THREE.CylinderGeometry(0.2, 0.2, 1.2, 12);
+    const stem = new THREE.CylinderGeometry(0.18, 0.18, 1.2, 8);
     stem.translate(0, -0.6, 0);
-
-    const conePos = cone.attributes.position.array;
-    const stemPos = stem.attributes.position.array;
-    const coneNorm = cone.attributes.normal.array;
-    const stemNorm = stem.attributes.normal.array;
-
-    const mergedPos = new Float32Array(conePos.length + stemPos.length);
-    mergedPos.set(conePos, 0);
-    mergedPos.set(stemPos, conePos.length);
-
-    const mergedNorm = new Float32Array(coneNorm.length + stemNorm.length);
-    mergedNorm.set(coneNorm, 0);
-    mergedNorm.set(stemNorm, coneNorm.length);
-
-    geo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
-    return geo;
+    return mergeGeometries([cone, stem])!;
   }, []);
 
-  // Material with dynamic glow based on current power
-  const streamlineMaterial = useMemo(() => {
-    const isStorm = currentFlowPower === 'storm';
-    const isExtreme = currentFlowPower === 'extreme';
-    const isFast = currentFlowPower === 'fast';
-    const isHolo = scannerMode === 'hologram';
+  const opacity =
+    currentFlowPower === 'storm' ? 0.95 : currentFlowPower === 'extreme' ? 0.8 : currentFlowPower === 'fast' ? 0.65 : 0.45;
+  const streamlineMaterial = holoMaterial({ color: currentFlowPower === 'storm' ? HOLO.hot : HOLO.primary, opacity });
 
-    const baseColor = isStorm
-      ? '#FF1100'
-      : isExtreme
-      ? '#FF4400'
-      : isFast
-      ? '#00E5FF'
-      : isHolo
-      ? '#00B4D8'
-      : '#0077B6';
-    const glowColor = isStorm
-      ? '#FF0055'
-      : isExtreme
-      ? '#FF5500'
-      : isFast
-      ? '#00FFFF'
-      : isHolo
-      ? '#00FFFF'
-      : '#00A8FF';
-    const intensity = isStorm ? 5.5 : isExtreme ? 4.0 : isFast ? 2.8 : 1.8;
-
-    return new THREE.MeshStandardMaterial({
-      color: new THREE.Color(baseColor),
-      emissive: new THREE.Color(glowColor),
-      emissiveIntensity: intensity,
-      roughness: 0.2,
-      metalness: 0.8,
-      transparent: true,
-      opacity: 0.82,
-      side: THREE.DoubleSide,
-    });
-  }, [currentFlowPower, scannerMode]);
-
-  // Initial random positions for vector arrows
-  const initialPositions = useMemo(() => {
-    const arr: { x: number; y: number; z: number; speedMul: number }[] = [];
-    for (let i = 0; i < VECTOR_COUNT; i++) {
-      arr.push({
+  const particles = useMemo(
+    () =>
+      Array.from({ length: VECTOR_COUNT }, () => ({
         x: (Math.random() - 0.5) * BOUNDS_XZ,
-        y: -Math.random() * 14.0 - 0.5, // Between 0.5m and 14.5m underwater
+        y: -Math.random() * 14.0 - 0.5, // water column above the seabed
         z: (Math.random() - 0.5) * BOUNDS_XZ,
         speedMul: 0.85 + Math.random() * 0.35,
-      });
-    }
-    return arr;
-  }, [VECTOR_COUNT]);
+        seed: Math.random() * 10,
+      })),
+    []
+  );
 
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   const compassArrowRef = useRef<THREE.Group>(null);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
+    const { currentSpeedKnots, currentDirectionDeg } = useRigStore.getState();
     const t = clock.getElapsedTime();
-    const speed = currentSpeedKnots * 2.6;
-    const upVector = new THREE.Vector3(0, 1, 0);
-    const flowDir = new THREE.Vector3(dirX, 0, dirZ).normalize();
+    const dirRad = (currentDirectionDeg * Math.PI) / 180;
+    const dirX = Math.sin(dirRad);
+    const dirZ = Math.cos(dirRad);
+    flowDir.set(dirX, 0, dirZ);
+    const step = currentSpeedKnots * KNOTS_TO_MS * VISUAL_SPEED_GAIN * Math.min(delta, 0.1);
+    const half = BOUNDS_XZ / 2;
 
-    // 1. Animate all current vector streamline arrows
     meshRefs.current.forEach((mesh, i) => {
-      if (mesh) {
-        const init = initialPositions[i];
-        const distTraveled = t * speed * init.speedMul;
+      if (!mesh) return;
+      const p = particles[i];
+      p.x += dirX * step * p.speedMul;
+      p.z += dirZ * step * p.speedMul;
+      // wrap inside the bounds
+      if (p.x > half) p.x -= BOUNDS_XZ;
+      else if (p.x < -half) p.x += BOUNDS_XZ;
+      if (p.z > half) p.z -= BOUNDS_XZ;
+      else if (p.z < -half) p.z += BOUNDS_XZ;
 
-        // Wrap around bounds centered at origin
-        let curX = ((init.x + distTraveled * dirX + BOUNDS_XZ / 2) % BOUNDS_XZ) - BOUNDS_XZ / 2;
-        let curZ = ((init.z + distTraveled * dirZ + BOUNDS_XZ / 2) % BOUNDS_XZ) - BOUNDS_XZ / 2;
-
-        mesh.position.set(curX, init.y + Math.sin(t * 2.0 + i) * 0.3, curZ);
-        mesh.quaternion.setFromUnitVectors(upVector, flowDir);
-
-        // Pulse scale
-        const pulse = Math.sin(t * (currentSpeedKnots * 1.5) + i) * 0.15 + 1.0;
-        mesh.scale.set(pulse, pulse * 1.2, pulse);
-      }
+      mesh.position.set(p.x, p.y + Math.sin(t * 1.2 + p.seed) * 0.3, p.z);
+      mesh.quaternion.setFromUnitVectors(UP, flowDir);
     });
 
-    // 2. Animate Metocean Floating Compass Beacon
     if (compassArrowRef.current) {
-      compassArrowRef.current.rotation.y = -dirRad;
+      compassArrowRef.current.rotation.y = dirRad;
       compassArrowRef.current.position.y = Math.sin(t * 1.8) * 0.4;
     }
   });
 
   return (
-    <group position={[0, 0, 0]}>
-      {/* Dynamic 3D Water Current Streamline Arrows */}
-      {initialPositions.map((_, i) => (
-        <mesh
-          key={i}
-          ref={(el) => (meshRefs.current[i] = el)}
-          geometry={chevronGeo}
-          material={streamlineMaterial}
-        />
+    <group>
+      {particles.map((_, i) => (
+        <mesh key={i} ref={(el) => (meshRefs.current[i] = el)} geometry={chevronGeo} material={streamlineMaterial} />
       ))}
 
-      {/* Floating 3D Metocean Current & Tide Direction Compass Beacon */}
+      {/* Floating current compass beacon */}
       <group position={[38, 0, 38]}>
-        {/* Floating Ring Buoy */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[3.2, 0.4, 16, 32]} />
-          <meshStandardMaterial
-            color="#FF9900"
-            emissive="#FF5500"
-            emissiveIntensity={0.8}
-            metalness={0.7}
-            roughness={0.3}
-          />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} material={holoMaterial({ color: HOLO.mid, opacity: 0.6 })}>
+          <torusGeometry args={[3.2, 0.25, 12, 48]} />
         </mesh>
-
-        {/* Rotating Compass Direction Indicator Arrow */}
         <group ref={compassArrowRef}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, 1.8]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, 1.8]} material={holoMaterial({ color: HOLO.hot, opacity: 0.9 })}>
             <coneGeometry args={[0.9, 2.5, 16]} />
-            <meshStandardMaterial
-              color="#00FFFF"
-              emissive="#00E5FF"
-              emissiveIntensity={2.5}
-              metalness={0.9}
-            />
           </mesh>
-          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, -0.6]}>
-            <cylinderGeometry args={[0.3, 0.3, 2.4, 16]} />
-            <meshStandardMaterial
-              color="#0088FF"
-              emissive="#0055FF"
-              emissiveIntensity={1.5}
-            />
+          <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.6, -0.6]} material={holoMaterial({ color: HOLO.primary, opacity: 0.6 })}>
+            <cylinderGeometry args={[0.3, 0.3, 2.4, 12]} />
           </mesh>
         </group>
-
-        {/* Outer Degree Dial */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[3.8, 4.4, 32]} />
-          <meshBasicMaterial color="#00FFFF" transparent opacity={0.6} side={THREE.DoubleSide} />
+        <mesh rotation={[-Math.PI / 2, 0, 0]} material={holoMaterial({ color: HOLO.primary, opacity: 0.45 })}>
+          <ringGeometry args={[3.8, 4.1, 64]} />
         </mesh>
       </group>
     </group>

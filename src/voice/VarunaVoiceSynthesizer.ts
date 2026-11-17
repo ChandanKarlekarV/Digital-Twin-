@@ -235,36 +235,38 @@ class VarunaVoiceSynthesizer {
     const pVal = record ? Math.round(record.p_line_bar) : 242;
     const bpdVal = record ? Math.round(record.net_oil_bpd).toLocaleString() : '34,200';
 
+    const rpm = record?.drill_rpm ?? 120;
+    const torque = (record?.drill_torque_knm ?? 28.4).toFixed(1);
+
     let message = '';
     switch (assetId) {
       case 'DRILL-SYSTEM':
-        message = `Drill floor inspected. Rotary speed 120 RPM, torque 28.4 kilonewton-meters. Top-drive and derrick mast within nominal operating envelope.`;
+        message = `Here's the drill string. It's turning at ${rpm} RPM with about ${torque} kNm of torque. Everything looks normal.`;
         break;
       case 'CRANE-SYSTEM':
-        message = `Topside heavy-lift pedestal cranes inspected. Hydraulic line pressure 210 bar. Safe working load 150 metric tons operational.`;
+        message = `These are the pedestal cranes. Hydraulic pressure is steady at 210 bar, and they're rated for 150 tonnes.`;
         break;
       case 'PILLAR-FOUNDATION':
-        message = `Platform stability columns inspected. Semi-submersible hull ballast stability at 98.6%. Four primary buoyant column tensions balanced.`;
+        message = `This is the jacket and its support legs. Load is balanced across all four columns, and the structure is stable.`;
         break;
       case 'RISER-ALPHA':
       case 'RISER-BRAVO':
       case 'SUBSEA-PIPES':
-        message = `Subsea riser and production flowlines inspected. Internal line pressure: ${pVal} bar. Multiphase flow rate: ${bpdVal} barrels per day. Wall integrity 99.4%.`;
+        message = `This is the production riser. Line pressure is ${pVal} bar, and it's carrying about ${bpdVal} BPD. Wall integrity is good.`;
         break;
       case 'MANIFOLD-D6-MAIN':
       case 'XT-WELLHEAD-01':
       case 'XT-WELLHEAD-02':
-        message = `Subsea Production Manifold Hub D6 inspected. Header Pressure: ${pVal} bar. Total gathering rate: ${bpdVal} Barrels per day. All branch valves nominal.`;
+        message = `You're looking at the subsea manifold. Header pressure is ${pVal} bar, gathering about ${bpdVal} BPD. All branch valves are open and healthy.`;
         break;
       case 'SUBSEA-BEDROCK':
-        message = `Subterranean geological formation inspected. KG-D6 deepwater turbidite reservoir at 2,040 meters subsea depth. Borehole casing integrity optimal.`;
+        message = `This is the seabed and the rock below it. The reservoir sits around two thousand metres down, and the borehole casing is holding well.`;
         break;
       case 'TOPSIDE-DRILL-RIG':
       default:
-        message = `Reliance KG-D6 platform inspected. Line Pressure: ${pVal} bar. Topside processing modules and Coriolis MPFM sensors locked.`;
+        message = `This is the KG-D6 platform. Line pressure is ${pVal} bar, and all topside systems are running normally.`;
         break;
     }
-
     this.speakCustom(message);
   }
 
@@ -338,61 +340,103 @@ class VarunaVoiceSynthesizer {
     this.speakWebSpeechFallback(message);
   }
 
+  private cachedVoice: SpeechSynthesisVoice | null = null;
+  private voicesListenerAttached = false;
+  private speechToken = 0;
+
+  /**
+   * Picks the most natural-sounding English voice the system offers. Neural/"Natural"
+   * voices (Edge, Windows 11), Google network voices and Apple enhanced voices sound far
+   * more human than the legacy desktop SAPI voices, which are ranked last.
+   */
+  private pickVoice(): SpeechSynthesisVoice | null {
+    if (this.cachedVoice) return this.cachedVoice;
+    const synth = window.speechSynthesis;
+    if (!this.voicesListenerAttached) {
+      this.voicesListenerAttached = true;
+      synth.addEventListener?.('voiceschanged', () => {
+        this.cachedVoice = null;
+      });
+    }
+    const voices = synth.getVoices().filter((v) => v.lang.toLowerCase().startsWith('en'));
+    if (voices.length === 0) return null;
+
+    const userLang = (navigator.language || 'en-US').toLowerCase();
+    const score = (v: SpeechSynthesisVoice) => {
+      const n = v.name.toLowerCase();
+      let s = 0;
+      if (n.includes('natural') || n.includes('neural')) s += 100;
+      if (n.includes('online')) s += 20;
+      if (n.includes('google')) s += 60;
+      if (n.includes('enhanced') || n.includes('premium') || n.includes('siri')) s += 70;
+      if (/(aria|jenny|guy|sonia|ryan|neerja|prabhat|samantha|daniel|karen)/.test(n)) s += 15;
+      if (n.includes('desktop') || /(david|zira|mark)\b/.test(n)) s -= 40;
+      if (v.lang.toLowerCase() === userLang) s += 10;
+      if (!v.localService) s += 5;
+      return s;
+    };
+    this.cachedVoice = voices.sort((a, b) => score(b) - score(a))[0];
+    return this.cachedVoice;
+  }
+
+  /** Rewrites engineering shorthand so it is read the way a person would say it. */
+  private humanize(text: string): string {
+    return text
+      .replace(/\bKG-D6\b/g, 'K G D six')
+      .replace(/(\d)\s*°\s*C\b/g, '$1 degrees')
+      .replace(/(\d)\s*%/g, '$1 percent')
+      .replace(/\bkNm\b/gi, 'kilonewton metres')
+      .replace(/\bkilonewton-meters\b/gi, 'kilonewton metres')
+      .replace(/\bBPD\b/g, 'barrels a day')
+      .replace(/\bRPM\b/g, 'R P M')
+      .replace(/\bMT\b/g, 'tonnes')
+      .replace(/\bSCADA\b/g, 'skada')
+      .replace(/\bESD\b/g, 'E S D')
+      .replace(/\bMPFM\b/g, 'multiphase meter')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private finishSpeaking(message: string, token: number): void {
+    if (token !== this.speechToken) return;
+    useRigStore.getState().setVoiceStatus({ isSpeaking: false, lastMessage: message });
+  }
+
   private speakWebSpeechFallback(message: string): void {
+    const token = ++this.speechToken;
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setTimeout(() => {
-        useRigStore.getState().setVoiceStatus({
-          isSpeaking: false,
-          lastMessage: message,
-        });
-      }, 3000);
+      setTimeout(() => this.finishSpeaking(message, token), 3000);
       return;
     }
 
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.rate = 1.05;
-      utterance.pitch = 0.95;
-      utterance.volume = 0.9;
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const voice = this.pickVoice();
 
-      const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find(
-        (v) =>
-          v.lang.startsWith('en') &&
-          (v.name.includes('Natural') ||
-            v.name.includes('Google') ||
-            v.name.includes('David') ||
-            v.name.includes('Alex') ||
-            v.name.includes('Guy'))
-      );
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-
-      utterance.onend = () => {
-        useRigStore.getState().setVoiceStatus({
-          isSpeaking: false,
-          lastMessage: message,
-        });
-      };
-
-      utterance.onerror = () => {
-        useRigStore.getState().setVoiceStatus({
-          isSpeaking: false,
-          lastMessage: message,
-        });
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      useRigStore.getState().setVoiceStatus({
-        isSpeaking: false,
-        lastMessage: message,
+      // Speak sentence by sentence: natural pauses, and Chrome no longer cuts off long text
+      const sentences = this.humanize(message).match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) ?? [message];
+      sentences.forEach((sentence, i) => {
+        const u = new SpeechSynthesisUtterance(sentence);
+        if (voice) {
+          u.voice = voice;
+          u.lang = voice.lang;
+        }
+        // Neural voices already have natural prosody; legacy voices sound better a touch slower
+        const natural = !!voice && /natural|neural|google|enhanced|premium|siri/i.test(voice.name);
+        u.rate = natural ? 1.0 : 0.94;
+        u.pitch = 1.0;
+        u.volume = 0.95;
+        if (i === sentences.length - 1) {
+          u.onend = () => this.finishSpeaking(message, token);
+          u.onerror = () => this.finishSpeaking(message, token);
+        }
+        synth.speak(u);
       });
+    } catch {
+      this.finishSpeaking(message, token);
     }
   }
-
   public toggleMute(): boolean {
     this.isMuted = !this.isMuted;
     if (this.isMuted) {

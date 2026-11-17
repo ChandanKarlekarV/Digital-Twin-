@@ -9,6 +9,35 @@ import { multiphaseCutEngine } from './MultiphaseCut';
 import { aiIngestionPipeline } from '../services/AiIngestionPipeline';
 import { midnightSettlementEngine } from '../services/MidnightSettlementEngine';
 
+const ASSET_BASELINES = [
+  { id: 'RISER-ALPHA', baseP: 242.0, baseT: 52.0, baseMass: 58.2, nominalBpd: 34200 },
+  { id: 'RISER-BRAVO', baseP: 238.5, baseT: 50.5, baseMass: 53.6, nominalBpd: 31500 },
+  { id: 'MANIFOLD-D6-MAIN', baseP: 255.0, baseT: 68.0, baseMass: 201.0, nominalBpd: 118000 },
+  { id: 'XT-WELLHEAD-01', baseP: 278.0, baseT: 78.5, baseMass: 38.0, nominalBpd: 22300 },
+  { id: 'XT-WELLHEAD-02', baseP: 282.0, baseT: 81.0, baseMass: 31.5, nominalBpd: 18500 },
+  { id: 'TOPSIDE-MPFM-01', baseP: 85.0, baseT: 38.0, baseMass: 201.0, nominalBpd: 118000 },
+  { id: 'TOPSIDE-DRILL-RIG', baseP: 210.0, baseT: 60.0, baseMass: 65.0, nominalBpd: 38000 },
+];
+
+/** KG-D6 condensate base density at 15.56 °C (≈ 43.7 °API) */
+const BASE_OIL_DENSITY = 807.2;
+const NOMINAL_WATER_CUT = 4.5;
+
+const BRINE_DENSITY = 1025.0;
+/** Solution gas-oil ratio, scf of gas per stock-tank barrel */
+const GAS_OIL_RATIO_SCF_BBL = 480;
+
+/** In-situ oil density from the PVT line: thermal expansion lowers it ~0.65 kg/m³ per °C. */
+function inSituOilDensity(baseDensity: number, tempC: number): number {
+  return baseDensity - (tempC - 15.56) * 0.65;
+}
+
+/** Volume-weighted oil/brine mixture density seen by the Coriolis tube. */
+function expectedMixDensity(baseDensity: number, waterCutPct: number, tempC: number): number {
+  const wc = waterCutPct / 100;
+  return (1 - wc) * inSituOilDensity(baseDensity, tempC) + wc * BRINE_DENSITY;
+}
+
 interface AssetFilterBank {
   pressure: KalmanFilter1D;
   temperature: KalmanFilter1D;
@@ -35,24 +64,21 @@ class TelemetryEmitterService {
     this.initFilterBanks();
   }
 
+  /**
+   * Each asset's filters start at that asset's own operating point. (They used to all start at
+   * RISER-ALPHA's values, so other assets' readings were rejected as outliers and the display
+   * froze at 1245 Hz / 500 kg/m³ / 151 °API.)
+   */
   private initFilterBanks(): void {
-    const assets = [
-      'RISER-ALPHA',
-      'RISER-BRAVO',
-      'MANIFOLD-D6-MAIN',
-      'XT-WELLHEAD-01',
-      'XT-WELLHEAD-02',
-      'TOPSIDE-MPFM-01',
-      'TOPSIDE-DRILL-RIG',
-    ];
-
-    for (const id of assets) {
-      this.filterBanks.set(id, {
-        pressure: new KalmanFilter1D({ Q: 0.015, R: 0.20, initialState: 240.0, maxResidualThreshold: 45 }),
-        temperature: new KalmanFilter1D({ Q: 0.003, R: 0.06, initialState: 52.0, maxResidualThreshold: 15 }),
-        frequency: new KalmanFilter1D({ Q: 0.008, R: 0.12, initialState: 1245.0, maxResidualThreshold: 20 }),
-        massRate: new KalmanFilter1D({ Q: 0.04, R: 0.35, initialState: 55.0, maxResidualThreshold: 30 }),
-        waterCut: new KalmanFilter1D({ Q: 0.008, R: 0.08, initialState: 4.5, maxResidualThreshold: 10 }),
+    for (const asset of ASSET_BASELINES) {
+      const density = expectedMixDensity(BASE_OIL_DENSITY, NOMINAL_WATER_CUT, asset.baseT);
+      const fOsc = coriolisEngine.computeFrequencyFromDensity(density, asset.baseT);
+      this.filterBanks.set(asset.id, {
+        pressure: new KalmanFilter1D({ Q: 0.015, R: 0.20, initialState: asset.baseP, maxResidualThreshold: 45 }),
+        temperature: new KalmanFilter1D({ Q: 0.003, R: 0.06, initialState: asset.baseT, maxResidualThreshold: 15 }),
+        frequency: new KalmanFilter1D({ Q: 0.008, R: 0.12, initialState: fOsc, maxResidualThreshold: 20 }),
+        massRate: new KalmanFilter1D({ Q: 0.04, R: 0.35, initialState: asset.baseMass, maxResidualThreshold: 30 }),
+        waterCut: new KalmanFilter1D({ Q: 0.008, R: 0.08, initialState: NOMINAL_WATER_CUT, maxResidualThreshold: 10 }),
         drillTorque: new KalmanFilter1D({ Q: 0.02, R: 0.18, initialState: 28.4, maxResidualThreshold: 25 }),
         drillRop: new KalmanFilter1D({ Q: 0.01, R: 0.10, initialState: 12.5, maxResidualThreshold: 15 }),
       });
@@ -123,17 +149,7 @@ class TelemetryEmitterService {
       this.autoPhaseTick = 0;
     }
 
-    const assets = [
-      { id: 'RISER-ALPHA', baseP: 242.0, baseT: 52.0, baseMass: 58.2, nominalBpd: 34200 },
-      { id: 'RISER-BRAVO', baseP: 238.5, baseT: 50.5, baseMass: 53.6, nominalBpd: 31500 },
-      { id: 'MANIFOLD-D6-MAIN', baseP: 255.0, baseT: 68.0, baseMass: 201.0, nominalBpd: 118000 },
-      { id: 'XT-WELLHEAD-01', baseP: 278.0, baseT: 78.5, baseMass: 38.0, nominalBpd: 22300 },
-      { id: 'XT-WELLHEAD-02', baseP: 282.0, baseT: 81.0, baseMass: 31.5, nominalBpd: 18500 },
-      { id: 'TOPSIDE-MPFM-01', baseP: 85.0, baseT: 38.0, baseMass: 201.0, nominalBpd: 118000 },
-      { id: 'TOPSIDE-DRILL-RIG', baseP: 210.0, baseT: 60.0, baseMass: 65.0, nominalBpd: 38000 },
-    ];
-
-    for (const asset of assets) {
+    for (const asset of ASSET_BASELINES) {
       let filterBank = this.filterBanks.get(asset.id);
       if (!filterBank) {
         this.initFilterBanks();
@@ -147,7 +163,7 @@ class TelemetryEmitterService {
       let targetP = asset.baseP + waveHarmonic + pumpHarmonic;
       let targetT = asset.baseT + Math.sin(this.tickCount * 0.004) * 0.2;
       let targetMass = asset.baseMass * (1 + Math.sin(this.tickCount * 0.01) * 0.02);
-      let targetWC = 4.2 + Math.sin(this.tickCount * 0.002) * 0.6;
+      let targetWC = NOMINAL_WATER_CUT + Math.sin(this.tickCount * 0.002) * 0.6;
       let statusFlag = 0;
 
       // Drill dynamics baseline
@@ -221,8 +237,7 @@ class TelemetryEmitterService {
       const rawRop = targetRop + (Math.random() - 0.5) * 0.4;
 
       // Theoretical frequency for Coriolis tube
-      const baseDensity = 807.2;
-      const expectedRawDensity = baseDensity * (1 + (rawWC / 100) * 0.24) - (rawT - 15.56) * 0.65;
+      const expectedRawDensity = expectedMixDensity(BASE_OIL_DENSITY, rawWC, rawT);
       const nominalFOsc = coriolisEngine.computeFrequencyFromDensity(expectedRawDensity, rawT);
       const rawFOsc = nominalFOsc + (Math.random() - 0.5) * 2.0 + (isGlitch ? 10.0 : 0);
 
@@ -238,11 +253,13 @@ class TelemetryEmitterService {
       // Raw record calculations
       const rawCoriolis = coriolisEngine.computeDensityFromFrequency(rawFOsc, rawT);
       const rawAstm = astm1250Engine.executeFullCorrection(rawCoriolis.temp_compensated_density_kg_m3, rawT, rawP);
+      // Oil density comes from the PVT line (as in a real MPFM), not from the water-bearing mixture
       const rawMultiphase = multiphaseCutEngine.deconvolveFlow(
         rawCoriolis.temp_compensated_density_kg_m3,
-        rawAstm.rho_base * 0.98,
+        inSituOilDensity(BASE_OIL_DENSITY, rawT),
         rawMass,
-        rawAstm.rho_base
+        BASE_OIL_DENSITY,
+        BRINE_DENSITY
       );
 
       // Filtered record calculations
@@ -250,15 +267,18 @@ class TelemetryEmitterService {
       const filtAstm = astm1250Engine.executeFullCorrection(filtCoriolis.temp_compensated_density_kg_m3, kT.filtered, kP.filtered);
       const filtMultiphase = multiphaseCutEngine.deconvolveFlow(
         filtCoriolis.temp_compensated_density_kg_m3,
-        filtAstm.rho_base * 0.98,
+        inSituOilDensity(BASE_OIL_DENSITY, kT.filtered),
         kMass.filtered,
-        filtAstm.rho_base
+        BASE_OIL_DENSITY,
+        BRINE_DENSITY
       );
 
+      // net_oil_bpd is already water-free; gross liquid adds the produced water back
       const netBpd = filtMultiphase.net_oil_bpd;
-      const purifiedBpd = netBpd * (1.0 - kWC.filtered / 100);
-      const producedWater = netBpd * (kWC.filtered / 100);
-      const associatedGas = (purifiedBpd * 480) / 1e6;
+      const producedWater = filtMultiphase.water_bpd;
+      const grossBpd = netBpd + producedWater;
+      const purifiedBpd = netBpd;
+      const associatedGas = (netBpd * GAS_OIL_RATIO_SCF_BBL) / 1e6;
 
       const rawRecord: TelemetryRecord = {
         timestamp: now,
@@ -272,11 +292,11 @@ class TelemetryEmitterService {
         api_gravity: Number(rawAstm.api_gravity.toFixed(2)),
         water_cut_pct: Number(rawWC.toFixed(2)),
         gross_mass_rate: Number(rawMass.toFixed(2)),
-        gross_liquid_bpd: Number(rawMultiphase.net_oil_bpd.toFixed(1)),
+        gross_liquid_bpd: Number((rawMultiphase.net_oil_bpd + rawMultiphase.water_bpd).toFixed(1)),
         net_oil_bpd: Number(rawMultiphase.net_oil_bpd.toFixed(1)),
-        purified_oil_bpd: Number((rawMultiphase.net_oil_bpd * (1 - rawWC / 100)).toFixed(1)),
-        produced_water_bpd: Number((rawMultiphase.net_oil_bpd * (rawWC / 100)).toFixed(1)),
-        associated_gas_mmscfd: Number(((rawMultiphase.net_oil_bpd * 480) / 1e6).toFixed(2)),
+        purified_oil_bpd: Number(rawMultiphase.net_oil_bpd.toFixed(1)),
+        produced_water_bpd: Number(rawMultiphase.water_bpd.toFixed(1)),
+        associated_gas_mmscfd: Number(((rawMultiphase.net_oil_bpd * GAS_OIL_RATIO_SCF_BBL) / 1e6).toFixed(2)),
         status_flag: statusFlag,
         drill_rpm: targetRpm,
         drill_torque_knm: Number(rawTorque.toFixed(1)),
@@ -297,7 +317,7 @@ class TelemetryEmitterService {
         api_gravity: Number(filtAstm.api_gravity.toFixed(2)),
         water_cut_pct: Number(kWC.filtered.toFixed(2)),
         gross_mass_rate: Number(kMass.filtered.toFixed(2)),
-        gross_liquid_bpd: Number(netBpd.toFixed(1)),
+        gross_liquid_bpd: Number(grossBpd.toFixed(1)),
         net_oil_bpd: Number(netBpd.toFixed(1)),
         purified_oil_bpd: Number(purifiedBpd.toFixed(1)),
         produced_water_bpd: Number(producedWater.toFixed(1)),

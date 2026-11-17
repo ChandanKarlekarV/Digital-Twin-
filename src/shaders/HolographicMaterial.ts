@@ -55,35 +55,26 @@ varying vec3 vColor;
 varying float vFresnel;
 
 void main() {
-  // Base tint: either vertex colors or uniform base color
+  // Flat, single-tone body (no rainbow vertex gradient) so the silhouette reads cleanly
   vec3 base = (uUseVertexColor > 0.5 && length(vColor) > 0.01) ? vColor : uBaseColor;
 
-  // 1. Vertical Sweeping Scanlines
-  float scanline = sin(vWorldPosition.y * uScanlineFreq - uTime * 3.5) * 0.5 + 0.5;
-  scanline = pow(scanline, 4.0) * 0.35;
+  // Per-fragment Fresnel: crisp edges instead of the interpolated per-vertex smear
+  vec3 n = normalize(vNormal);
+  vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+  float fresnel = pow(1.0 - abs(dot(n, viewDir)), 2.5);
 
-  // 2. High-speed Fast Laser Pulse
-  float laserPulse = sin(vWorldPosition.y * 0.2 - uTime * 5.0);
-  laserPulse = smoothstep(0.85, 1.0, laserPulse) * 0.6;
+  // Thin, slow scanlines (subtle — texture, not stripes)
+  float scan = smoothstep(0.92, 1.0, sin(vWorldPosition.y * uScanlineFreq * 6.0 - uTime * 2.0));
 
-  // 3. Cyber Wireframe Grid pattern from UV or world coords
-  float gridX = abs(fract(vWorldPosition.x * 0.5) - 0.5);
-  float gridZ = abs(fract(vWorldPosition.z * 0.5) - 0.5);
-  float grid = smoothstep(0.04, 0.0, min(gridX, gridZ)) * 0.25;
+  // One soft sweep band travelling up the structure every few seconds
+  float sweepY = mod(uTime * 9.0, 140.0) - 60.0;
+  float sweep = exp(-abs(vWorldPosition.y - sweepY) * 0.35) * 0.6;
 
-  // 4. Fresnel Edge Glow (Intense neon outline)
-  vec3 rimGlow = uGlowColor * vFresnel * uGlowIntensity;
+  vec3 finalColor = base * 0.22
+    + uGlowColor * fresnel * uGlowIntensity
+    + uGlowColor * (scan * 0.12 + sweep);
 
-  // 5. Breathing ambient glow
-  float pulse = sin(uTime * 2.0) * 0.08 + 0.92;
-
-  // Composite holographic color
-  vec3 finalColor = base * 0.6 + rimGlow + (uGlowColor * (scanline + laserPulse + grid));
-  finalColor *= pulse;
-
-  // Holographic alpha: transparent in center, brightly luminous on silhouette edges
-  float alpha = clamp((0.35 + vFresnel * 0.6 + scanline * 0.2 + laserPulse * 0.3) * uOpacity, 0.15, 0.95);
-
+  float alpha = clamp((0.18 + fresnel * 0.75 + sweep * 0.3) * uOpacity, 0.08, 0.95);
   gl_FragColor = vec4(finalColor, alpha);
 }
 `;
@@ -106,6 +97,7 @@ export function createHolographicMaterial(options: HolographicMaterialOptions = 
     vertexShader: HolographicVertexShader,
     fragmentShader: HolographicFragmentShader,
     transparent: true,
+    blending: THREE.AdditiveBlending,
     depthWrite: false, // Ensures see-through hologram projection layers
     side: THREE.DoubleSide,
     wireframe: options.wireframe ?? false,

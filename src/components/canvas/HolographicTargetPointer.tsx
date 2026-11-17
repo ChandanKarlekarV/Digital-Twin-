@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useRigStore, HolographicComponentType } from '../../store/useRigStore';
+import { HOLO } from '../../shaders/HoloPalette';
 
 interface SubsystemTargetVolume {
   id: HolographicComponentType;
@@ -28,8 +29,6 @@ export const HolographicTargetPointer: React.FC = () => {
   const reticleGroupRef = useRef<THREE.Group>(null);
   const outerRingRef = useRef<THREE.Mesh>(null);
   const [activeTarget, setActiveTarget] = React.useState<SubsystemTargetVolume | null>(null);
-  const [targetPoint, setTargetPoint] = React.useState<THREE.Vector3>(new THREE.Vector3(0, 0, 0));
-  const [isHovered, setIsHovered] = React.useState(false);
 
   // Defined 3D Subsystem Target Volumes across KG-D6 platform
   const subsystemCatalog: SubsystemTargetVolume[] = useMemo(
@@ -40,7 +39,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'topside',
         center: new THREE.Vector3(-22.0, 32.4, -3.2),
         radius: 12.0,
-        color: '#00FF66',
+        color: HOLO.primary,
       },
       {
         id: 'crane1',
@@ -48,7 +47,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'topside',
         center: new THREE.Vector3(-3.9, 33.1, 8.5),
         radius: 14.0,
-        color: '#FF9900',
+        color: HOLO.primary,
       },
       {
         id: 'crane2',
@@ -56,7 +55,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'topside',
         center: new THREE.Vector3(-9.9, 28.4, -9.7),
         radius: 12.0,
-        color: '#FF007F',
+        color: HOLO.primary,
       },
       {
         id: 'command_dock',
@@ -64,7 +63,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'bridge',
         center: new THREE.Vector3(0.0, 16.0, 0.0),
         radius: 15.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'accommodation',
@@ -72,7 +71,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'topside',
         center: new THREE.Vector3(15.1, 18.9, -5.7),
         radius: 13.0,
-        color: '#FFEA00',
+        color: HOLO.primary,
       },
       {
         id: 'drill',
@@ -80,7 +79,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'topside',
         center: new THREE.Vector3(0.0, 30.0, 0.0),
         radius: 16.0,
-        color: '#00F0FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe1',
@@ -88,7 +87,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(-12.0, -18.0, 18.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe2',
@@ -96,7 +95,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(12.0, -18.0, 18.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe3',
@@ -104,7 +103,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(-12.0, -18.0, -18.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe4',
@@ -112,7 +111,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(12.0, -18.0, -18.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe5',
@@ -120,7 +119,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(-28.0, -16.0, 0.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe6',
@@ -128,7 +127,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(28.0, -16.0, 0.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe7',
@@ -136,7 +135,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(0.0, -16.0, -28.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe8',
@@ -144,7 +143,7 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(0.0, -16.0, 28.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
       {
         id: 'pipe9',
@@ -152,94 +151,66 @@ export const HolographicTargetPointer: React.FC = () => {
         category: 'subsea',
         center: new THREE.Vector3(0.0, -15.5, 0.0),
         radius: 9.0,
-        color: '#00E5FF',
+        color: HOLO.primary,
       },
     ],
     []
   );
 
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
-  const tempRayOrigin = useMemo(() => new THREE.Vector3(), []);
-  const tempRayDir = useMemo(() => new THREE.Vector3(), []);
+  const ndc = useMemo(() => new THREE.Vector2(), []);
+  const hit = useMemo(() => new THREE.Vector3(), []);
+  const bestHit = useMemo(() => new THREE.Vector3(), []);
+  const spheres = useMemo(() => subsystemCatalog.map((s) => new THREE.Sphere(s.center, s.radius)), [subsystemCatalog]);
+  const lastTargetId = useRef<string | null>(null);
 
+  // Ray-casts the fingertip into the scene every frame, but only touches React state
+  // when the locked target actually changes (no 60 Hz re-renders).
   useFrame(({ clock }) => {
     if (!isGestureActive) {
-      if (isHovered) {
-        setIsHovered(false);
+      if (lastTargetId.current) {
+        lastTargetId.current = null;
         setActiveTarget(null);
         setTargetedPartId(null);
       }
       return;
     }
 
-    const t = clock.getElapsedTime();
-    const spatial = useRigStore.getState().gestureSpatial;
-
-    // Determine 2D screen pointer coordinate from primary hand pointing finger or centroid
-    const hand = spatial?.primaryHand;
-    const hx = hand ? hand.x : spatial?.deltaX ? 0.5 + spatial.deltaX * 5 : 0.5;
-    const hy = hand ? hand.y : spatial?.deltaY ? 0.5 + spatial.deltaY * 5 : 0.5;
-
-    // Convert to Normalized Device Coordinates (NDC: -1 to +1)
-    const ndcX = hx * 2.0 - 1.0;
-    const ndcY = -(hy * 2.0 - 1.0);
-
-    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+    const { pointerCursor, gestureSpatial } = useRigStore.getState();
+    const hand = gestureSpatial?.primaryHand;
+    const hx = pointerCursor.active ? pointerCursor.x : hand ? hand.x : 0.5;
+    const hy = pointerCursor.active ? pointerCursor.y : hand ? hand.y : 0.5;
+    raycaster.setFromCamera(ndc.set(hx * 2 - 1, -(hy * 2 - 1)), camera);
     const ray = raycaster.ray;
 
-    // Find closest intersecting subsystem volume
-    let closestTarget: SubsystemTargetVolume | null = null;
+    let closest: SubsystemTargetVolume | null = null;
     let closestDist = Infinity;
-    let hitPosition = new THREE.Vector3();
-
-    subsystemCatalog.forEach((subsys) => {
-      // Ray-Sphere distance test
-      const sphere = new THREE.Sphere(subsys.center, subsys.radius);
-      const targetPointOnRay = new THREE.Vector3();
-      const hasIntersection = ray.intersectSphere(sphere, targetPointOnRay);
-
-      if (hasIntersection) {
-        const distFromCam = camera.position.distanceTo(targetPointOnRay);
-        if (distFromCam < closestDist) {
-          closestDist = distFromCam;
-          closestTarget = subsys;
-          hitPosition.copy(targetPointOnRay);
+    spheres.forEach((sphere, i) => {
+      if (ray.intersectSphere(sphere, hit)) {
+        const d = camera.position.distanceTo(hit);
+        if (d < closestDist) {
+          closestDist = d;
+          closest = subsystemCatalog[i];
+          bestHit.copy(hit);
         }
       }
     });
 
-    if (closestTarget) {
-      setIsHovered(true);
-      setActiveTarget(closestTarget);
-      setTargetPoint(hitPosition);
-      setTargetedPartId((closestTarget as SubsystemTargetVolume).id);
+    const g = reticleGroupRef.current;
+    if (g) {
+      if (closest) g.position.copy(bestHit);
+      else ray.at(35.0, g.position);
+      g.lookAt(camera.position);
+    }
+    if (outerRingRef.current) outerRingRef.current.rotation.z = clock.getElapsedTime() * 2.5;
 
-      if (reticleGroupRef.current) {
-        reticleGroupRef.current.position.copy(hitPosition);
-        reticleGroupRef.current.lookAt(camera.position);
-      }
-
-      if (outerRingRef.current) {
-        outerRingRef.current.rotation.z = t * 2.5;
-      }
-    } else {
-      // If no direct bounding volume hit, project default reticle at fixed ray distance
-      ray.at(35.0, tempRayOrigin);
-      setTargetPoint(tempRayOrigin);
-
-      if (reticleGroupRef.current) {
-        reticleGroupRef.current.position.copy(tempRayOrigin);
-        reticleGroupRef.current.lookAt(camera.position);
-      }
-
-      if (isHovered) {
-        setIsHovered(false);
-        setActiveTarget(null);
-        setTargetedPartId(null);
-      }
+    const id = closest ? (closest as SubsystemTargetVolume).id : null;
+    if (id !== lastTargetId.current) {
+      lastTargetId.current = id;
+      setActiveTarget(closest);
+      setTargetedPartId(id as HolographicComponentType | null);
     }
   });
-
   if (!isGestureActive) return null;
 
   return (
@@ -248,7 +219,7 @@ export const HolographicTargetPointer: React.FC = () => {
       <mesh ref={outerRingRef}>
         <ringGeometry args={[1.2, 1.45, 32]} />
         <meshBasicMaterial
-          color={activeTarget ? activeTarget.color : '#00ffff'}
+          color={activeTarget ? HOLO.hot : HOLO.primary}
           transparent
           opacity={0.85}
           side={THREE.DoubleSide}
@@ -258,7 +229,7 @@ export const HolographicTargetPointer: React.FC = () => {
       <mesh>
         <ringGeometry args={[0.3, 0.45, 16]} />
         <meshBasicMaterial
-          color="#ffffff"
+          color={HOLO.hot}
           transparent
           opacity={0.95}
           side={THREE.DoubleSide}
@@ -280,7 +251,7 @@ export const HolographicTargetPointer: React.FC = () => {
             itemSize={3}
           />
         </bufferGeometry>
-        <lineBasicMaterial color={activeTarget ? activeTarget.color : '#00ffff'} linewidth={2} />
+        <lineBasicMaterial color={activeTarget ? HOLO.hot : HOLO.primary} linewidth={2} />
       </lineSegments>
 
       {/* Floating 3D Holographic Target Lock Badge */}
@@ -288,7 +259,7 @@ export const HolographicTargetPointer: React.FC = () => {
         <Html position={[2.2, 1.2, 0]} center distanceFactor={28} className="pointer-events-none select-none">
           <div className="bg-black/90 border border-cyan-400/80 rounded-lg p-2 font-mono text-[10px] text-white shadow-cyan-glow backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 whitespace-nowrap min-w-[180px]">
             <div className="flex items-center gap-1.5 pb-1 border-b border-cyan-400/30 text-cyan-300 font-extrabold tracking-wide">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-cyan-300 animate-ping" />
               <span>🎯 TARGET LOCKED</span>
             </div>
             <div className="pt-1 text-white font-bold text-[11px]">
@@ -296,7 +267,7 @@ export const HolographicTargetPointer: React.FC = () => {
             </div>
             <div className="text-[8px] text-cyan-400/80 pt-0.5 flex items-center justify-between">
               <span>CAT: {activeTarget.category.toUpperCase()}</span>
-              <span className="text-amber-300 font-bold">SWIPE LEFT ◀ TO OPEN</span>
+              <span className="text-cyan-200 font-bold">HOLD TO OPEN</span>
             </div>
           </div>
         </Html>

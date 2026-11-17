@@ -4,89 +4,49 @@ import * as THREE from 'three';
 import { createOceanMaterial } from '../../shaders/OceanShader';
 import { useRigStore } from '../../store/useRigStore';
 
+// Wave height multiplier per sea state
+const WAVE_SCALE: Record<string, number> = {
+  slow: 0.45,
+  moderate: 1.0,
+  fast: 1.8,
+  extreme: 3.2,
+  storm: 4.8,
+};
+
 /**
- * Realistic Transparent Ocean Surface situated at Y = 0 (below the topside rig)
- * Seamless 360-degree all-around water visibility with dual-sided transparency.
+ * Holographic sea surface at Y = 0: a single uniform dark tone with glowing wave-crest
+ * contour lines. Wave phase is integrated over time, so changing the current speed
+ * changes the wave speed smoothly instead of making the sea jump.
  */
 export const OceanSurface: React.FC = () => {
-  const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
-  const metoceanCondition = useRigStore((s) => s.metoceanCondition);
-
   const oceanMaterial = useMemo(() => createOceanMaterial(), []);
+  const oceanGeometry = useMemo(() => new THREE.PlaneGeometry(700, 700, 260, 260), []);
+  const phase = useRef(0);
+  const waveScale = useRef(1);
 
-  // Water surface plane (110m x 110m) exactly matching the land below
-  const oceanGeometry = useMemo(() => {
-    return new THREE.PlaneGeometry(110, 110, 64, 64);
-  }, []);
+  useFrame((_, delta) => {
+    const { currentSpeedKnots, currentDirectionDeg, currentFlowPower } = useRigStore.getState();
+    const u = oceanMaterial.uniforms;
 
-  const scannerMode = useRigStore((s) => s.scannerMode);
-  const currentDirectionDeg = useRigStore((s) => s.currentDirectionDeg);
-  const currentSpeedKnots = useRigStore((s) => s.currentSpeedKnots);
-  const currentFlowPower = useRigStore((s) => s.currentFlowPower);
+    // Wave clock runs faster with stronger current (2.4 kn = nominal)
+    phase.current += Math.min(delta, 0.1) * Math.max(0.3, currentSpeedKnots / 2.4);
+    u.uTime.value = phase.current;
 
-  useFrame(({ clock }) => {
-    if (oceanMaterial) {
-      // Scale wave time speed with water flow velocity
-      const speedFactor = Math.max(0.3, currentSpeedKnots / 2.4);
-      const t = clock.getElapsedTime() * speedFactor;
-      oceanMaterial.uniforms.uTime.value = t;
+    // Ease sea-state changes over ~1 s
+    const target = WAVE_SCALE[currentFlowPower] ?? 1.0;
+    waveScale.current += (target - waveScale.current) * Math.min(1, delta * 1.5);
+    u.uWaveHeightScale.value = waveScale.current;
+    u.uIsUnderwater.value = camera.position.y < 0 ? 1.0 : 0.0;
 
-      // Scale wave height with flow power
-      let waveScale = 1.0;
-      if (currentFlowPower === 'slow') waveScale = 0.45;
-      else if (currentFlowPower === 'moderate') waveScale = 1.0;
-      else if (currentFlowPower === 'fast') waveScale = 1.8;
-      else if (currentFlowPower === 'extreme') waveScale = 3.2;
-      else if (currentFlowPower === 'storm') waveScale = 4.8;
-
-      oceanMaterial.uniforms.uWaveHeightScale.value = waveScale;
-      oceanMaterial.uniforms.uIsUnderwater.value = camera.position.y < 0 ? 1.0 : 0.0;
-      oceanMaterial.uniforms.uCameraPosition.value.copy(camera.position);
-
-      // Align wave vectors with water current flow heading
-      const dirRad = (currentDirectionDeg * Math.PI) / 180;
-      const dX = Math.sin(dirRad);
-      const dZ = Math.cos(dirRad);
-
-      oceanMaterial.uniforms.uWaveA.value.set(dX, dZ, 0.22, 45.0);
-      oceanMaterial.uniforms.uWaveB.value.set(
-        dX * 0.86 + dZ * 0.5,
-        dZ * 0.86 - dX * 0.5,
-        0.16,
-        28.0
-      );
-      oceanMaterial.uniforms.uWaveC.value.set(
-        dX * 0.7 - dZ * 0.7,
-        dZ * 0.7 + dX * 0.7,
-        0.11,
-        16.0
-      );
-
-      if (scannerMode === 'hologram') {
-        oceanMaterial.uniforms.uDeepColor.value.set('#001830');
-        oceanMaterial.uniforms.uShallowColor.value.set('#00E5FF');
-        oceanMaterial.uniforms.uFoamColor.value.set('#00FFFF');
-      } else if (currentFlowPower === 'storm') {
-        oceanMaterial.uniforms.uDeepColor.value.set('#001122');
-        oceanMaterial.uniforms.uShallowColor.value.set('#1A4968');
-        oceanMaterial.uniforms.uFoamColor.value.set('#FFFFFF');
-      } else {
-        oceanMaterial.uniforms.uDeepColor.value.set('#002B49');
-        oceanMaterial.uniforms.uShallowColor.value.set('#0077B6');
-        oceanMaterial.uniforms.uFoamColor.value.set('#E0F7FA');
-      }
-    }
+    // Align wave trains with the current heading
+    const dirRad = (currentDirectionDeg * Math.PI) / 180;
+    const dX = Math.sin(dirRad);
+    const dZ = Math.cos(dirRad);
+    u.uWaveA.value.set(dX, dZ, 0.22, 45.0);
+    u.uWaveB.value.set(dX * 0.86 + dZ * 0.5, dZ * 0.86 - dX * 0.5, 0.16, 28.0);
+    u.uWaveC.value.set(dX * 0.7 - dZ * 0.7, dZ * 0.7 + dX * 0.7, 0.11, 16.0);
   });
 
-  return (
-    <mesh
-      ref={meshRef}
-      geometry={oceanGeometry}
-      material={oceanMaterial}
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0, 0]}
-      renderOrder={1}
-    />
-  );
+  return <mesh geometry={oceanGeometry} material={oceanMaterial} rotation={[-Math.PI / 2, 0, 0]} renderOrder={1} />;
 };

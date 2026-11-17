@@ -8,7 +8,7 @@ import { CustomObjRig } from './CustomObjRig';
  * extended seabed terrain, and direct mesh raycast voice diagnostics.
  */
 export const OilRigModel: React.FC = () => {
-  const customObjUrl = useRigStore((s) => s.customObjUrl) || '/models/untitled.obj';
+  const customObjUrl = useRigStore((s) => s.customObjUrl) || '/models/rig.bin';
 
   return (
     <group position={[0, 0, 0]}>

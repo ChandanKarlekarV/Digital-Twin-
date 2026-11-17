@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Scene } from './components/canvas/Scene';
 import { telemetryEmitter } from './physics/TelemetryEmitter';
-import { useRigStore } from './store/useRigStore';
+import { useRigStore, CameraViewMode } from './store/useRigStore';
 import { CommandDock } from './components/hud/CommandDock';
 import { TelemetryDrawer } from './components/hud/TelemetryDrawer';
 import { PhysicsAuditModal } from './components/hud/PhysicsAuditModal';
@@ -9,7 +9,6 @@ import { EmergencyIncidentPanel } from './components/hud/EmergencyIncidentPanel'
 import { VarunaVoiceIndicator } from './components/hud/VarunaVoiceIndicator';
 import { CurrentControlWidget } from './components/hud/CurrentControlWidget';
 import { CriticalAnomaliesMonitor } from './components/hud/CriticalAnomaliesMonitor';
-import { ColorCodeLegend } from './components/hud/ColorCodeLegend';
 import { IncidentControlManager } from './components/hud/IncidentControlManager';
 import { ElevenLabsConfigModal } from './components/hud/ElevenLabsConfigModal';
 import { HardwareLinkModal } from './components/hud/HardwareLinkModal';
@@ -49,12 +48,52 @@ import { jarvisVoiceCommander } from './voice/JarvisVoiceCommander';
 
 import { telemetryDb } from './db/TelemetryDatabase';
 import { sixMonthDataEngine } from './db/SixMonthDataEngine';
-import { rigModelCache } from './services/RigModelCache';
+
+const hudButton =
+  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-reliance-cyan/30 text-[11px] font-mono font-bold tracking-wider text-white/90 hover:text-white hover:border-reliance-cyan/70 transition-colors cursor-pointer';
+const hudButtonActive = 'border-reliance-cyan bg-reliance-cyan/15 text-reliance-cyan';
+const hudMenu =
+  'absolute top-full mt-2 rounded-2xl glass-panel border border-reliance-cyan/30 p-1.5 shadow-dock z-50 text-xs font-mono animate-in fade-in slide-in-from-top-2 duration-150';
+
+/** Camera presets with the real model depths (water line = 0 m, mudline ≈ -16 m, bit ≈ -98 m) */
+const CAMERA_PRESETS: { mode: CameraViewMode; label: string; depth: string }[] = [
+  { mode: 'topside', label: 'Full rig', depth: 'auto-fit' },
+  { mode: 'upper_rig', label: 'Topside & derrick', depth: '+25 m' },
+  { mode: 'subsea', label: 'Below the waterline', depth: '-12 m' },
+  { mode: 'manifold', label: 'Seabed manifold', depth: '-16 m' },
+  { mode: 'drill', label: 'Drill string & bit', depth: '-98 m' },
+];
+
+const MenuLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="px-2.5 pt-1.5 pb-1 text-[9px] uppercase tracking-widest text-reliance-textMuted font-bold">{children}</div>
+);
+
+const MenuItem: React.FC<{
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint: string;
+  active?: boolean;
+  onClick: () => void;
+}> = ({ icon: Icon, title, hint, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
+      active ? 'bg-reliance-cyan/15 text-white' : 'hover:bg-white/10 text-white/90'
+    }`}
+  >
+    <Icon className="w-4 h-4 text-reliance-cyan shrink-0" />
+    <span>
+      <span className="block text-[11px] font-bold">{title}</span>
+      <span className="block text-[9px] text-reliance-textMuted">{hint}</span>
+    </span>
+  </button>
+);
 
 export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
+  const scannerMode = useRigStore((s) => s.scannerMode);
   const isCommandDockOpen = useRigStore((s) => s.isCommandDockOpen);
   const toggleCommandDock = useRigStore((s) => s.toggleCommandDock);
 
@@ -80,10 +119,13 @@ export default function App() {
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
 
-  // Dropdown States for Consolidated Top Navigation Bar
-  const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
-  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
-  const [isCommsDropdownOpen, setIsCommsDropdownOpen] = useState(false);
+  // One top-bar menu open at a time
+  const [openMenu, setOpenMenu] = useState<'tools' | 'view' | 'voice' | null>(null);
+  const toggleMenu = (m: 'tools' | 'view' | 'voice') => setOpenMenu((cur) => (cur === m ? null : m));
+  const runMenu = (action: () => void) => {
+    action();
+    setOpenMenu(null);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,9 +146,6 @@ export default function App() {
 
     // 3. Start 10-second continuous dynamic tide & metocean phase cycling
     dynamicTideEngine.start();
-
-    // 4. Preload 3D OBJ Rig Model and precompute vertex colors into RAM
-    rigModelCache.preload('/models/untitled.obj').catch(console.warn);
 
     // Rolling FPS calculation
     let animId: number;
@@ -141,418 +180,127 @@ export default function App() {
         onChange={handleFileUpload}
       />
 
-      {/* ================= TOP TACTICAL HUD (CLEAN & CONSOLIDATED) ================= */}
-      <header className="absolute top-0 left-0 right-0 z-40 h-14 px-4 flex items-center justify-between pointer-events-none">
-        {/* Far Left: Consolidated SYSTEM TOOLS / COMMAND Dropdown Menu & Quick EXPLODED VIEW */}
+      {/* ================= TOP BAR ================= */}
+<header className="absolute top-0 left-0 right-0 z-40 h-14 px-4 flex items-center justify-between gap-3 pointer-events-none">
+        {/* Left: brand, tools menu, exploded-view toggle */}
         <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="hidden md:flex items-center gap-2 pr-2 mr-1 border-r border-reliance-cyan/20">
+            <span className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
+            <span className="font-mono text-xs font-extrabold tracking-[0.2em] text-reliance-cyan">VARUNA</span>
+            <span className="font-mono text-[10px] text-reliance-textMuted">KG-D6 TWIN</span>
+          </div>
+
           <div className="relative">
             <button
-              onClick={() => {
-                setIsToolsDropdownOpen(!isToolsDropdownOpen);
-                setIsViewDropdownOpen(false);
-                setIsCommsDropdownOpen(false);
-              }}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-reliance-cyan transition-all shadow-cyan-glow cursor-pointer"
+              onClick={() => toggleMenu('tools')}
+              className={`${hudButton} ${openMenu === 'tools' ? hudButtonActive : ''}`}
             >
-              <div className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
-              <span className="font-extrabold tracking-wider text-xs uppercase font-mono">
-                SYSTEM TOOLS
-              </span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-reliance-cyan transition-transform duration-200 ${
-                  isToolsDropdownOpen ? 'rotate-180' : ''
-                }`}
-              />
+              <Sliders className="w-3.5 h-3.5" />
+              <span>TOOLS</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${openMenu === 'tools' ? 'rotate-180' : ''}`} />
             </button>
-
-            {/* System Tools Consolidated Dropdown Menu */}
-            {isToolsDropdownOpen && (
-              <div className="absolute top-full mt-2 left-0 w-72 rounded-2xl glass-panel border border-reliance-cyan/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in slide-in-from-top-2 duration-150">
-                <div className="px-2.5 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1 flex justify-between items-center">
-                  <span>TACTICAL OPERATIONS</span>
-                  <span className="text-reliance-cyan font-extrabold">[CMD]</span>
+            {openMenu === 'tools' && (
+              <div className={`${hudMenu} left-0 w-72`}>
+                <MenuLabel>Operations</MenuLabel>
+                <MenuItem icon={Zap} title="Command Dock" hint="Diagnostics, scenarios & sensors" onClick={() => runMenu(toggleCommandDock)} />
+                <MenuItem icon={Scissors} title={isPipeSliced ? 'Close Pipe 1 Section' : 'Slice Pipe 1'} hint="Cut-away of the multiphase core" active={isPipeSliced} onClick={() => runMenu(() => setPipeSliced(!isPipeSliced))} />
+                <MenuItem icon={Cpu} title="Hardware SCADA Gateway" hint="Serial, Modbus & WebSocket links" onClick={() => runMenu(() => setHardwareModalOpen(true))} />
+                <MenuItem icon={Wind} title="KG-D6 Weather & Metocean" hint="Bay of Bengal marine forecast" onClick={() => runMenu(toggleWeatherPanel)} />
+                <MenuLabel>Data & Reports</MenuLabel>
+                <MenuItem icon={Calendar} title="6-Month Production Ledger" hint="180-day database & midnight settlement" onClick={() => runMenu(() => setEodModalOpen(true))} />
+                <MenuItem icon={FileCheck} title="Compliance Audit Report" hint="DGH / ISO export, PDF & CSV" onClick={() => runMenu(() => setReportModalOpen(true))} />
+                <MenuItem icon={FileText} title="SIH Presentation Deck" hint="6-slide deck & video demo" onClick={() => runMenu(() => setSihModalOpen(true))} />
+                <div className="border-t border-white/10 mt-1 pt-1">
+                  <button
+                    onClick={() => runMenu(() => fileInputRef.current?.click())}
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/10 text-white/80 flex items-center justify-between text-[10px]"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <FolderOpen className="w-3.5 h-3.5 text-reliance-cyan" />
+                      Import .OBJ model
+                    </span>
+                    <span className="text-[9px] text-reliance-textMuted truncate max-w-[110px]">{customObjFileName}</span>
+                  </button>
                 </div>
-
-                {/* Command Dock Toggle */}
-                <button
-                  onClick={() => {
-                    toggleCommandDock();
-                    setIsToolsDropdownOpen(false);
-                  }}
-                  className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-reliance-blue/30 text-white flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <Zap className="w-4 h-4 text-reliance-cyan" />
-                  <div>
-                    <div className="font-bold text-[11px]">Command Dock</div>
-                    <div className="text-[9px] text-reliance-textMuted">Open main technical tools & diagnostics</div>
-                  </div>
-                </button>
-
-                {/* Jarvis Exploded View */}
-                <button
-                  onClick={() => {
-                    const nextState = !isSplitViewActive;
-                    setSplitViewActive(nextState);
-                    setIsToolsDropdownOpen(false);
-                    if (nextState) {
-                      varunaVoice.speakCustom('Exploded modular view engaged.');
-                    } else {
-                      varunaVoice.speakCustom('Subsea rig assembly restored.');
-                    }
-                  }}
-                  className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
-                    isSplitViewActive
-                      ? 'bg-amber-500/20 text-amber-200 font-bold'
-                      : 'hover:bg-white/10 text-white'
-                  }`}
-                >
-                  <Layers className="w-4 h-4 text-amber-400" />
-                <div>
-                  <div className="font-bold text-[11px]">
-                    {isSplitViewActive ? 'Assemble Subsea Rig' : 'Jarvis Split Exploded View'}
-                  </div>
-                  <div className="text-[9px] text-reliance-textMuted">Iron Man piece-by-piece disassembly</div>
-                </div>
-              </button>
-
-              {/* Slice Pipe 1 */}
-              <button
-                onClick={() => {
-                  setPipeSliced(!isPipeSliced);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className={`w-full px-2.5 py-2 rounded-xl text-left flex items-center gap-2 transition-all cursor-pointer ${
-                  isPipeSliced
-                    ? 'bg-reliance-cyan/20 text-reliance-cyan font-bold'
-                    : 'hover:bg-white/10 text-white'
-                }`}
-              >
-                <Scissors className="w-4 h-4 text-reliance-cyan" />
-                <div>
-                  <div className="font-bold text-[11px]">
-                    {isPipeSliced ? 'Close Cross-Section' : 'Slice Pipe 1 Cross-Section'}
-                  </div>
-                  <div className="text-[9px] text-reliance-textMuted">Expose internal multiphase fluid core</div>
-                </div>
-              </button>
-
-              {/* Hardware Gateway */}
-              <button
-                onClick={() => {
-                  setHardwareModalOpen(true);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-emerald-500/20 text-emerald-200 flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Cpu className="w-4 h-4 text-emerald-400" />
-                <div>
-                  <div className="font-bold text-[11px]">Hardware SCADA Gateway</div>
-                  <div className="text-[9px] text-emerald-400/70">Serial USB / Modbus / Live WebSocket</div>
-                </div>
-              </button>
-
-              {/* SIH 6-Page Presentation Deck & Video Demo */}
-              <button
-                onClick={() => {
-                  setSihModalOpen(true);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-amber-500/20 text-amber-200 flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-amber-400" />
-                <div>
-                  <div className="font-bold text-[11px]">SIH 6-Page Presentation Deck</div>
-                  <div className="text-[9px] text-amber-400/70">Official SIH26120 6-Slide Template &amp; Video Demo</div>
-                </div>
-              </button>
-
-              {/* 6-Month AI Production Ledger & Midnight Settlement */}
-              <button
-                onClick={() => {
-                  setEodModalOpen(true);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-emerald-500/20 text-emerald-200 flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Calendar className="w-4 h-4 text-emerald-400" />
-                <div>
-                  <div className="font-bold text-[11px]">6-Month AI Production Ledger</div>
-                  <div className="text-[9px] text-emerald-400/70">180-Day Database &amp; Midnight EOD Settlement</div>
-                </div>
-              </button>
-
-              {/* Compliance Audit Report */}
-              <button
-                onClick={() => {
-                  setReportModalOpen(true);
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-white/10 text-white flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <FileCheck className="w-4 h-4 text-reliance-cyan" />
-                <div>
-                  <div className="font-bold text-[11px]">Compliance Audit Report</div>
-                  <div className="text-[9px] text-reliance-textMuted">Export DGH / ISO verification PDF &amp; CSV</div>
-                </div>
-              </button>
-
-              {/* Weather Panel */}
-              <button
-                onClick={() => {
-                  toggleWeatherPanel();
-                  setIsToolsDropdownOpen(false);
-                }}
-                className="w-full px-2.5 py-2 rounded-xl text-left hover:bg-amber-500/20 text-amber-200 flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Wind className="w-4 h-4 text-amber-400" />
-                <div>
-                  <div className="font-bold text-[11px]">KG-D6 Weather &amp; Metocean</div>
-                  <div className="text-[9px] text-amber-400/70">Bay of Bengal marine radar forecast</div>
-                </div>
-              </button>
-
-              {/* Custom Model File Load */}
-              <div className="border-t border-white/10 pt-1 mt-1">
-                <button
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                    setIsToolsDropdownOpen(false);
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/10 text-white/80 flex items-center justify-between text-[10px]"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5 text-reliance-cyan" />
-                    <span>Import Custom .OBJ Rig</span>
-                  </span>
-                  <span className="text-[8px] text-reliance-textMuted truncate max-w-[80px]">
-                    {customObjFileName || 'untitled.obj'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Dedicated EXPLODED VIEW Quick Button */}
-        <button
-          onClick={() => {
-            const nextState = !isSplitViewActive;
-            setSplitViewActive(nextState);
-            if (nextState) {
-              varunaVoice.speakCustom('Exploded modular view engaged. All subsea and topside subsystems decoupled.');
-            } else {
-              varunaVoice.speakCustom('Subsea rig assembly restored.');
-            }
-          }}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border transition-all cursor-pointer font-mono text-xs font-extrabold tracking-wider uppercase ${
-            isSplitViewActive
-              ? 'border-amber-400 bg-amber-500/25 text-amber-300 shadow-amber-glow animate-pulse'
-              : 'border-reliance-cyan/40 bg-reliance-deepnavy/95 hover:bg-reliance-navy text-white hover:text-amber-300 hover:border-amber-400/60 shadow-cyan-glow'
-          }`}
-          title="Toggle Exploded View to isolate and access all rig subsystems"
-        >
-          <Layers className={`w-3.5 h-3.5 ${isSplitViewActive ? 'text-amber-300' : 'text-amber-400'}`} />
-          <span>{isSplitViewActive ? 'ASSEMBLE RIG' : 'EXPLODED VIEW'}</span>
-          {isSplitViewActive && (
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
-          )}
-        </button>
-
-        {/* Dedicated 6-MONTH AI LEDGER & MIDNIGHT SETTLEMENT Quick Button */}
-        <button
-          onClick={() => {
-            setEodModalOpen(true);
-            varunaVoice.speakCustom('Opening KG-D6 6-Month AI Production Ledger and Midnight Settlement.');
-          }}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel border border-emerald-400/50 bg-reliance-deepnavy/95 hover:bg-emerald-950/40 text-emerald-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-cyan-glow"
-          title="Open 6-Month AI Production Ledger & 12:00 Midnight Settlement"
-        >
-          <Calendar className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-          <span>6-MO LEDGER &amp; EOD</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping ml-0.5" />
-        </button>
-
-        {/* Dedicated SIH 6-PAGE PPT Quick Button */}
-        <button
-          onClick={() => {
-            setSihModalOpen(true);
-            varunaVoice.speakCustom('Opening Smart India Hackathon 6-page presentation deck.');
-          }}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl glass-panel border border-amber-400/60 bg-reliance-deepnavy/95 hover:bg-amber-950/40 text-amber-300 font-mono text-xs font-extrabold tracking-wider uppercase transition-all cursor-pointer shadow-amber-glow"
-          title="Open Official SIH 6-Page Presentation Deck & Download PPTX"
-        >
-          <FileText className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span>SIH 6-PAGE PPT</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping ml-0.5" />
-        </button>
-      </div>
-
-        {/* Center Top: Geolocation Coordinates & Active Feed Badge */}
-        <div className="hidden lg:flex items-center gap-3 px-4 py-1.5 rounded-full glass-panel border border-reliance-cyan/30 bg-reliance-deepnavy/90 text-xs font-mono shadow-dock pointer-events-auto">
-          <div className="flex items-center gap-1.5 text-amber-300 font-bold">
-            <Compass className="w-3.5 h-3.5 text-amber-400" />
-            <span>16°19'00"N 82°20'00"E</span>
-          </div>
-          <div className="w-px h-3 bg-white/20" />
-          <div className="flex items-center gap-1.5 text-reliance-cyan font-bold uppercase tracking-wider text-[10px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-            <span>KG-D6 SUBSEA MANIFOLD | ACTIVE FEED</span>
-          </div>
-          <div className="w-px h-3 bg-white/20" />
-          <div className="text-reliance-textMuted text-[10px]">
-            SEABED DEPTH: <strong className="text-white">-2,040 m</strong>
-          </div>
-        </div>
-
-        {/* Right Side: Consolidated Dropdowns (VIEW OPTIONS & VOICE & COMMS) */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {/* 1. VIEW OPTIONS DROPDOWN */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setIsViewDropdownOpen(!isViewDropdownOpen);
-                setIsCommsDropdownOpen(false);
-                setIsToolsDropdownOpen(false);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/90 hover:bg-reliance-navy text-xs font-mono text-white transition-all cursor-pointer shadow-cyan-glow"
-            >
-              <Eye className="w-3.5 h-3.5 text-reliance-cyan" />
-              <span className="font-bold hidden sm:inline uppercase">VIEW OPTIONS</span>
-              <ChevronDown
-                className={`w-3 h-3 text-reliance-cyan transition-transform duration-200 ${
-                  isViewDropdownOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-
-            {isViewDropdownOpen && (
-              <div className="absolute top-full mt-2 right-0 w-52 rounded-xl glass-panel border border-reliance-cyan/40 bg-reliance-deepnavy/98 p-1.5 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in duration-150">
-                <div className="px-2 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1">
-                  CAMERA PERSPECTIVE
-                </div>
-                <button
-                  onClick={() => {
-                    setCameraViewMode('topside');
-                    setIsViewDropdownOpen(false);
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
-                    cameraViewMode === 'topside'
-                      ? 'bg-reliance-blue text-white font-bold'
-                      : 'hover:bg-white/10 text-white/80'
-                  }`}
-                >
-                  <span>Topside Rig</span>
-                  <span className="text-[9px] opacity-60">+12m</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCameraViewMode('subsea');
-                    setIsViewDropdownOpen(false);
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
-                    cameraViewMode === 'subsea'
-                      ? 'bg-reliance-blue text-white font-bold'
-                      : 'hover:bg-white/10 text-white/80'
-                  }`}
-                >
-                  <span>Dive Subsea</span>
-                  <span className="text-[9px] opacity-60">-35m</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCameraViewMode('manifold');
-                    setIsViewDropdownOpen(false);
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between mb-0.5 ${
-                    cameraViewMode === 'manifold'
-                      ? 'bg-reliance-blue text-white font-bold'
-                      : 'hover:bg-white/10 text-white/80'
-                  }`}
-                >
-                  <span>Seabed Manifold</span>
-                  <span className="text-[9px] opacity-60">-1,020m</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCameraViewMode('drill');
-                    setIsViewDropdownOpen(false);
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg text-left transition-all cursor-pointer flex items-center justify-between ${
-                    cameraViewMode === 'drill'
-                      ? 'bg-reliance-blue text-white font-bold'
-                      : 'hover:bg-white/10 text-white/80'
-                  }`}
-                >
-                  <span>Down View / Drill</span>
-                  <span className="text-[9px] opacity-60">-2,040m</span>
-                </button>
               </div>
             )}
           </div>
 
-          {/* 2. VOICE & COMMS DROPDOWN */}
+          <button
+            onClick={() => setSplitViewActive(!isSplitViewActive)}
+            className={`${hudButton} ${isSplitViewActive ? hudButtonActive : ''}`}
+            title="Split the rig into its sub-assemblies"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{isSplitViewActive ? 'ASSEMBLE' : 'EXPLODE'}</span>
+          </button>
+        </div>
+
+        {/* Centre: site & feed status */}
+        <div className="hidden lg:flex items-center gap-3 px-4 py-1.5 rounded-full glass-panel border border-reliance-cyan/25 text-[10px] font-mono pointer-events-auto">
+          <span className="flex items-center gap-1.5 text-white/90">
+            <Compass className="w-3.5 h-3.5 text-reliance-cyan" />
+            16°19′N 82°20′E
+          </span>
+          <span className="w-px h-3 bg-white/20" />
+          <span className="flex items-center gap-1.5 text-reliance-cyan font-bold tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-reliance-cyan animate-ping" />
+            LIVE FEED
+          </span>
+          <span className="w-px h-3 bg-white/20" />
+          <span className="text-reliance-textMuted">
+            TARGET <strong className="text-white">{selectedAssetId || 'KG-D6 MAIN'}</strong>
+          </span>
+        </div>
+
+        {/* Right: camera, voice */}
+        <div className="flex items-center gap-2 pointer-events-auto">
           <div className="relative">
-            <button
-              onClick={() => {
-                setIsCommsDropdownOpen(!isCommsDropdownOpen);
-                setIsViewDropdownOpen(false);
-                setIsToolsDropdownOpen(false);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel border border-purple-400/40 bg-reliance-deepnavy/90 hover:bg-purple-900/30 text-xs font-mono text-purple-200 transition-all cursor-pointer"
-            >
-              <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-              <span className="font-bold hidden sm:inline uppercase">VOICE & COMMS</span>
-              <ChevronDown
-                className={`w-3 h-3 text-purple-400 transition-transform duration-200 ${
-                  isCommsDropdownOpen ? 'rotate-180' : ''
-                }`}
-              />
+            <button onClick={() => toggleMenu('view')} className={`${hudButton} ${openMenu === 'view' ? hudButtonActive : ''}`}>
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">VIEW</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${openMenu === 'view' ? 'rotate-180' : ''}`} />
             </button>
-
-            {isCommsDropdownOpen && (
-              <div className="absolute top-full mt-2 right-0 w-64 rounded-xl glass-panel border border-purple-400/50 bg-reliance-deepnavy/98 p-2 shadow-dock backdrop-blur-2xl z-50 text-xs font-mono animate-in fade-in duration-150">
-                <div className="px-2 py-1 text-[9px] text-reliance-textMuted uppercase font-bold border-b border-white/10 mb-1">
-                  VOICE SYNTHESIS & RECOGNITION
-                </div>
-
-                <button
-                  onClick={() => {
-                    jarvisVoiceCommander.toggle();
-                    setIsCommsDropdownOpen(false);
-                  }}
-                  className="w-full px-2.5 py-2 rounded-lg text-left hover:bg-white/10 text-white flex items-center justify-between mb-1"
-                >
-                  <span className="flex items-center gap-2">
-                    <Mic className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Jarvis Listener</span>
-                  </span>
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                      isVoiceCommanderActive ? 'bg-purple-500/30 text-purple-200' : 'bg-white/10 text-white/50'
+            {openMenu === 'view' && (
+              <div className={`${hudMenu} right-0 w-56`}>
+                <MenuLabel>Camera</MenuLabel>
+                {CAMERA_PRESETS.map((preset) => (
+                  <button
+                    key={preset.mode}
+                    onClick={() => runMenu(() => setCameraViewMode(preset.mode))}
+                    className={`w-full px-2.5 py-1.5 rounded-lg text-left flex items-center justify-between text-[11px] transition-colors ${
+                      cameraViewMode === preset.mode ? 'bg-reliance-cyan/20 text-white font-bold' : 'hover:bg-white/10 text-white/80'
                     }`}
                   >
-                    {isVoiceCommanderActive ? 'ACTIVE' : 'MUTED'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setVoiceModalOpen(true);
-                    setIsCommsDropdownOpen(false);
-                  }}
-                  className="w-full px-2.5 py-2 rounded-lg text-left hover:bg-purple-500/20 text-purple-200 flex items-center justify-between"
-                >
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                    <span>ElevenLabs AI Voice</span>
-                  </span>
-                  <span className="text-[9px] text-reliance-textMuted">CONFIGURE</span>
-                </button>
+                    <span>{preset.label}</span>
+                    <span className="text-[9px] text-reliance-textMuted">{preset.depth}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Varuna Voice Status Light */}
+          <div className="relative">
+            <button onClick={() => toggleMenu('voice')} className={`${hudButton} ${openMenu === 'voice' ? hudButtonActive : ''}`}>
+              <Mic className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">VOICE</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${openMenu === 'voice' ? 'rotate-180' : ''}`} />
+            </button>
+            {openMenu === 'voice' && (
+              <div className={`${hudMenu} right-0 w-60`}>
+                <MenuLabel>Voice assistant</MenuLabel>
+                <MenuItem
+                  icon={Mic}
+                  title="Voice listener"
+                  hint={isVoiceCommanderActive ? 'Listening for “Varuna”' : 'Muted'}
+                  active={isVoiceCommanderActive}
+                  onClick={() => runMenu(() => jarvisVoiceCommander.toggle())}
+                />
+                <MenuItem icon={Volume2} title="ElevenLabs voice" hint="Use a studio-quality voice" onClick={() => runMenu(() => setVoiceModalOpen(true))} />
+              </div>
+            )}
+          </div>
+
           <VarunaVoiceIndicator />
         </div>
       </header>
@@ -590,7 +338,7 @@ export default function App() {
       {/* ================= JARVIS DEDICATED HOLOGRAPHIC PART INSPECTION DECK ================= */}
       <HolographicPartInspectionModal />
 
-      {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENTAL TAB, COLOR-CODE LEGEND & GESTURE/VOICE HUD ================= */}
+      {/* ================= BOTTOM-LEFT DOCK: ENVIRONMENT, ANOMALIES & GESTURE/VOICE ================= */}
       {/* Positioned at bottom-left so the entire top-left under SYSTEM TOOLS is 100% clear and unobstructed */}
       <div className="absolute bottom-10 left-4 z-30 flex items-end gap-3 pointer-events-auto max-w-[calc(100vw-360px)]">
         {/* Left Side of Cluster: Environmental Conditions & Tides and Critical Anomalies */}
@@ -601,9 +349,6 @@ export default function App() {
           {/* Panel 2: Critical Anomalies Monitor */}
           <CriticalAnomaliesMonitor />
         </div>
-
-        {/* Middle of Cluster: Color-Code Segregation Legend */}
-        <ColorCodeLegend />
 
         {/* Right of Cluster: Jarvis Gesture Camera & Varuna Voice HUD */}
         <JarvisGestureVoiceHUD />
@@ -618,7 +363,6 @@ export default function App() {
       {/* ================= 3D VIEWPORT (Occupies 100% of Screen) ================= */}
       <main id="canvas-container" className="relative w-full h-full flex-1 overflow-hidden">
         <Scene />
-        <div className="absolute inset-0 scanlines pointer-events-none" />
       </main>
 
       {/* ================= BOTTOM STATUS FOOTER ================= */}
@@ -628,13 +372,13 @@ export default function App() {
             TARGET: <strong className="text-reliance-cyan">{selectedAssetId || 'KG-D6 MAIN'}</strong>
           </span>
           <span>
-            FREQ: <strong className="text-emerald-400">50.0 Hz (20ms)</strong>
+            FREQ: <strong className="text-reliance-cyan">50.0 Hz (20ms)</strong>
           </span>
           <span>
-            FPS: <strong className={fps >= 55 ? 'text-emerald-400' : 'text-amber-400'}>{fps}.0</strong>
+            FPS: <strong className={fps >= 55 ? 'text-reliance-cyan' : 'text-white'}>{fps}.0</strong>
           </span>
-          <span className="hidden sm:inline text-emerald-300">
-            6-MO DB: <strong className="text-emerald-400">180 DAYS SYNCED</strong>
+          <span className="hidden sm:inline">
+            6-MO DB: <strong className="text-reliance-cyan">180 DAYS SYNCED</strong>
           </span>
           <span className="hidden md:inline">
             GPU RASTER: <strong className="text-white">HARDWARE ACCEL</strong>
@@ -642,7 +386,7 @@ export default function App() {
         </div>
         <div className="flex items-center gap-2 pointer-events-auto">
           <span className="text-reliance-textMuted/70">RELIANCE OFFSHORE CYBER-PHYSICAL SUITE</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-reliance-cyan animate-pulse" />
         </div>
       </footer>
     </div>

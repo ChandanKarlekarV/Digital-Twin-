@@ -4,6 +4,13 @@ import { OrbitControls } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
 import { useRigStore } from '../../store/useRigStore';
+import { rigModelCache, DEFAULT_RIG_URL, SUBSEA_SHIFT_M } from '../../services/RigModelCache';
+
+/** Presets that look at seabed equipment (pipes, wells, manifold) */
+const SEABED_MODES = new Set<string>([
+  'manifold', 'riser', 'pipe1', 'pipe2', 'pipe3', 'pipe4', 'pipe5', 'pipe6', 'pipe7', 'pipe8', 'pipe9', 'pipe1_slice',
+  'well1', 'well2', 'well3', 'well4', 'well5', 'well6', 'well7', 'wells1_7',
+]);
 
 /**
  * Camera Rig with Fixed 360-Degree Free Orbit:
@@ -22,6 +29,8 @@ export const CameraRig: React.FC = () => {
   const isUserInteracting = useRef(false);
   const transitionSpeed = useRef(3.2);
   const prevModeRef = useRef<string>(cameraViewMode);
+  const homeCamPos = useRef(new THREE.Vector3(45, 28, 55));
+  const homeLookAt = useRef(new THREE.Vector3(0, 10, 0));
 
   // Stop any transition immediately when user touches/drags mouse or trackpad
   useEffect(() => {
@@ -60,6 +69,48 @@ export const CameraRig: React.FC = () => {
     };
   }, [gl.domElement, camera]);
 
+  // Auto-frame the whole rig once it has loaded: D = R·1.35 / tan(FOV/2),
+  // seen from 26° elevation / 42° azimuth. Skipped if the user already moved the camera.
+  const customObjUrl = useRigStore((s) => s.customObjUrl) || DEFAULT_RIG_URL;
+  useEffect(() => {
+    let cancelled = false;
+    rigModelCache
+      .preload(customObjUrl)
+      .then((data) => {
+        if (cancelled || isUserInteracting.current || !data.topsideGeo) return;
+        const geo = data.topsideGeo;
+        if (!geo.boundingSphere) geo.computeBoundingSphere();
+        const s = geo.boundingSphere!;
+        const scale = rigModelCache.MODEL_SCALE;
+        // Same transform as CustomObjRig: rotate -90° about Y, scale, then offset by the (unrotated) centre
+        const c = s.center;
+        const center = new THREE.Vector3(
+          -c.z - data.center.x,
+          c.y - rigModelCache.WATER_LINE_OBJ_Y,
+          c.x - data.center.z
+        ).multiplyScalar(scale);
+        const radius = s.radius * scale;
+        const fov = (camera as THREE.PerspectiveCamera).fov ?? 48;
+        const dist = (radius * 1.35) / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+        const elev = THREE.MathUtils.degToRad(26);
+        const azim = THREE.MathUtils.degToRad(42);
+        targetLookAt.current.copy(center);
+        targetCamPos.current.set(
+          center.x + dist * Math.cos(elev) * Math.sin(azim),
+          center.y + dist * Math.sin(elev),
+          center.z + dist * Math.cos(elev) * Math.cos(azim)
+        );
+        homeCamPos.current.copy(targetCamPos.current);
+        homeLookAt.current.copy(targetLookAt.current);
+        transitionSpeed.current = 2.4;
+        isTransitioning.current = true;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [customObjUrl, camera]);
+
   // Trigger smooth transition ONLY on explicit camera preset change
   useEffect(() => {
     if (prevModeRef.current === cameraViewMode) return;
@@ -73,12 +124,13 @@ export const CameraRig: React.FC = () => {
     isTransitioning.current = true;
 
     if (cameraViewMode === 'topside') {
-      targetCamPos.current.set(45, 28, 55);
-      targetLookAt.current.set(0, 10, 0);
+      targetCamPos.current.copy(homeCamPos.current);
+      targetLookAt.current.copy(homeLookAt.current);
       transitionSpeed.current = 3.2;
     } else if (cameraViewMode === 'subsea') {
-      targetCamPos.current.set(36, -22, 48);
-      targetLookAt.current.set(0, -15, 0);
+      // Mid-water, looking down the jacket legs toward the seabed
+      targetCamPos.current.set(36, -12, 48);
+      targetLookAt.current.set(0, -12, 0);
       transitionSpeed.current = 2.8;
     } else if (cameraViewMode === 'manifold') {
       targetCamPos.current.set(22, -8, 26);
@@ -125,9 +177,10 @@ export const CameraRig: React.FC = () => {
       targetLookAt.current.set(-14, -8, 12);
       transitionSpeed.current = 4.0;
     } else if (cameraViewMode === 'drill') {
-      targetCamPos.current.set(0, 12, 22);
-      targetLookAt.current.set(0, 8, 0);
-      transitionSpeed.current = 3.8;
+      // Down the borehole to the bit (~ -98 m)
+      targetCamPos.current.set(16, -78, 28);
+      targetLookAt.current.set(0, -88, 0);
+      transitionSpeed.current = 2.6;
     } else if (cameraViewMode === 'motor') {
       targetCamPos.current.set(0, 24, 18);
       targetLookAt.current.set(0, 20, 0);
@@ -181,13 +234,20 @@ export const CameraRig: React.FC = () => {
       targetLookAt.current.set(0, -16, 0);
       transitionSpeed.current = 3.0;
     } else if (cameraViewMode === 'split') {
-      targetCamPos.current.set(58, 35, 68);
-      targetLookAt.current.set(0, 0, 0);
-      transitionSpeed.current = 2.8;
+      // Exploded rig spans roughly +60 m to -115 m: pull back from the home view and aim lower
+      targetLookAt.current.copy(homeLookAt.current).setY(homeLookAt.current.y - 18);
+      targetCamPos.current.copy(homeCamPos.current).sub(homeLookAt.current).multiplyScalar(1.45).add(targetLookAt.current);
+      transitionSpeed.current = 2.4;
     } else if (cameraViewMode === 'part_detail') {
       targetCamPos.current.set(20, 5, 25);
       targetLookAt.current.set(0, 0, 0);
       transitionSpeed.current = 3.8;
+    }
+
+    // Seabed presets were authored for the original 16 m water depth
+    if (SEABED_MODES.has(cameraViewMode)) {
+      targetCamPos.current.y -= SUBSEA_SHIFT_M;
+      targetLookAt.current.y -= SUBSEA_SHIFT_M;
     }
   }, [cameraViewMode]);
 
@@ -248,8 +308,8 @@ export const CameraRig: React.FC = () => {
       }
 
       // Prevent penetrating below bedrock bottom
-      if (camera.position.y < -110) {
-        camera.position.y = -110;
+      if (camera.position.y < -175) {
+        camera.position.y = -175;
       }
 
       // Only lerp if user is NOT interacting and a transition was explicitly requested

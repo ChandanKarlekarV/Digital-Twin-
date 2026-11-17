@@ -23,6 +23,9 @@ export interface KalmanFilterState {
   isOutlier: boolean;
 }
 
+/** Outliers in a row (0.2 s at 50 Hz) after which the filter accepts the new level. */
+const MAX_CONSECUTIVE_OUTLIERS = 10;
+
 export class KalmanFilter1D {
   private A: number;
   private B: number;
@@ -32,6 +35,7 @@ export class KalmanFilter1D {
   private x: number; // State estimate
   private P: number; // Error covariance
   private maxResidualThreshold: number;
+  private consecutiveOutliers = 0;
 
   constructor(config: KalmanFilterConfig = {}) {
     this.A = config.A ?? 1.0;
@@ -50,6 +54,7 @@ export class KalmanFilter1D {
   public reset(initialState: number, initialCovariance = 1.0): void {
     this.x = initialState;
     this.P = initialCovariance;
+    this.consecutiveOutliers = 0;
   }
 
   /**
@@ -64,8 +69,17 @@ export class KalmanFilter1D {
     const innovation = z - this.H * xPrior;
     const isOutlier = Math.abs(innovation) > this.maxResidualThreshold;
 
-    // If extreme outlier (e.g. communication dropout / zero clipping), rely on state projection
+    // If extreme outlier (e.g. communication dropout / zero clipping), rely on state projection.
+    // A persistent "outlier" is a real step change (valve trip, blockage), so re-seed on it
+    // instead of freezing the estimate forever.
     if (isOutlier) {
+      this.consecutiveOutliers++;
+      if (this.consecutiveOutliers >= MAX_CONSECUTIVE_OUTLIERS) {
+        this.consecutiveOutliers = 0;
+        this.x = z;
+        this.P = 1.0;
+        return { raw: z, filtered: z, covariance: this.P, kalmanGain: 1, innovation, isOutlier: false };
+      }
       this.x = xPrior;
       this.P = pPrior;
       return {
@@ -77,6 +91,8 @@ export class KalmanFilter1D {
         isOutlier: true,
       };
     }
+
+    this.consecutiveOutliers = 0;
 
     // 2. Measurement Update (Correct)
     const S = this.H * pPrior * this.H + this.R;

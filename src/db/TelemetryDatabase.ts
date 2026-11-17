@@ -1,5 +1,6 @@
 import { TelemetryRecord, TelemetryAggregate, TelemetryTimeBucket } from '../types/telemetry';
 import { sixMonthDataEngine } from './SixMonthDataEngine';
+import { coriolisEngine } from '../physics/CoriolisEngine';
 
 /**
  * Ultra-Fast In-Memory & IndexedDB/Disk Time-Series Telemetry Engine for VARUNA-AI.
@@ -109,7 +110,8 @@ class TelemetryDatabaseService {
         const cpl = 1 / (1 - 1.25e-5 * (pLine - 1.0));
         const rawDensity = baseDensity * ctl * cpl * (1 + (waterCutPct / 100) * 0.24);
 
-        const fOsc = 1245.5 - (rawDensity - 800) * 0.45 + (Math.random() - 0.5) * 1.2;
+        // Same Coriolis calibration as the live emitter (≈ 730 Hz for KG-D6 condensate)
+        const fOsc = coriolisEngine.computeFrequencyFromDensity(rawDensity, tLine) + (Math.random() - 0.5) * 1.2;
         const grossMassRate = (targetBpd * 0.1589873 * baseDensity) / 86400;
         const purifiedBpd = targetBpd * (1.0 - waterCutPct / 100);
 

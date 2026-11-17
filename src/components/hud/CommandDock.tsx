@@ -174,38 +174,6 @@ export const CommandDock: React.FC = () => {
           </div>
         </div>
 
-        {/* 2. MULTI-SPECTRAL SCANNERS */}
-        <div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-reliance-textMuted uppercase mb-1.5 font-semibold">
-            <Scan className="w-3.5 h-3.5 text-reliance-cyan" />
-            <span>Multi-Spectral Scanning Suite</span>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {[
-              { id: 'hologram', label: 'Hologram (Cyber Twin)' },
-              { id: 'normal', label: 'Color Coated' },
-              { id: 'thermal', label: 'Thermal DTS (IR)' },
-              { id: 'acoustic', label: 'Acoustic DAS (Sonic)' },
-              { id: 'gamma', label: 'Gamma Tomography' },
-            ].map((scan) => (
-              <button
-                key={scan.id}
-                onClick={() => {
-                  setScannerMode(scan.id as ScannerMode);
-                  varunaVoice.playSonarPing(880, 0.08);
-                }}
-                className={`px-2.5 py-1.5 rounded-lg text-left text-[11px] font-mono transition-all cursor-pointer border ${
-                  scannerMode === scan.id
-                    ? 'bg-reliance-cyan/20 border-reliance-cyan text-reliance-cyan shadow-cyan-glow font-bold'
-                    : 'bg-reliance-navy/40 border-white/10 text-reliance-textMuted hover:text-white hover:border-reliance-cyan/40'
-                }`}
-              >
-                {scan.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* 2.5 HOLOGRAPHIC 3D SUBSYSTEMS INSPECTION */}
         <div>
           <div className="flex items-center justify-between text-[10px] font-mono text-reliance-textMuted uppercase mb-1.5 font-semibold">

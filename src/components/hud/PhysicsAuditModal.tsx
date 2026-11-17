@@ -83,7 +83,7 @@ Net_Standard_Oil_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd || 0)},Bar
   };
 
   // Dynamic values formatted at 10 Hz
-  const fOsc = currentRecord?.f_osc_hz.toFixed(2) || '1245.00';
+  const fOsc = currentRecord?.f_osc_hz.toFixed(2) || '733.70';
   const tau = activeCoriolisResult?.period_us.toFixed(2) || '803.21';
   const rhoUncomp = activeCoriolisResult?.uncompensated_density_kg_m3.toFixed(2) || '785.40';
   const rhoComp = activeCoriolisResult?.temp_compensated_density_kg_m3.toFixed(2) || '785.40';

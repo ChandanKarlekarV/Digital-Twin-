@@ -7,12 +7,9 @@ import {
   Gauge,
   Thermometer,
   Droplets,
-  Radio,
   Volume2,
   Maximize2,
-  Layers,
   Activity,
-  ChevronRight,
   Disc,
   Anchor,
   Compass,
@@ -197,7 +194,6 @@ export const HolographicPartInspectionModal: React.FC = () => {
 
   const currentRecord = useTelemetryStore((s) => s.currentRecord);
   const activeHydraulicResult = useTelemetryStore((s) => s.activeHydraulicResult);
-  const activeMultiphaseResult = useTelemetryStore((s) => s.activeMultiphaseResult);
 
   const [isScanning, setIsScanning] = useState(false);
   const [autoRotate, setAutoRotate] = useState(true);

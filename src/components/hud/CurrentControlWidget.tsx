@@ -7,14 +7,12 @@ import {
   Gauge,
   ChevronUp,
   ChevronDown,
-  CloudLightning,
   Play,
   Pause,
-  CloudRain,
   ExternalLink,
 } from 'lucide-react';
 import { useRigStore, CurrentFlowPower } from '../../store/useRigStore';
-import { dynamicTideEngine, TIDE_PHASES_SCHEDULE } from '../../physics/DynamicTideEngine';
+import { TIDE_PHASES_SCHEDULE } from '../../physics/DynamicTideEngine';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 export const CurrentControlWidget: React.FC = () => {

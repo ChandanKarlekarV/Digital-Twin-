@@ -1,14 +1,11 @@
 import React from 'react';
 import {
-  AlertTriangle,
-  Flame,
   ShieldAlert,
   Gauge,
   Thermometer,
   Radio,
   Sliders,
   RotateCcw,
-  Zap,
 } from 'lucide-react';
 import {
   useRigStore,

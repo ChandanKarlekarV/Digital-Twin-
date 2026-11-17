@@ -883,7 +883,7 @@ export const useRigStore = create<RigState>((set, get) => ({
       selectedAssetId: comp.toUpperCase(),
     });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-      varunaVoice.speakCustom(`Displaying dedicated 3D holographic diagnostics for ${comp.toUpperCase().replace('_', ' ')}.`);
+      varunaVoice.speakCustom(`Inspecting ${comp.replace(/_/g, ' ')}.`);
     });
   },
   closeHoloModal: () => set({ activeHoloModal: null }),
@@ -1023,9 +1023,9 @@ export const useRigStore = create<RigState>((set, get) => ({
     });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
       if (active) {
-        varunaVoice.speakCustom('Executing Iron Man piece-by-piece modular split view. All 12 structural assemblies decoupled for holographic diagnostics.');
+        varunaVoice.speakCustom('Exploded view. Every assembly is separated; tap one to inspect it.');
       } else {
-        varunaVoice.speakCustom('Reassembling subsea digital twin. All structural modules locked in nominal alignment.');
+        varunaVoice.speakCustom('Reassembled.');
       }
     });
   },
@@ -1039,9 +1039,9 @@ export const useRigStore = create<RigState>((set, get) => ({
     });
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
       if (sliced) {
-        varunaVoice.speakCustom('Pipe 1 longitudinal cross-section cut active. Exposing internal multi-phase fluid core and ultrasonic wall profile.');
+        varunaVoice.speakCustom('Pipe one cross-section, showing the gas and condensate flow inside.');
       } else {
-        varunaVoice.speakCustom('Pipeline cross-section closed. Returning to catenary riser inspection.');
+        varunaVoice.speakCustom('Cross-section closed.');
       }
     });
   },

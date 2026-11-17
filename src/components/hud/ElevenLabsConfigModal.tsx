@@ -6,7 +6,6 @@ import {
   Sparkles,
   Key,
   Check,
-  Radio,
   Play,
   Save,
   HelpCircle,

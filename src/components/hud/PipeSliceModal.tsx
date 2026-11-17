@@ -2,16 +2,9 @@ import React, { useState } from 'react';
 import {
   X,
   Activity,
-  Layers,
-  Zap,
   ShieldCheck,
   Thermometer,
-  Gauge,
-  Droplets,
   Radio,
-  SlidersHorizontal,
-  Maximize2,
-  Minimize2,
   Scan,
   Sparkles,
 } from 'lucide-react';

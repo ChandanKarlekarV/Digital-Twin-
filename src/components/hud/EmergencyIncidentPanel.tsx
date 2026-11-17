@@ -1,16 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  AlertTriangle,
   ShieldAlert,
-  Flame,
-  Activity,
-  CheckCircle2,
   XCircle,
-  Volume2,
   RotateCcw,
-  Zap,
-  Waves,
-  Wrench,
   ChevronRight,
   Sliders,
 } from 'lucide-react';
@@ -21,6 +13,9 @@ import {
 } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
+import { telemetryDb } from '../../db/TelemetryDatabase';
+import { solveNetwork } from '../../physics/KgD6FlowModel';
+import { productionAt } from '../../data/kgd6Production';
 
 export const EmergencyIncidentPanel: React.FC = () => {
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
@@ -32,6 +27,10 @@ export const EmergencyIncidentPanel: React.FC = () => {
 
   const currentRecord = useTelemetryStore((s) => s.currentRecord);
   const activeHydraulicResult = useTelemetryStore((s) => s.activeHydraulicResult);
+  // Measured manifold pressure against today's undisturbed network (re-evaluated on every telemetry update)
+  useTelemetryStore((s) => s.currentRecord);
+  const manifoldNow = telemetryDb.getLatest('MANIFOLD-D6-MAIN')?.p_line_bar;
+  const manifoldRiseBar = manifoldNow ? Math.max(0, manifoldNow - solveNetwork(productionAt())['MANIFOLD-D6-MAIN'].pBar) : 0;
   const activeDrillResult = useTelemetryStore((s) => s.activeDrillResult);
   const activeMultiphaseResult = useTelemetryStore((s) => s.activeMultiphaseResult);
 
@@ -112,7 +111,7 @@ export const EmergencyIncidentPanel: React.FC = () => {
             <>
               <div className="flex justify-between">
                 <span className="text-red-200">MANIFOLD ΔP SURGE:</span>
-                <span className="text-white font-bold">+{activeHydraulicResult?.pressureDropBar.toFixed(1)} bar</span>
+                <span className="text-white font-bold">+{manifoldRiseBar.toFixed(1)} bar</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-red-200">CHOKE CONSTRICTION:</span>

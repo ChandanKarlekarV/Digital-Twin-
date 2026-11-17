@@ -4,17 +4,12 @@ import {
   Clock,
   CheckCircle2,
   Download,
-  Flame,
   Droplets,
-  Layers,
   Search,
-  Sparkles,
   ShieldCheck,
   TrendingUp,
   X,
   Zap,
-  RotateCcw,
-  Sliders,
   FileSpreadsheet,
   AlertTriangle,
 } from 'lucide-react';
@@ -268,7 +263,7 @@ export const MidnightSettlementModal: React.FC = () => {
                 ₹{analytics.total_estimated_revenue_inr_cr.toLocaleString()} <span className="text-xs font-normal text-purple-400">Cr</span>
               </div>
               <div className="text-[9px] text-purple-300/80 mt-0.5">
-                ${(analytics.total_estimated_revenue_usd / 1000000).toFixed(1)}M USD Brent Equivalent
+                ${(analytics.total_estimated_revenue_usd / 1000000).toFixed(1)}M USD condensate at $98.90/bbl
               </div>
             </div>
           </div>
@@ -388,7 +383,10 @@ export const MidnightSettlementModal: React.FC = () => {
                     <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-white/10">
                       <div className="text-[9px] text-reliance-textMuted">ASSOCIATED GAS</div>
                       <div className="font-bold text-amber-200 mt-0.5">{selectedRecord.associated_gas_mmscfd} MMSCFD</div>
-                      <div className="text-[8.5px] text-reliance-textMuted">GOR: 480 SCF/bbl</div>
+                      <div className="text-[8.5px] text-reliance-textMuted">
+                        {(selectedRecord.associated_gas_mmscfd / 35.3147).toFixed(1)} MMSCMD ·{' '}
+                        {Math.round((selectedRecord.associated_gas_mmscfd * 1e6) / Math.max(selectedRecord.purified_oil_bpd, 1)).toLocaleString()} scf/bbl
+                      </div>
                     </div>
 
                     <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-white/10">

@@ -1,12 +1,9 @@
 import React from 'react';
 import {
   X,
-  FileCheck,
   Download,
   CheckCircle2,
   ShieldCheck,
-  FileSpreadsheet,
-  FileText,
   Printer,
 } from 'lucide-react';
 import { useRigStore, ASSET_CATALOG } from '../../store/useRigStore';
@@ -17,8 +14,6 @@ export const ComplianceReportModal: React.FC = () => {
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
 
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
-  const emergencyScenario = useRigStore((s) => s.emergencyScenario);
-  const incidentPhase = useRigStore((s) => s.incidentPhase);
 
   const currentRecord = useTelemetryStore((s) => s.currentRecord);
   const activeAstmResult = useTelemetryStore((s) => s.activeAstmResult);

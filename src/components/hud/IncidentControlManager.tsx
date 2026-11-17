@@ -2,7 +2,6 @@ import React from 'react';
 import {
   X,
   ShieldAlert,
-  AlertTriangle,
   Play,
   Pause,
   ChevronRight,

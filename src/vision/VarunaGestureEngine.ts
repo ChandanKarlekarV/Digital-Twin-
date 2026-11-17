@@ -1,27 +1,17 @@
 /**
- * VARUNA-AI Computer Vision Hand Gesture Recognition Engine
- * Real-Time Webcam & Complete Varuna Decoupled Dual-Hand Spatial Holographic Matrix:
+ * VARUNA-AI hand gestures (MediaPipe Hands, webcam, runs offline).
  *
- * 1. ASYMMETRIC DECOUPLED DUAL-HAND INTERACTION :
- *    - Hand 1 (Zoom Controller): Operates continuous smooth ZOOM (Pinch In -> Zoom Out, Pinch Out -> Zoom In).
- *    - Hand 2 (Orbit Controller): Operates continuous smooth 3D MODEL MOVE & ORBIT (Translating in (x,y)).
- *    - Simultaneous, zero-drift, instant freeze in place when motion stops or palm is opened.
- *
- * 2. 3D FINGER LASER TARGETING & RIGHT-TO-LEFT SWIPE INSPECTION:
- *    - Pointing finger projects a 3D holographic laser targeting reticle onto subsea & topside components.
- *    - Swiping finger/hand rapidly from Right to Left instantly opens the targeted part's dedicated inspection view!
- *
- * 3. THE 6 CORE RECOGNIZABLE & TRACKABLE GESTURES:
- *    - 1. SPLIT VIEW (Two hands spreading outward / open palm spread -> Exploded Rig view)
- *    - 2. MERGE / JOIN (Fists / Hands together -> Solid Rig reassembly)
- *    - 3. MOVE / ORBIT / PAN (Continuous hand translation -> 3D model rotation & pan)
- *    - 4. ZOOM IN (Pinch out / Hands moving apart -> Dolly camera in)
- *    - 5. ZOOM OUT (Pinch in / Hands moving closer -> Dolly camera out)
- *    - 6. SUBSYSTEM INDEX SELECTOR (Finger count 1-5 -> Helipad, Crane 1, Crane 2, Command Dock, Accommodation)
- *    - BONUS: SWIPE LEFT (Right to Left swipe -> Open targeted subsystem view)
+ *   Open palm, moving ...... rotate the view        Palm held still ...... freeze
+ *   Two palms apart ........ zoom in                Two palms together ... zoom out
+ *   Thumb up / down ........ one view layer up / down (derrick ... drill bit)
+ *   1-5 fingers, held ...... SELECT a part (1 = helipad or the pointed part,
+ *                            2 = crane 1, 3 = crane 2, 4 = command dock,
+ *                            thumb + pinky = living quarters)
+ *   Fist ................... OPEN the selected part (nothing opens without it)
+ *   Two fists .............. toggle the exploded view
  */
 
-import { useRigStore, RecognizedGesture } from '../store/useRigStore';
+import { useRigStore, RecognizedGesture, GESTURE_PARTS, CameraViewMode } from '../store/useRigStore';
 
 export type { RecognizedGesture };
 
@@ -72,10 +62,16 @@ async function loadMediaPipeHands(): Promise<void> {
 const POSE_STABLE_FRAMES = 4;
 /** Hold time for count gestures (2-4 fingers, shaka) before a subsystem opens. */
 const INDEX_HOLD_MS = 700;
-/** Pointer dwell time on a targeted part before it opens. */
-const POINTER_DWELL_MS = 1100;
 /** Centroid speed (screen widths / frame) below which a hand counts as still. */
 const STILL_SPEED = 0.006;
+/** Two-hand zoom: ignore spread changes below this (screen widths / frame), then scale. */
+const ZOOM_DEADZONE = 0.0035;
+const ZOOM_GAIN = 1.1;
+/** Thumb up/down: hold time before a layer step, and the repeat interval while held. */
+const THUMB_HOLD_MS = 450;
+const THUMB_REPEAT_MS = 1300;
+/** A finger-count selection waits this long for the confirming fist. */
+const SELECTION_TTL_MS = 5000;
 
 export interface HandLandmark {
   x: number;
@@ -145,24 +141,17 @@ class VarunaGestureEngine {
   private prevHand2Pos: { x: number; y: number; time: number } | null = null;
   private prevPinchDist1: number | null = null;
   private prevPinchDist2: number | null = null;
-  private prevMidpoint: { x: number; y: number; time: number } | null = null;
   private prevDistance: number | null = null;
 
   // Sustained gesture stability & cooldowns
   private sustainedGesture: RecognizedGesture = null;
   private sustainedGestureStartTime = 0;
-  private lastSplitTime = 0;
   private lastMergeTime = 0;
   private lastSliceTime = 0;
-  private lastSwipeLeftTime = 0;
   private lastIndexTriggerTime = 0;
   private prevHandsCount = 0;
   /** Recent raw poses per hand slot, for frame-voting */
   private poseHistory: RecognizedGesture[][] = [[], []];
-  /** Recent single-hand centroid samples, for swipe detection */
-  private motionHistory: { x: number; y: number; t: number }[] = [];
-  private pointerDwellTarget: string | null = null;
-  private pointerDwellStart = 0;
   private handIsStill = false;
   private stablePoses: RecognizedGesture[] = [null, null];
 
@@ -344,7 +333,6 @@ class VarunaGestureEngine {
       this.prevHand2Pos = null;
       this.prevPinchDist1 = null;
       this.prevPinchDist2 = null;
-      this.prevMidpoint = null;
       this.prevDistance = null;
 
       const emptyResult: GestureTrackingResult = {
@@ -411,7 +399,6 @@ class VarunaGestureEngine {
       this.prevDistance = null;
       this.poseHistory = [[], []];
       this.stablePoses = [null, null];
-      this.motionHistory = [];
     }
 
     // Process Hand 1
@@ -454,59 +441,38 @@ class VarunaGestureEngine {
     }
 
     let gesture: RecognizedGesture = null;
-    let confidence = 0.95;
+    const confidence = 0.95;
     let activeMode: GestureTrackingResult['activeMode'] = 'IDLE';
     let deltaX = 0;
     let deltaY = 0;
-    const zoomDelta = 0; // ZERO ZOOM: completely disabled for now as requested
+    let zoomDelta = 0;
     let currentDistance = 0;
     let midX = hand1Data.centroid.x;
     let midY = hand1Data.centroid.y;
 
-    // Swipe = open-hand or point moving fast and mostly horizontally right-to-left
-    // (on screen) over the last ~350 ms. Requires real travel, not a single noisy frame.
-    let isSwipeLeft = false;
-    if (handsCount === 1 && (hand1Data.gesture === 'PALM' || hand1Data.gesture === 'INDEX_1')) {
-      this.motionHistory.push({ x: hand1Data.centroid.x, y: hand1Data.centroid.y, t: now });
-      while (this.motionHistory.length && now - this.motionHistory[0].t > 350) this.motionHistory.shift();
-      const first = this.motionHistory[0];
-      const dx = hand1Data.centroid.x - first.x;
-      const dy = hand1Data.centroid.y - first.y;
-      isSwipeLeft =
-        this.motionHistory.length >= 5 && dx < -0.22 && Math.abs(dy) < Math.abs(dx) * 0.5 && now - this.lastSwipeLeftTime > 1500;
-    } else {
-      this.motionHistory = [];
-    }
-
-    if (isSwipeLeft) {
-      gesture = 'SWIPE_LEFT';
-      activeMode = 'INDEX_SELECT';
-      this.lastSwipeLeftTime = now;
-      this.motionHistory = [];
-    }
-    // 3. DUAL-HAND INTERACTION
-    else if (handsCount >= 2 && hand2Data) {
+    // 3. TWO HANDS: stretch apart / together = zoom, move together = rotate, two fists = exploded view
+    if (handsCount >= 2 && hand2Data) {
       midX = (hand1Data.centroid.x + hand2Data.centroid.x) / 2.0;
       midY = (hand1Data.centroid.y + hand2Data.centroid.y) / 2.0;
       currentDistance = Math.hypot(
         hand2Data.centroid.x - hand1Data.centroid.x,
         hand2Data.centroid.y - hand1Data.centroid.y
       );
+      const spread = this.prevDistance === null ? 0 : currentDistance - this.prevDistance;
       this.prevDistance = currentDistance;
-      this.prevMidpoint = { x: midX, y: midY, time: now };
 
       const bothOpen = hand1Data.gesture === 'PALM' && hand2Data.gesture === 'PALM';
       const bothFists = hand1Data.gesture === 'FIST' && hand2Data.gesture === 'FIST';
       const moving = Math.hypot(dH1_x + dH2_x, dH1_y + dH2_y) / 2 > STILL_SPEED * 0.5;
 
-      if (bothFists || (currentDistance < 0.14 && !bothOpen)) {
-        // MERGE: two fists, or hands brought together
+      if (bothFists) {
         gesture = 'MERGE';
         activeMode = 'MERGE';
-      } else if (bothOpen && currentDistance > 0.55) {
-        // SPLIT: two open palms spread wide apart
-        gesture = 'SPLIT';
-        activeMode = 'SPLIT';
+      } else if (bothOpen && Math.abs(spread) > ZOOM_DEADZONE) {
+        // Hands moving apart -> zoom in, together -> zoom out
+        zoomDelta = spread * ZOOM_GAIN;
+        gesture = 'ZOOM';
+        activeMode = 'ZOOM';
       } else if (bothOpen && moving) {
         // Both palms moving together -> orbit
         deltaX = (dH1_x + dH2_x) / 2.0;
@@ -534,9 +500,9 @@ class VarunaGestureEngine {
           gesture = 'PALM';
           activeMode = 'IDLE';
         }
-      } else if (pose === 'FIST') {
-        gesture = 'FIST';
-        activeMode = 'MERGE';
+      } else if (pose === 'FIST' || pose === 'THUMB_UP' || pose === 'THUMB_DOWN') {
+        gesture = pose;
+        activeMode = 'IDLE';
       } else if (pose) {
         gesture = pose; // INDEX_1 (pointer) .. INDEX_5
         activeMode = 'INDEX_SELECT';
@@ -554,7 +520,7 @@ class VarunaGestureEngine {
       handDistance: currentDistance,
       deltaX,
       deltaY,
-      zoomDelta: 0,
+      zoomDelta,
       isTwoHanded: handsCount >= 2,
       isPinching: false,
       fingerCount: hand1Data.fingerCount + (hand2Data?.fingerCount ?? 0),
@@ -570,7 +536,7 @@ class VarunaGestureEngine {
     useRigStore.getState().setGestureSpatial({
       deltaX,
       deltaY,
-      zoomDelta: 0,
+      zoomDelta,
       distance: currentDistance,
       handsCount,
       primaryHand: {
@@ -579,7 +545,7 @@ class VarunaGestureEngine {
         fingerCount: hand1Data.fingerCount,
         isPinching: false,
         pinchDist: 1.0,
-        role: activeMode === 'ORBIT' ? 'ORBIT' : 'IDLE',
+        role: activeMode === 'ORBIT' ? 'ORBIT' : activeMode === 'ZOOM' ? 'ZOOM' : 'IDLE',
       },
       secondaryHand: hand2Data
         ? {
@@ -588,7 +554,7 @@ class VarunaGestureEngine {
             fingerCount: hand2Data.fingerCount,
             isPinching: false,
             pinchDist: 1.0,
-            role: activeMode === 'ORBIT' ? 'ORBIT' : 'IDLE',
+            role: activeMode === 'ORBIT' ? 'ORBIT' : activeMode === 'ZOOM' ? 'ZOOM' : 'IDLE',
           }
         : null,
       activeMode,
@@ -703,11 +669,19 @@ class VarunaGestureEngine {
     const fourUp = isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended;
     const isShaka = isThumbExtended && isPinkyExtended && !isIndexExtended && !isMiddleExtended && !isRingExtended;
 
+    // Thumb up / down: other fingers curled, thumb clearly vertical and long (a fist's
+    // thumb lies across the fingers, so it is neither vertical nor long)
+    const thumbMcp = landmarks[2];
+    const tdx = thumbTip.x - thumbMcp.x;
+    const tdy = thumbTip.y - thumbMcp.y;
+    const thumbVertical = isFist && Math.abs(tdy) > Math.abs(tdx) * 1.5 && Math.abs(tdy) > palm * 0.45;
+
     // Unambiguous pose vocabulary:
-    //  FIST, INDEX_1 (point / laser), INDEX_2 (V), INDEX_3 (three), INDEX_4 (four, thumb tucked),
-    //  INDEX_5 (shaka: thumb + pinky), PALM (all five open)
+    //  FIST, THUMB_UP, THUMB_DOWN, INDEX_1 (point), INDEX_2 (V), INDEX_3 (three),
+    //  INDEX_4 (four, thumb tucked), INDEX_5 (shaka: thumb + pinky), PALM (all five open)
     let gesture: RecognizedGesture;
     if (isShaka) gesture = 'INDEX_5';
+    else if (thumbVertical) gesture = tdy < 0 ? 'THUMB_UP' : 'THUMB_DOWN';
     else if (isFist) gesture = 'FIST';
     else if (isPoint) gesture = 'INDEX_1';
     else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) gesture = 'INDEX_2';
@@ -733,74 +707,75 @@ class VarunaGestureEngine {
     } as SingleHandData & { _isPoint: boolean };
   }
 
+  /**
+   * Discrete actions. Nothing opens by itself: a finger count only SELECTS a part, and a
+   * fist OPENS the selection. Thumb up/down steps through the view layers, and two fists
+   * toggle the exploded view.
+   */
   private handleGestureAction(res: GestureTrackingResult): void {
     const store = useRigStore.getState();
     const now = performance.now();
-
-    // 1. SWIPE LEFT (Right to Left horizontal swipe -> Opens targeted or next subsystem view)
-    if (res.gesture === 'SWIPE_LEFT' && now - this.lastSwipeLeftTime < 400) {
-      store.openNextSubsystemView();
-      return;
+    const g = res.gesture;
+    const held = g === this.sustainedGesture;
+    if (!held) {
+      this.sustainedGesture = g;
+      this.sustainedGestureStartTime = now;
+      this.lastSliceTime = 0; // a new pose may step a layer right after its hold time
     }
+    const heldFor = now - this.sustainedGestureStartTime;
 
-    // 2. Gesture 1: SPLIT VIEW
-    if (res.gesture === 'SPLIT' && !store.isSplitViewActive && now - this.lastSplitTime > 2200) {
-      this.lastSplitTime = now;
-      store.setSplitViewActive(true);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Split gesture recognized. Exploding digital twin into subsystem modules.');
-      });
-      return;
-    }
+    // Selections expire if no fist follows
+    const sel = store.gestureSelection;
+    if (sel && Date.now() - sel.at > SELECTION_TTL_MS) store.setGestureSelection(null);
 
-    // 3. Gesture 2: MERGE / REASSEMBLE
-    if (
-      (res.gesture === 'MERGE' || res.gesture === 'FIST') &&
-      store.isSplitViewActive &&
-      now - this.lastMergeTime > 2000
-    ) {
-      this.lastMergeTime = now;
-      store.setSplitViewActive(false);
-      import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-        varunaVoice.speakCustom('Merge gesture recognized. Reassembling digital twin.');
-      });
-      return;
-    }
-
-    // 4. POINTER DWELL: hold the laser on a part to open it (no part -> helipad shortcut)
-    if (res.gesture === 'INDEX_1') {
-      const target = store.targetedPartId;
-      if (target !== this.pointerDwellTarget || this.sustainedGesture !== 'INDEX_1') {
-        this.pointerDwellTarget = target;
-        this.pointerDwellStart = now;
+    // Two fists: toggle exploded view
+    if (g === 'MERGE') {
+      if (heldFor > 400 && now - this.lastMergeTime > 2000) {
+        this.lastMergeTime = now;
+        store.setSplitViewActive(!store.isSplitViewActive);
       }
-      this.sustainedGesture = 'INDEX_1';
-      const needed = target ? POINTER_DWELL_MS : POINTER_DWELL_MS + 500;
-      if (now - this.pointerDwellStart > needed && now - this.lastIndexTriggerTime > 2500 && (target || this.handIsStill)) {
+      return;
+    }
+
+    // Thumb up / down: one layer per step, repeating while held
+    if (g === 'THUMB_UP' || g === 'THUMB_DOWN') {
+      if (heldFor > THUMB_HOLD_MS && now - this.lastSliceTime > THUMB_REPEAT_MS) {
+        this.lastSliceTime = now;
+        store.stepLayer(g === 'THUMB_UP' ? -1 : 1);
+      }
+      return;
+    }
+
+    // Fist: open the current selection (a fresh fist only, so holding one does not repeat)
+    if (g === 'FIST') {
+      const cur = useRigStore.getState().gestureSelection;
+      if (!held && cur && now - this.lastIndexTriggerTime > 800) {
         this.lastIndexTriggerTime = now;
-        this.pointerDwellStart = now;
-        if (target) store.openNextSubsystemView();
-        else store.openSubsystemByIndex(1);
+        store.setGestureSelection(null);
+        if (cur.targetPart) {
+          store.openHoloModal(cur.targetPart);
+          store.setCameraViewMode(cur.targetPart as CameraViewMode);
+        } else {
+          store.openSubsystemByIndex(cur.index);
+        }
       }
       return;
     }
 
-    // 5. SUBSYSTEM SHORTCUTS: hold a count pose steadily (2 = crane 1, 3 = crane 2, 4 = dock, shaka = quarters)
-    if (res.gesture && res.gesture.startsWith('INDEX_')) {
-      if (this.sustainedGesture !== res.gesture || !this.handIsStill) {
-        this.sustainedGesture = res.gesture;
-        this.sustainedGestureStartTime = now;
-      } else if (now - this.sustainedGestureStartTime > INDEX_HOLD_MS && now - this.lastIndexTriggerTime > 2500) {
-        this.lastIndexTriggerTime = now;
-        const indexNum = parseInt(res.gesture.replace('INDEX_', ''), 10);
-        if (indexNum >= 2 && indexNum <= 5) store.openSubsystemByIndex(indexNum);
+    // 1-5 fingers held on a steady hand: select (one finger picks the part under the pointer, if any)
+    if (g && g.startsWith('INDEX_') && this.handIsStill && heldFor > INDEX_HOLD_MS) {
+      const index = Number(g.slice(6));
+      const targetPart = index === 1 ? store.targetedPartId : null;
+      const label = targetPart ? targetPart.replace(/_/g, ' ') : GESTURE_PARTS[index]?.label;
+      const prev = useRigStore.getState().gestureSelection;
+      if (label && (!prev || prev.index !== index || prev.targetPart !== targetPart)) {
+        store.setGestureSelection({ index, label, targetPart, at: Date.now() });
+        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => varunaVoice.playWakeChime());
+      } else if (prev) {
+        store.setGestureSelection({ ...prev, at: Date.now() }); // keep it alive while held
       }
-    } else {
-      this.sustainedGesture = null;
-      this.pointerDwellTarget = null;
     }
   }
-
   /** Reports a pose only after it has been seen POSE_STABLE_FRAMES frames in a row. */
   private stabilizePose(slot: 0 | 1, hand: SingleHandData): SingleHandData {
     const history = this.poseHistory[slot];

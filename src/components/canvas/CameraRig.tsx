@@ -46,23 +46,42 @@ export const CameraRig: React.FC = () => {
       }
     };
 
+    // A wheel tick has no "end" event: it only cancels a running transition. (It used to
+    // set the interacting flag for good, which silently disabled gesture control.)
+    const onWheel = () => {
+      isTransitioning.current = false;
+      if (controlsRef.current) targetLookAt.current.copy(controlsRef.current.target);
+    };
+
     const domElement = gl.domElement;
     domElement.addEventListener('pointerdown', onUserStart);
     domElement.addEventListener('pointerup', onUserEnd);
     domElement.addEventListener('pointercancel', onUserEnd);
-    domElement.addEventListener('wheel', onUserStart, { passive: true });
-    domElement.addEventListener('touchstart', onUserStart, { passive: true });
-    domElement.addEventListener('touchend', onUserEnd, { passive: true });
+    domElement.addEventListener('pointerleave', onUserEnd);
+    domElement.addEventListener('wheel', onWheel, { passive: true });
 
     return () => {
       domElement.removeEventListener('pointerdown', onUserStart);
       domElement.removeEventListener('pointerup', onUserEnd);
       domElement.removeEventListener('pointercancel', onUserEnd);
-      domElement.removeEventListener('wheel', onUserStart);
-      domElement.removeEventListener('touchstart', onUserStart);
-      domElement.removeEventListener('touchend', onUserEnd);
+      domElement.removeEventListener('pointerleave', onUserEnd);
+      domElement.removeEventListener('wheel', onWheel);
     };
   }, [gl.domElement, camera]);
+
+  // On-screen zoom buttons: ease the camera distance by the requested factor
+  const nudgeSeq = useRigStore((s) => s.cameraNudge.seq);
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!nudgeSeq || !controls) return;
+    const factor = useRigStore.getState().cameraNudge.zoom;
+    const offset = camera.position.clone().sub(controls.target);
+    offset.setLength(THREE.MathUtils.clamp(offset.length() * factor, 7, 340));
+    targetLookAt.current.copy(controls.target);
+    targetCamPos.current.copy(controls.target).add(offset);
+    transitionSpeed.current = 6;
+    isTransitioning.current = true;
+  }, [nudgeSeq, camera]);
 
   // Auto-frame the whole rig once it has loaded: D = R·1.35 / tan(FOV/2),
   // seen from 26° elevation / 42° azimuth. Skipped if the user already moved the camera.
@@ -248,12 +267,9 @@ export const CameraRig: React.FC = () => {
       const gestureDetected = useRigStore.getState().gestureDetected;
 
       if (isGestureActive && !isUserInteracting.current && gestureSpatial) {
-        let { deltaX, deltaY, zoomDelta } = gestureSpatial;
-
-        // Open palm strictly stops all zooming and only allows smooth translation
-        if (gestureDetected === 'PALM') {
-          zoomDelta = 0;
-        }
+        const { deltaX, deltaY } = gestureSpatial;
+        // Zoom only while the two-hand stretch is the recognised gesture
+        const zoomDelta = gestureDetected === 'ZOOM' ? gestureSpatial.zoomDelta : 0;
 
         const hasMotion =
           Math.abs(deltaX) > 0.0008 || Math.abs(deltaY) > 0.0008 || Math.abs(zoomDelta) > 0.0008;

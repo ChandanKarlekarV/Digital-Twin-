@@ -1,7 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  ChevronRight,
-  ChevronLeft,
   Activity,
   Gauge,
   Thermometer,
@@ -23,7 +21,6 @@ import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 export const TelemetryDrawer: React.FC = () => {
   const isTelemetryDrawerOpen = useRigStore((s) => s.isTelemetryDrawerOpen);
-  const toggleTelemetryDrawer = useRigStore((s) => s.toggleTelemetryDrawer);
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
   const setSelectedAssetId = useRigStore((s) => s.setSelectedAssetId);
   const togglePhysicsModal = useRigStore((s) => s.togglePhysicsModal);

@@ -3,23 +3,38 @@ import {
   Zap,
   Mic,
   Video,
-  Sparkles,
   ChevronDown,
   ChevronUp,
   Layers,
   Scissors,
-  Move,
-  ZoomIn,
-  ZoomOut,
-  FolderOpen,
   Power,
-  Hand,
-  Crosshair,
 } from 'lucide-react';
-import { useRigStore, RecognizedGesture } from '../../store/useRigStore';
+import { useRigStore } from '../../store/useRigStore';
 import { varunaGestureEngine } from '../../vision/VarunaGestureEngine';
 import { varunaVoiceCommander } from '../../voice/VarunaVoiceCommander';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
+
+const GESTURE_GUIDE: [string, string][] = [
+  ['Open palm, move', 'Rotate'],
+  ['Palm still', 'Freeze'],
+  ['Two hands apart', 'Zoom in'],
+  ['Two hands together', 'Zoom out'],
+  ['Thumb up', 'Layer up'],
+  ['Thumb down', 'Layer down'],
+  ['1 finger / point', 'Helipad or pointed part'],
+  ['2 fingers', 'Crane 1'],
+  ['3 fingers', 'Crane 2'],
+  ['4 fingers', 'Command dock'],
+  ['Thumb + pinky', 'Living quarters'],
+  ['Fist', 'Open selection'],
+  ['Two fists', 'Exploded view'],
+];
+
+const GESTURE_NAMES: Record<string, string> = {
+  PALM: 'Freeze', MOVE: 'Rotating', ZOOM: 'Zooming', FIST: 'Fist', MERGE: 'Two fists',
+  THUMB_UP: 'Layer up', THUMB_DOWN: 'Layer down', INDEX_1: '1 finger', INDEX_2: '2 fingers',
+  INDEX_3: '3 fingers', INDEX_4: '4 fingers', INDEX_5: 'Thumb + pinky',
+};
 
 export const VarunaGestureVoiceHUD: React.FC = () => {
   const isGestureCameraActive = useRigStore((s) => s.isGestureCameraActive);
@@ -35,18 +50,14 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
   const voiceTranscript = useRigStore((s) => s.voiceTranscript);
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const isPipeSliced = useRigStore((s) => s.isPipeSliced);
-  const targetedPartId = useRigStore((s) => s.targetedPartId);
+  const gestureSelection = useRigStore((s) => s.gestureSelection);
   const pointerCursor = useRigStore((s) => s.pointerCursor);
 
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
-  const setGestureDetected = useRigStore((s) => s.setGestureDetected);
-  const openSubsystemByIndex = useRigStore((s) => s.openSubsystemByIndex);
-  const openNextSubsystemView = useRigStore((s) => s.openNextSubsystemView);
 
   const [isExpanded, setIsExpanded] = useState(true);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
-  const [selectedSubsystemIndex, setSelectedSubsystemIndex] = useState<number>(1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -270,56 +281,14 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
       const ok = await varunaGestureEngine.start();
       if (ok) {
         varunaVoice.speakCustom(
-          'Gesture vision online. Move an open palm to rotate, hold it still to freeze, and point to aim.'
+          'Gestures on. Move an open palm to rotate, stretch two hands to zoom, thumb up or down to change layer, and hold up fingers then make a fist to open a part.'
         );
       }
     }
   };
 
 
-  const triggerGesture = (
-    type: 'SPLIT' | 'MERGE' | 'MOVE' | 'POINT' | 'PALM' | 'SWIPE_LEFT' | 'INDEX'
-  ) => {
-    if (type === 'SPLIT') {
-      setGestureDetected('SPLIT', 0.98);
-      setSplitViewActive(true);
-      varunaVoice.speakCustom('Split view activated. Subsystem modules exploded.');
-    } else if (type === 'MERGE') {
-      setGestureDetected('MERGE', 0.98);
-      setSplitViewActive(false);
-      varunaVoice.speakCustom('Merge gesture activated. Reassembling full rig.');
-    } else if (type === 'MOVE') {
-      setGestureDetected('MOVE', 0.98);
-      useRigStore.getState().setGestureSpatial({
-        deltaX: 0.015,
-        deltaY: -0.008,
-        activeMode: 'ORBIT',
-      });
-      varunaVoice.speakCustom('Model move and orbit tracking engaged.');
-    } else if (type === 'POINT') {
-      // Point -> Laser targeting
-      setGestureDetected('INDEX_1', 0.98);
-      useRigStore.getState().setPointerCursor({ x: 0.65, y: 0.45, active: true });
-      varunaVoice.speakCustom('Pointing index finger: 3D laser targeting active.');
-    } else if (type === 'PALM') {
-      // Open Palm -> Instant freeze in place
-      setGestureDetected('PALM', 0.99);
-      useRigStore.getState().setGestureSpatial({
-        deltaX: 0,
-        deltaY: 0,
-        zoomDelta: 0,
-        activeMode: 'IDLE',
-      });
-      varunaVoice.speakCustom('Open palm recognized: Camera frozen immediately in place.');
-    } else if (type === 'SWIPE_LEFT') {
-      // Swipe Left -> Open targeted/next subsystem inspection deck
-      setGestureDetected('SWIPE_LEFT', 0.99);
-      openNextSubsystemView();
 
-    } else if (type === 'INDEX') {
-      openSubsystemByIndex(selectedSubsystemIndex);
-    }
-  };
 
   return (
     <div className="font-mono text-xs animate-in fade-in duration-200 shrink-0">
@@ -426,163 +395,43 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Active Dual-Hand & Gesture Detection Badges */}
-                  <div className="absolute top-1 left-1 flex flex-col gap-0.5">
-                    <div className="bg-reliance-deepnavy/90 border border-reliance-cyan/60 px-1.5 py-0.5 rounded text-[8px] font-mono text-reliance-cyan font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>
-                        {gestureSpatial?.handsCount >= 2
-                          ? '2 HANDS TRACKED (DECOUPLED)'
-                          : gestureSpatial?.handsCount === 1
-                          ? '1 HAND TRACKED'
-                          : 'SEARCHING HANDS...'}
-                      </span>
-                    </div>
-
-                    <div className="bg-black/80 border border-amber-400/60 px-1.5 py-0.5 rounded text-[8px] font-mono text-amber-300 font-bold">
-                      {gestureDetected ? `[${gestureDetected}]` : '[STANDBY]'}
-                    </div>
-                  </div>
-
-                  {/* Mode & FPS info */}
-                  <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/85 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                    {gestureSpatial?.activeMode === 'DECOUPLED_DUAL'
-                      ? 'Right hand zooms, left hand orbits'
-                      : gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
-                      ? 'Moving and zooming'
-                      : 'WEBCAM MULTI-TRACK 30 FPS'}
+                  {/* Tracking status */}
+                  <div className="absolute top-1 left-1 right-1 flex items-center justify-between gap-1 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-surface/90 border border-line text-ink-muted">
+                      {gestureSpatial?.handsCount >= 2 ? 'Two hands' : gestureSpatial?.handsCount === 1 ? 'One hand' : 'Show your hand'}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-surface/90 border border-accent-600 text-accent-200 font-medium">
+                      {GESTURE_NAMES[gestureDetected ?? ''] ?? 'Ready'}
+                    </span>
                   </div>
                 </div>
 
-                {/* Holographic Target Lock Readout Banner */}
-                {targetedPartId && (
-                  <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-400/80 flex items-center justify-between shadow-cyan-glow animate-in fade-in duration-150">
-                    <div className="flex items-center gap-1.5 text-cyan-200">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                      <span className="font-extrabold text-[8.5px] tracking-wide">
-                        LOCKED: [{targetedPartId.toUpperCase().replace('_', ' ')}]
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => triggerGesture('SWIPE_LEFT')}
-                      className="px-2 py-0.5 rounded bg-cyan-500/40 hover:bg-cyan-500/60 border border-cyan-300 text-white font-bold text-[8px] cursor-pointer shadow-sm flex items-center gap-1"
-                      title="Inspect locked component"
-                    >
-                      <span>SWIPE LEFT ◀</span>
-                    </button>
+                {/* Selected part: waits for a fist */}
+                {gestureSelection && (
+                  <div className="p-2 rounded-md bg-accent-950 border border-accent-600 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-accent-100">
+                      Selected <strong className="font-semibold capitalize">{gestureSelection.label}</strong>
+                    </span>
+                    <span className="text-[10px] text-ink-muted">Make a fist to open</span>
                   </div>
                 )}
 
-                {/* VARUNA DECOUPLED ACTIONS & 6 CORE GESTURES BAR */}
-                <div className="space-y-1 bg-black/40 p-1.5 rounded-lg border border-white/10">
-                  <div className="flex items-center justify-between text-[8px] font-bold text-reliance-cyan">
-                    <span>VARUNA HOLOGRAPHIC GESTURES:</span>
-                    <span className="text-white/60">MOVE / POINT / SPLIT / MERGE</span>
-                  </div>
-
-                  {/* Top Row: Split, Merge, Move */}
-                  <div className="grid grid-cols-3 gap-1 text-[8px]">
-                    <button
-                      onClick={() => triggerGesture('SPLIT')}
-                      className={`p-1 rounded border flex items-center justify-center gap-1 cursor-pointer transition-all ${
-                        isSplitViewActive
-                          ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-bold'
-                          : 'bg-reliance-navy/50 border-white/15 text-white/80 hover:bg-reliance-blue/50'
-                      }`}
-                      title="Gesture 1: Two hands spreading apart -> Exploded Split View"
-                    >
-                      <Layers className="w-2.5 h-2.5 text-amber-400" />
-                      <span>1. Split Rig</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('MERGE')}
-                      className={`p-1 rounded border flex items-center justify-center gap-1 cursor-pointer transition-all ${
-                        !isSplitViewActive
-                          ? 'bg-emerald-500/30 border-emerald-400 text-emerald-200 font-bold'
-                          : 'bg-reliance-navy/50 border-white/15 text-white/80 hover:bg-reliance-blue/50'
-                      }`}
-                      title="Gesture 2: Closed fist / Hands together -> Reassemble Digital Twin"
-                    >
-                      <Hand className="w-2.5 h-2.5 text-emerald-400" />
-                      <span>2. Merge Rig</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('MOVE')}
-                      className="p-1 rounded bg-reliance-navy/50 hover:bg-reliance-blue/50 border border-white/15 text-white/80 flex items-center justify-center gap-1 cursor-pointer transition-all"
-                      title="Gesture 3: 5 fingers / moving hand -> Continuous 3D Rotate & Pan"
-                    >
-                      <Move className="w-2.5 h-2.5 text-cyan-400" />
-                      <span>3. Move (X,Y)</span>
-                    </button>
-                  </div>
-
-                  {/* Second Row: Point Laser, Palm Freeze, Swipe Left */}
-                  <div className="grid grid-cols-3 gap-1 text-[8px]">
-                    <button
-                      onClick={() => triggerGesture('POINT')}
-                      className="p-1 rounded bg-blue-500/25 hover:bg-blue-500/40 border border-blue-400/40 text-blue-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Pointing Index Finger -> Laser Pointer Targeting"
-                    >
-                      <Crosshair className="w-2.5 h-2.5 text-blue-300" />
-                      <span>Point</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('PALM')}
-                      className="p-1 rounded bg-rose-500/25 hover:bg-rose-500/40 border border-rose-400/40 text-rose-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Open Palm -> Freeze camera in place with zero drift"
-                    >
-                      <Hand className="w-2.5 h-2.5 text-rose-300" />
-                      <span>Freeze</span>
-                    </button>
-
-                    <button
-                      onClick={() => triggerGesture('SWIPE_LEFT')}
-                      className="p-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-400/40 text-teal-200 flex items-center justify-center gap-1 cursor-pointer transition-all font-bold"
-                      title="Swipe Left: Open targeted component / Next subsystem"
-                    >
-                      <FolderOpen className="w-2.5 h-2.5 text-teal-300" />
-                      <span>◀ Swipe Left</span>
-                    </button>
-                  </div>
-
-                  {/* Subsystem Index Quick Bar */}
-                  <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1 text-[7.5px]">
-                    <span className="text-white/60 font-bold" title="Hold the pose steady for under a second">HOLD:</span>
-                    {[
-                      { idx: 1, name: '1 finger: Helipad' },
-                      { idx: 2, name: '2 fingers: Crane 1' },
-                      { idx: 3, name: '3 fingers: Crane 2' },
-                      { idx: 4, name: '4 fingers: Dock' },
-                      { idx: 5, name: 'Shaka: Quarters' },
-                    ].map((item) => (
-                      <button
-                        key={item.idx}
-                        onClick={() => {
-                          setSelectedSubsystemIndex(item.idx);
-                          openSubsystemByIndex(item.idx);
-                        }}
-                        className={`px-1 py-0.5 rounded border transition-all cursor-pointer ${
-                          selectedSubsystemIndex === item.idx
-                            ? 'bg-purple-500/40 border-purple-400 text-white font-bold'
-                            : 'bg-black/30 border-white/10 text-white/70 hover:border-white/30'
-                        }`}
-                      >
-                        {item.name}
-                      </button>
-                    ))}
-                  </div>
+                {/* Gesture guide */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 p-2 rounded-md bg-surface-2 border border-line text-[10px]">
+                  {GESTURE_GUIDE.map(([pose, action]) => (
+                    <div key={pose} className="flex justify-between gap-2">
+                      <span className="text-ink">{pose}</span>
+                      <span className="text-ink-muted text-right">{action}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ) : (
+              </div>            ) : (
               <div className="p-2.5 rounded-xl bg-reliance-navy/50 border border-white/10 text-center space-y-2">
                 <div className="text-[9px] text-reliance-textMuted">
                   {cameraErrorMessage ? (
                     <span className="text-amber-300">{cameraErrorMessage}</span>
                   ) : (
-                    'Open palm: move. Still palm: freeze. Point and hold: open a part. Fist: reassemble.'
+                    'Start the camera to steer the rig with your hands. Fingers select a part, a fist opens it.'
                   )}
                 </div>
 

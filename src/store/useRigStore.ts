@@ -99,7 +99,36 @@ export type RecognizedGesture =
   | 'SWIPE_LEFT'
   | 'SWIPE_RIGHT'
   | 'FIST'
+  | 'THUMB_UP'
+  | 'THUMB_DOWN'
+  | 'ZOOM'
   | null;
+
+/** Parts a finger-count pose can select (1-5); a fist then opens the selection. */
+export const GESTURE_PARTS: Record<number, { part: HolographicComponentType; asset: string; label: string }> = {
+  1: { part: 'helipad', asset: 'HELIDECK-CAP437', label: 'the helideck' },
+  2: { part: 'crane1', asset: 'CRANE-PORT-BOOM', label: 'crane one' },
+  3: { part: 'crane2', asset: 'CRANE-STARBOARD-PEDESTAL', label: 'crane two' },
+  4: { part: 'command_dock', asset: 'COMMAND-DOCK-BRIDGE', label: 'the command dock' },
+  5: { part: 'accommodation', asset: 'ACCOMMODATION-MODULE', label: 'the living quarters' },
+};
+
+export interface GestureSelection {
+  index: number;
+  label: string;
+  /** Part under the pointer when the selection was made with one finger */
+  targetPart: HolographicComponentType | null;
+  at: number;
+}
+
+/** Layer-wise views, top to bottom (thumb up / down or the layer buttons step through them). */
+export const VIEW_LAYERS: { mode: CameraViewMode; label: string }[] = [
+  { mode: 'upper_rig', label: 'Derrick & topside' },
+  { mode: 'topside', label: 'Full rig' },
+  { mode: 'subsea', label: 'Below the waterline' },
+  { mode: 'manifold', label: 'Seabed manifold' },
+  { mode: 'drill', label: 'Drill string & bit' },
+];
 
 export interface GestureSpatialState {
   deltaX: number;
@@ -600,6 +629,14 @@ interface RigState {
   setTargetedPartId: (id: HolographicComponentType | null) => void;
   openNextSubsystemView: () => void;
   openSubsystemByIndex: (index: number) => void;
+  /** Part picked by a finger-count pose; a fist opens it */
+  gestureSelection: GestureSelection | null;
+  setGestureSelection: (sel: GestureSelection | null) => void;
+  /** One-shot zoom request (factor < 1 zooms in) from on-screen buttons */
+  cameraNudge: { zoom: number; seq: number };
+  nudgeZoom: (factor: number) => void;
+  /** Move one layer up (-1) or down (+1) through VIEW_LAYERS */
+  stepLayer: (dir: 1 | -1) => void;
 
   // Varuna Voice Commander & Wake-Word Architecture
   isVoiceCommanderActive: boolean;
@@ -893,7 +930,7 @@ export const useRigStore = create<RigState>((set, get) => ({
       state.setCameraViewMode(state.targetedPartId);
       import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
         varunaVoice.speakCustom(
-          `Swipe gesture recognized. Opening dedicated inspection view for ${state.targetedPartId?.toUpperCase().replace('_', ' ')}.`
+          `Opening ${state.targetedPartId?.replace(/_/g, ' ')}.`
         );
       });
       return;
@@ -926,61 +963,32 @@ export const useRigStore = create<RigState>((set, get) => ({
     state.setCameraViewMode(nextSubsystem);
     import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
       varunaVoice.speakCustom(
-        `Swipe gesture recognized. Opening dedicated inspection view for ${nextSubsystem.toUpperCase().replace('_', ' ')}.`
+        `Opening ${nextSubsystem.replace(/_/g, ' ')}.`
       );
     });
   },
   openSubsystemByIndex: (index: number) => {
+    const sub = GESTURE_PARTS[index];
+    if (!sub) return;
     const state = get();
-    switch (index) {
-      case 1:
-        // Index 1: Helipad
-        state.openHoloModal('helipad');
-        state.setCameraViewMode('helipad');
-        state.setSelectedAssetId('HELIDECK-CAP437');
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom('Subsystem index 1: Helideck CAP 437 holographic inspection opened.');
-        });
-        break;
-      case 2:
-        // Index 2: Crane 1
-        state.openHoloModal('crane1');
-        state.setCameraViewMode('crane1');
-        state.setSelectedAssetId('CRANE-PORT-BOOM');
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom('Subsystem index 2: Port Crane 1 lattice boom inspection opened.');
-        });
-        break;
-      case 3:
-        // Index 3: Crane 2
-        state.openHoloModal('crane2');
-        state.setCameraViewMode('crane2');
-        state.setSelectedAssetId('CRANE-STARBOARD-PEDESTAL');
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom('Subsystem index 3: Starboard Crane 2 pedestal inspection opened.');
-        });
-        break;
-      case 4:
-        // Index 4: Command Dock
-        state.openHoloModal('command_dock');
-        state.setCameraViewMode('command_dock');
-        state.setSelectedAssetId('COMMAND-DOCK-BRIDGE');
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom('Subsystem index 4: Tactical Command Dock opened.');
-        });
-        break;
-      case 5:
-        // Index 5: Accommodation & Main Deck
-        state.openHoloModal('accommodation');
-        state.setCameraViewMode('accommodation');
-        state.setSelectedAssetId('ACCOMMODATION-MODULE');
-        import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => {
-          varunaVoice.speakCustom('Subsystem index 5: Living quarters and main deck module opened.');
-        });
-        break;
-      default:
-        break;
-    }
+    state.openHoloModal(sub.part);
+    state.setCameraViewMode(sub.part as CameraViewMode);
+    state.setSelectedAssetId(sub.asset);
+    import('../voice/VarunaVoiceSynthesizer').then(({ varunaVoice }) => varunaVoice.speakCustom(`Opening ${sub.label}.`));
+  },
+
+  gestureSelection: null,
+  setGestureSelection: (sel) => set({ gestureSelection: sel }),
+
+  cameraNudge: { zoom: 1, seq: 0 },
+  nudgeZoom: (factor) => set((s) => ({ cameraNudge: { zoom: factor, seq: s.cameraNudge.seq + 1 } })),
+
+  stepLayer: (dir) => {
+    const cur = VIEW_LAYERS.findIndex((l) => l.mode === get().cameraViewMode);
+    // From a non-layer view, "down" starts at the top layer and "up" at the bottom
+    const next = cur < 0 ? (dir > 0 ? 0 : VIEW_LAYERS.length - 1) : Math.min(VIEW_LAYERS.length - 1, Math.max(0, cur + dir));
+    if (next === cur) return;
+    set({ cameraViewMode: VIEW_LAYERS[next].mode });
   },
 
   // Varuna Voice Commander & Wake-Word Architecture

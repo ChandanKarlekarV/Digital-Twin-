@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   CloudRain,
-  CloudLightning,
   Wind,
   Waves,
   Compass,
@@ -9,15 +8,11 @@ import {
   Gauge,
   Sun,
   Cloud,
-  Eye,
   RefreshCw,
   AlertTriangle,
   Radio,
   X,
-  ChevronRight,
   ShieldAlert,
-  Droplets,
-  Activity,
   Zap,
 } from 'lucide-react';
 import { useRigStore } from '../../store/useRigStore';
@@ -28,12 +23,7 @@ import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 export const KgD6WeatherSidePanel: React.FC = () => {
   const isWeatherPanelOpen = useRigStore((s) => s.isWeatherPanelOpen);
   const setWeatherPanelOpen = useRigStore((s) => s.setWeatherPanelOpen);
-  const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
 
-  const currentFlowPower = useRigStore((s) => s.currentFlowPower);
-  const currentSpeedKnots = useRigStore((s) => s.currentSpeedKnots);
-  const currentDirectionLabel = useRigStore((s) => s.currentDirectionLabel);
-  const tidePhase = useRigStore((s) => s.tidePhase);
   const tidePhaseIndex = useRigStore((s) => s.tidePhaseIndex);
   const isDynamicTideCycling = useRigStore((s) => s.isDynamicTideCycling);
   const dynamicTideSecondsRemaining = useRigStore((s) => s.dynamicTideSecondsRemaining);

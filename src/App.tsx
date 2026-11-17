@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, Suspense, lazy } from 'react';
 import { Scene } from './components/canvas/Scene';
 import { telemetryEmitter } from './physics/TelemetryEmitter';
-import { useRigStore, CameraViewMode } from './store/useRigStore';
+import { useRigStore, CameraViewMode, VIEW_LAYERS } from './store/useRigStore';
 import { CommandDock } from './components/hud/CommandDock';
 import { TelemetryDrawer } from './components/hud/TelemetryDrawer';
 import { EmergencyIncidentPanel } from './components/hud/EmergencyIncidentPanel';
@@ -37,23 +37,20 @@ const LazyModal: React.FC<{ C: React.ComponentType; open: (s: RigState) => boole
   ) : null;
 import {
   Compass,
-  Radio,
   Eye,
   ChevronDown,
+  ChevronUp,
+  ZoomIn,
+  ZoomOut,
   FolderOpen,
-  AlertTriangle,
-  Sparkles,
-  Cpu,
   FileCheck,
   FileText,
   Wind,
   Layers,
   Scissors,
-  Video,
   Volume2,
   Mic,
   Sliders,
-  RotateCcw,
   Zap,
   Calendar,
   Database,
@@ -130,14 +127,46 @@ const SidePanelRail: React.FC = () => {
   );
 };
 
+/** Zoom and layer-by-layer view buttons (the same actions as the two-hand and thumb gestures). */
+const ViewControls: React.FC<{ right: string }> = ({ right }) => {
+  const nudgeZoom = useRigStore((s) => s.nudgeZoom);
+  const stepLayer = useRigStore((s) => s.stepLayer);
+  const mode = useRigStore((s) => s.cameraViewMode);
+  const layer = VIEW_LAYERS.findIndex((l) => l.mode === mode);
+  const btn = 'btn btn-icon';
+  return (
+    <div
+      className="absolute top-16 z-30 flex flex-col items-end gap-1.5 transition-[right] duration-300"
+      style={{ right }}
+    >
+      <div className="flex flex-col gap-1 p-1 rounded-md glass-pill">
+        <button className={btn} onClick={() => nudgeZoom(0.75)} title="Zoom in">
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        <button className={btn} onClick={() => nudgeZoom(1.33)} title="Zoom out">
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <span className="h-px bg-line mx-1" />
+        <button className={btn} onClick={() => stepLayer(-1)} disabled={layer === 0} title="Layer up">
+          <ChevronUp className="w-4 h-4" />
+        </button>
+        <button className={btn} onClick={() => stepLayer(1)} disabled={layer === VIEW_LAYERS.length - 1} title="Layer down">
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      </div>
+      <span className="px-2 py-1 rounded-md glass-pill text-[10px] text-ink-muted whitespace-nowrap">
+        {layer >= 0 ? `Layer ${layer + 1}/${VIEW_LAYERS.length} · ${VIEW_LAYERS[layer].label}` : 'Custom view'}
+      </span>
+    </div>
+  );
+};
+
 export default function App() {
   const cameraViewMode = useRigStore((s) => s.cameraViewMode);
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
   const selectedAssetId = useRigStore((s) => s.selectedAssetId);
-  const isCommandDockOpen = useRigStore((s) => s.isCommandDockOpen);
   const toggleCommandDock = useRigStore((s) => s.toggleCommandDock);
 
-  const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
   const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
@@ -394,6 +423,7 @@ export default function App() {
       </div>
 
       <SidePanelRail />
+      <ViewControls right={sidePanelOpen ? 'calc(var(--side-panel-w) + 48px)' : '48px'} />
 
       {/* ================= RIGHT SIDEBAR: SYSTEM TELEMETRY & PRODUCTION DATA ================= */}
       <TelemetryDrawer />

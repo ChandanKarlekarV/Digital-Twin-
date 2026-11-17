@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import {
   Camera,
-  Scan,
   AlertTriangle,
   FileCode,
-  SlidersHorizontal,
   Flame,
   Activity,
   Waves,
@@ -13,20 +11,16 @@ import {
   FolderOpen,
   X,
   Sparkles,
-  Cpu,
   ShieldCheck,
   Wrench,
   Sliders,
   Wind,
   Calendar,
-  Database,
   FileText,
 } from 'lucide-react';
 import {
   useRigStore,
   CameraViewMode,
-  MetoceanCondition,
-  EmergencyScenario,
 } from '../../store/useRigStore';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
@@ -41,8 +35,6 @@ export const CommandDock: React.FC = () => {
   const setCameraViewMode = useRigStore((s) => s.setCameraViewMode);
 
 
-  const metoceanCondition = useRigStore((s) => s.metoceanCondition);
-  const setMetoceanCondition = useRigStore((s) => s.setMetoceanCondition);
 
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
   const setEmergencyScenario = useRigStore((s) => s.setEmergencyScenario);
@@ -51,7 +43,6 @@ export const CommandDock: React.FC = () => {
   const setCustomObjUrl = useRigStore((s) => s.setCustomObjUrl);
 
   const togglePhysicsModal = useRigStore((s) => s.togglePhysicsModal);
-  const toggleTelemetryDrawer = useRigStore((s) => s.toggleTelemetryDrawer);
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
   const toggleWeatherPanel = useRigStore((s) => s.toggleWeatherPanel);
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);

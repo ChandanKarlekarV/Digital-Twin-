@@ -12,6 +12,8 @@ import { varunaVoice } from '../voice/VarunaVoiceSynthesizer';
 
 /** Healthy Coriolis tube frequency for KG-D6 fluids (same calibration as TelemetryEmitter) */
 const CORIOLIS_BAND_HZ: [number, number] = [715, 760];
+/** Minimum spacing between two logged events of the same kind on the same asset */
+const ANOMALY_REPEAT_MS = 10000;
 
 export class AiIngestionPipelineService {
   private static instance: AiIngestionPipelineService;
@@ -20,6 +22,7 @@ export class AiIngestionPipelineService {
   private packetCount = 0;
   private lastAlertTime = 0;
   private alertCooldownMs = 12000; // Prevent alert spamming
+  private lastLogged = new Map<string, number>();
 
   private constructor() {}
 
@@ -132,6 +135,13 @@ export class AiIngestionPipelineService {
   }
 
   private logAnomaly(event: AiAnomalyEvent): void {
+    // A condition that persists is one event, not 50 a second: log each asset+category at
+    // most once per ANOMALY_REPEAT_MS so the 500-entry log keeps its history
+    const key = `${event.asset_id}|${event.category}`;
+    const last = this.lastLogged.get(key) ?? -Infinity;
+    if (event.timestamp - last < ANOMALY_REPEAT_MS) return;
+    this.lastLogged.set(key, event.timestamp);
+
     const list = sixMonthDataEngine.getAiAnomalies();
     // Keep max 500 recent events
     if (list.length > 500) {

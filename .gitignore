@@ -35,3 +35,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# MediaPipe Hands runtime copied from node_modules by scripts/copy-mediapipe.mjs
+public/mediapipe/

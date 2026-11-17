@@ -2,16 +2,38 @@ import { TelemetryRecord, TelemetryAggregate, TelemetryTimeBucket } from '../typ
 import { sixMonthDataEngine } from './SixMonthDataEngine';
 import { coriolisEngine } from '../physics/CoriolisEngine';
 
+/** Live 50 Hz stream kept in RAM: ~57 s of all 7 assets */
+const LIVE_CAPACITY = 20000;
+/** Each asset is sampled into the history once per minute */
+const HISTORY_SAMPLE_MS = 60 * 1000;
+/** History window kept in RAM and on disk */
+const HISTORY_WINDOW_MS = 35 * 24 * 3600 * 1000;
+/** Queued history samples are written to IndexedDB in one transaction this often */
+const FLUSH_INTERVAL_MS = 5000;
+const IDB_NAME = 'varuna_telemetry_db_v3';
+const IDB_STORE = 'history_samples';
+
 /**
- * Ultra-Fast In-Memory & IndexedDB/Disk Time-Series Telemetry Engine for VARUNA-AI.
- * Optimized for 50 Hz / 100 Hz high-accuracy sampling with sub-millisecond range & aggregate queries.
+ * Three-tier time-series store for VARUNA-AI:
+ *  1. live   — fixed-size ring buffer of every 50 Hz record (O(1) insert, no array shifting)
+ *  2. history — time-sorted 15-minute seed + 1-minute live samples per asset, queried by
+ *               binary search; live data can no longer push the 5-week history out
+ *  3. disk   — IndexedDB, written in batched transactions every 5 s and restored on load,
+ *              so real samples survive a reload (the synthetic seed is never written)
  */
 class TelemetryDatabaseService {
+  /** Tier 2: time-sorted history used by every range/aggregate query */
   private inMemoryRecords: TelemetryRecord[] = [];
+  /** Tier 1: ring buffer */
+  private live: (TelemetryRecord | undefined)[] = new Array(LIVE_CAPACITY);
+  private liveHead = 0;
+  private liveSize = 0;
+  private lastHistorySample = new Map<string, number>();
+  private pendingWrites: TelemetryRecord[] = [];
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
   private db: IDBDatabase | null = null;
   private dbReadyPromise: Promise<void>;
   private listeners: Set<(record: TelemetryRecord) => void> = new Set();
-  private maxInMemorySize = 100000;
 
   constructor() {
     this.dbReadyPromise = this.initIndexedDB();
@@ -26,19 +48,22 @@ class TelemetryDatabaseService {
       return;
     }
 
+    // The v2 database re-wrote the synthetic seed on every load and grew without bound
+    try {
+      indexedDB.deleteDatabase('varuna_telemetry_db_v2');
+    } catch {
+      // ignore
+    }
+
     return new Promise((resolve) => {
-      const request = indexedDB.open('varuna_telemetry_db_v2', 2);
+      const request = indexedDB.open(IDB_NAME, 1);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('production_telemetry')) {
-          const store = db.createObjectStore('production_telemetry', {
-            keyPath: 'id',
-            autoIncrement: true,
-          });
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          // One sample per asset per minute: [asset, timestamp] is a natural unique key
+          const store = db.createObjectStore(IDB_STORE, { keyPath: ['asset_id', 'timestamp'] });
           store.createIndex('timestamp_idx', 'timestamp', { unique: false });
-          store.createIndex('asset_idx', 'asset_id', { unique: false });
-          store.createIndex('asset_timestamp_idx', ['asset_id', 'timestamp'], { unique: false });
         }
       };
 
@@ -127,11 +152,12 @@ class TelemetryDatabaseService {
           api_gravity: Number(apiGravity.toFixed(2)),
           water_cut_pct: Number(waterCutPct.toFixed(2)),
           gross_mass_rate: Number(grossMassRate.toFixed(3)),
+          // Same meaning as live records: gross = oil + water, net oil is water-free
           gross_liquid_bpd: Number(targetBpd.toFixed(1)),
-          net_oil_bpd: Number(targetBpd.toFixed(1)),
+          net_oil_bpd: Number(purifiedBpd.toFixed(1)),
           purified_oil_bpd: Number(purifiedBpd.toFixed(1)),
           produced_water_bpd: Number((targetBpd * (waterCutPct / 100)).toFixed(1)),
-          associated_gas_mmscfd: Number(((targetBpd * 480) / 1e6).toFixed(2)),
+          associated_gas_mmscfd: Number(((purifiedBpd * 480) / 1e6).toFixed(2)),
           status_flag: 0,
           drill_rpm: 120,
           drill_torque_knm: 28.4,
@@ -142,13 +168,26 @@ class TelemetryDatabaseService {
       }
     }
 
-    this.inMemoryRecords = records.sort((a, b) => a.timestamp - b.timestamp);
-
-    this.persistToIndexedDB(records).catch((err) =>
-      console.warn('Background IndexedDB sync warning:', err)
-    );
+    // Real samples recorded in earlier sessions come back from disk and merge with the seed
+    const persisted = await this.loadPersisted(startTime);
+    this.inMemoryRecords = records.concat(persisted, this.inMemoryRecords).sort((a, b) => a.timestamp - b.timestamp);
 
     return this.inMemoryRecords.length;
+  }
+
+  private loadPersisted(since: number): Promise<TelemetryRecord[]> {
+    const db = this.db;
+    if (!db) return Promise.resolve([]);
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).index('timestamp_idx').getAll(IDBKeyRange.lowerBound(since));
+        req.onsuccess = () => resolve((req.result as TelemetryRecord[]) || []);
+        req.onerror = () => resolve([]);
+      } catch {
+        resolve([]);
+      }
+    });
   }
 
   public async seedSevenDayHistory(): Promise<number> {
@@ -174,25 +213,39 @@ class TelemetryDatabaseService {
     return this.queryRange(assetId, start, end);
   }
 
-  private async persistToIndexedDB(records: TelemetryRecord[]): Promise<void> {
-    if (!this.db) return;
-    return new Promise((resolve, reject) => {
-      try {
-        const tx = this.db!.transaction('production_telemetry', 'readwrite');
-        const store = tx.objectStore('production_telemetry');
-        for (let i = 0; i < Math.min(records.length, 5000); i++) {
-          store.put(records[i]);
+  /** Writes all queued history samples in ONE transaction (instead of one write per record). */
+  private flushToIndexedDB(): void {
+    const db = this.db;
+    if (!db || this.pendingWrites.length === 0) return;
+    const batch = this.pendingWrites;
+    this.pendingWrites = [];
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      for (const r of batch) store.put(r);
+      // Drop samples older than the history window in the same transaction
+      store.index('timestamp_idx').openCursor(IDBKeyRange.upperBound(Date.now() - HISTORY_WINDOW_MS)).onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
         }
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      } catch (e) {
-        reject(e);
-      }
-    });
+      };
+      tx.onerror = () => console.warn('IndexedDB batch write failed:', tx.error);
+    } catch (err) {
+      console.warn('IndexedDB batch write failed:', err);
+    }
+  }
+
+  private ensureFlushTimer(): void {
+    if (this.flushTimer || typeof window === 'undefined') return;
+    this.flushTimer = setInterval(() => this.flushToIndexedDB(), FLUSH_INTERVAL_MS);
+    window.addEventListener('pagehide', () => this.flushToIndexedDB());
   }
 
   /**
-   * Ingest a live high-frequency record into the high-speed storage engine.
+   * Ingest one live 50 Hz record: O(1) into the ring buffer; once a minute per asset it is
+   * also appended to the sorted history and queued for the next batched disk write.
    */
   public insert(record: TelemetryRecord): void {
     if (!record.timestamp) {
@@ -202,24 +255,36 @@ class TelemetryDatabaseService {
       record.precise_time_iso = new Date(record.timestamp).toISOString();
     }
 
-    this.inMemoryRecords.push(record);
-    if (this.inMemoryRecords.length > this.maxInMemorySize) {
-      this.inMemoryRecords.splice(0, 1000); // Ring buffer pruning
+    this.live[this.liveHead] = record;
+    this.liveHead = (this.liveHead + 1) % LIVE_CAPACITY;
+    if (this.liveSize < LIVE_CAPACITY) this.liveSize++;
+
+    const last = this.lastHistorySample.get(record.asset_id) ?? 0;
+    if (record.timestamp - last >= HISTORY_SAMPLE_MS) {
+      this.lastHistorySample.set(record.asset_id, record.timestamp);
+      this.appendHistory(record);
+      this.pendingWrites.push(record);
+      this.ensureFlushTimer();
     }
 
     // Notify real-time listeners
     this.listeners.forEach((listener) => listener(record));
   }
 
-  /**
-   * Batch ingest high-frequency records.
-   */
+  /** Batch ingest (e.g. a replayed log): straight into the sorted history. */
   public insertBatch(records: TelemetryRecord[]): void {
-    for (const r of records) {
-      this.inMemoryRecords.push(r);
-    }
-    if (this.inMemoryRecords.length > this.maxInMemorySize) {
-      this.inMemoryRecords.splice(0, this.inMemoryRecords.length - this.maxInMemorySize);
+    for (const r of records) this.appendHistory(r);
+  }
+
+  /** Keeps the history sorted (live samples arrive in order, so this is an append) and bounded. */
+  private appendHistory(record: TelemetryRecord): void {
+    const h = this.inMemoryRecords;
+    if (h.length === 0 || h[h.length - 1].timestamp <= record.timestamp) h.push(record);
+    else h.splice(this.findStartIndex(record.timestamp), 0, record);
+
+    // Age out anything older than the window, in one cheap splice
+    if (h.length && h[0].timestamp < record.timestamp - HISTORY_WINDOW_MS) {
+      h.splice(0, this.findStartIndex(record.timestamp - HISTORY_WINDOW_MS));
     }
   }
 
@@ -276,6 +341,9 @@ class TelemetryDatabaseService {
     let sumGrossBpd = 0;
     let maxPressure = -Infinity;
     let minPressure = Infinity;
+    let sumPressure = 0;
+    let sumApi = 0;
+    let sumDensity = 0;
     let sumTemp = 0;
     let sumWaterCut = 0;
     let sumFOsc = 0;
@@ -317,6 +385,9 @@ class TelemetryDatabaseService {
         sumGrossBpd += rec.gross_liquid_bpd || rec.net_oil_bpd;
         if (rec.p_line_bar > maxPressure) maxPressure = rec.p_line_bar;
         if (rec.p_line_bar < minPressure) minPressure = rec.p_line_bar;
+        sumPressure += rec.p_line_bar;
+        sumApi += rec.api_gravity;
+        sumDensity += rec.corrected_density;
         sumTemp += rec.t_line_c;
         sumWaterCut += rec.water_cut_pct;
         sumFOsc += rec.f_osc_hz;
@@ -337,6 +408,9 @@ class TelemetryDatabaseService {
       avg_gross_liquid_bpd: count > 0 ? sumGrossBpd / count : 0,
       max_p_line_bar: count > 0 ? maxPressure : 0,
       min_p_line_bar: count > 0 ? minPressure : 0,
+      avg_p_line_bar: count > 0 ? sumPressure / count : 0,
+      avg_api_gravity: count > 0 ? sumApi / count : 0,
+      avg_corrected_density: count > 0 ? sumDensity / count : 0,
       avg_t_line_c: count > 0 ? sumTemp / count : 0,
       avg_water_cut_pct: count > 0 ? sumWaterCut / count : 0,
       avg_f_osc_hz: count > 0 ? sumFOsc / count : 0,
@@ -365,50 +439,39 @@ class TelemetryDatabaseService {
     const bucketDuration = (endTime - startTime) / numBuckets;
     const buckets: TelemetryTimeBucket[] = [];
 
+    // One pass over the records into per-bucket sums (was buckets x records)
+    const sums = Array.from({ length: numBuckets }, () => ({ p: 0, t: 0, f: 0, net: 0, pur: 0, wc: 0, rho: 0, tq: 0, rop: 0, n: 0 }));
+    for (const r of records) {
+      const b = Math.floor((r.timestamp - startTime) / bucketDuration);
+      if (b < 0 || b >= numBuckets) continue;
+      const s = sums[b];
+      s.p += r.p_line_bar;
+      s.t += r.t_line_c;
+      s.f += r.f_osc_hz;
+      s.net += r.net_oil_bpd;
+      s.pur += r.purified_oil_bpd || r.net_oil_bpd * (1 - r.water_cut_pct / 100);
+      s.wc += r.water_cut_pct;
+      s.rho += r.raw_density;
+      if (r.drill_torque_knm) s.tq += r.drill_torque_knm;
+      if (r.drill_rop_mhr) s.rop += r.drill_rop_mhr;
+      s.n++;
+    }
+
     for (let b = 0; b < numBuckets; b++) {
-      const bStart = startTime + b * bucketDuration;
-      const bEnd = bStart + bucketDuration;
-      const bMid = (bStart + bEnd) / 2;
-
-      let bPressure = 0;
-      let bTemp = 0;
-      let bFOsc = 0;
-      let bNetBpd = 0;
-      let bPurified = 0;
-      let bWaterCut = 0;
-      let bRawDensity = 0;
-      let bTorque = 0;
-      let bRop = 0;
-      let count = 0;
-
-      for (let i = 0; i < records.length; i++) {
-        const r = records[i];
-        if (r.timestamp >= bStart && r.timestamp < bEnd) {
-          bPressure += r.p_line_bar;
-          bTemp += r.t_line_c;
-          bFOsc += r.f_osc_hz;
-          bNetBpd += r.net_oil_bpd;
-          bPurified += r.purified_oil_bpd || (r.net_oil_bpd * (1 - r.water_cut_pct / 100));
-          bWaterCut += r.water_cut_pct;
-          bRawDensity += r.raw_density;
-          if (r.drill_torque_knm) bTorque += r.drill_torque_knm;
-          if (r.drill_rop_mhr) bRop += r.drill_rop_mhr;
-          count++;
-        }
-      }
-
-      if (count > 0) {
+      const bMid = startTime + (b + 0.5) * bucketDuration;
+      const s = sums[b];
+      if (s.n > 0) {
         buckets.push({
           timestamp: bMid,
-          p_line_bar: bPressure / count,
-          t_line_c: bTemp / count,
-          f_osc_hz: bFOsc / count,
-          net_oil_bpd: bNetBpd / count,
-          purified_oil_bpd: bPurified / count,
-          water_cut_pct: bWaterCut / count,
-          raw_density: bRawDensity / count,
-          drill_torque_knm: bTorque / count,
-          drill_rop_mhr: bRop / count,
+          p_line_bar: s.p / s.n,
+          t_line_c: s.t / s.n,
+          f_osc_hz: s.f / s.n,
+          net_oil_bpd: s.net / s.n,
+          purified_oil_bpd: s.pur / s.n,
+          water_cut_pct: s.wc / s.n,
+          raw_density: s.rho / s.n,
+          drill_torque_knm: s.tq / s.n,
+          drill_rop_mhr: s.rop / s.n,
         });
       } else if (buckets.length > 0) {
         const prev = buckets[buckets.length - 1];
@@ -419,18 +482,15 @@ class TelemetryDatabaseService {
     return buckets;
   }
 
+  /** Newest record (optionally for one asset): live ring first, then history. */
   public getLatest(assetId?: string): TelemetryRecord | null {
-    const len = this.inMemoryRecords.length;
-    if (len === 0) return null;
-
-    if (!assetId) {
-      return this.inMemoryRecords[len - 1];
+    for (let k = 1; k <= this.liveSize; k++) {
+      const r = this.live[(this.liveHead - k + LIVE_CAPACITY) % LIVE_CAPACITY];
+      if (r && (!assetId || r.asset_id === assetId)) return r;
     }
-
-    for (let i = len - 1; i >= 0; i--) {
-      if (this.inMemoryRecords[i].asset_id === assetId) {
-        return this.inMemoryRecords[i];
-      }
+    for (let i = this.inMemoryRecords.length - 1; i >= 0; i--) {
+      const r = this.inMemoryRecords[i];
+      if (!assetId || r.asset_id === assetId) return r;
     }
     return null;
   }

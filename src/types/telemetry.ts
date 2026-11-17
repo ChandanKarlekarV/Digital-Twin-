@@ -35,6 +35,9 @@ export interface TelemetryAggregate {
   avg_gross_liquid_bpd?: number;
   max_p_line_bar: number;
   min_p_line_bar: number;
+  avg_p_line_bar?: number;
+  avg_api_gravity?: number;
+  avg_corrected_density?: number;
   avg_t_line_c: number;
   avg_water_cut_pct: number;
   avg_f_osc_hz: number;

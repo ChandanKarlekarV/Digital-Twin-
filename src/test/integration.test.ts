@@ -155,7 +155,7 @@ async function runEndToEndVerification() {
     asset_id: 'TOPSIDE-DRILL-RIG',
     p_line_bar: 240,
     t_line_c: 52,
-    f_osc_hz: 1245,
+    f_osc_hz: 734,
     raw_density: 807,
     corrected_density: 807,
     api_gravity: 44.5,

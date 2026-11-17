@@ -15,9 +15,12 @@
     "test:voice": "npx tsx src/test/voiceParser.test.ts",
     "test:gestures": "npx tsx src/test/gestureClassifier.test.ts",
     "convert:model": "node --max-old-space-size=8192 scripts/convert-rig-model.mjs",
+    "postinstall": "node scripts/copy-mediapipe.mjs",
+    "prebuild": "node scripts/copy-mediapipe.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@mediapipe/hands": "0.4.1675469240",
     "@react-three/drei": "^9.121.4",
     "@react-three/fiber": "^8.17.14",
     "@tauri-apps/api": "^2.2.0",

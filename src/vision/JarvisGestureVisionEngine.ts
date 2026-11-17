@@ -25,23 +25,45 @@ import { useRigStore, RecognizedGesture } from '../store/useRigStore';
 
 export type { RecognizedGesture };
 
-const MEDIAPIPE_HANDS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240';
+/**
+ * MediaPipe Hands (open source, Apache-2.0). Served from the app itself first
+ * (public/mediapipe/hands, copied from node_modules by scripts/copy-mediapipe.mjs) so
+ * gestures work offline; the pinned CDN copy is only a fallback.
+ */
+const MEDIAPIPE_HANDS_SOURCES = ['/mediapipe/hands', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240'];
+let mediaPipeBase = MEDIAPIPE_HANDS_SOURCES[0];
 let mediaPipeLoad: Promise<void> | null = null;
 
-function loadMediaPipeHands(): Promise<void> {
-  if ((window as any).Hands) return Promise.resolve();
+function loadScript(src: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => resolve();
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(src));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function loadMediaPipeHands(): Promise<void> {
+  if ((window as any).Hands) return;
   if (!mediaPipeLoad) {
-    mediaPipeLoad = new Promise<void>((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = `${MEDIAPIPE_HANDS_CDN}/hands.js`;
-      script.crossOrigin = 'anonymous';
-      script.onload = () => resolve();
-      script.onerror = () => {
-        mediaPipeLoad = null;
-        reject(new Error('Could not load the hand-tracking model (check the internet connection), or use Demo Vision mode.'));
-      };
-      document.head.appendChild(script);
-    });
+    mediaPipeLoad = (async () => {
+      for (const base of MEDIAPIPE_HANDS_SOURCES) {
+        try {
+          await loadScript(`${base}/hands.js`);
+          mediaPipeBase = base;
+          return;
+        } catch {
+          // try the next source
+        }
+      }
+      mediaPipeLoad = null;
+      throw new Error('Could not load the hand-tracking model (run npm install, or check the internet connection), or use Demo Vision mode.');
+    })();
   }
   return mediaPipeLoad;
 }
@@ -230,7 +252,7 @@ class JarvisGestureVisionEngine {
         await loadMediaPipeHands();
         const Hands = (window as any).Hands;
         this.mediaPipeHands = new Hands({
-          locateFile: (file: string) => `${MEDIAPIPE_HANDS_CDN}/${file}`,
+          locateFile: (file: string) => `${mediaPipeBase}/${file}`,
         });
         this.mediaPipeHands.setOptions({
           maxNumHands: 2,

@@ -10,6 +10,11 @@ import { telemetryDb } from '../db/TelemetryDatabase';
 import { sixMonthDataEngine } from '../db/SixMonthDataEngine';
 import { varunaVoice } from '../voice/VarunaVoiceSynthesizer';
 
+/** Topside multiphase meter on the export line: measures the whole block's production */
+const EXPORT_METER_ID = 'TOPSIDE-MPFM-01';
+/** Solution gas-oil ratio, scf per stock-tank barrel (same as TelemetryEmitter) */
+const GAS_OIL_RATIO_SCF_BBL = 480;
+
 export class MidnightSettlementEngineService {
   private static instance: MidnightSettlementEngineService;
   private midnightTimer: NodeJS.Timeout | number | null = null;
@@ -69,25 +74,29 @@ export class MidnightSettlementEngineService {
     const startMs = targetMidnight.getTime() - 24 * 3600 * 1000;
     const endMs = targetMidnight.getTime();
 
-    // Query 24-hour aggregate telemetry from local database
-    const aggs = telemetryDb.getAggregates(null, startMs, endMs);
+    // Block production = the topside export meter, which every well's flow passes through.
+    // (Averaging all 7 meters mixed risers, manifold and export meter and double-counted.)
+    const flow = telemetryDb.getAggregates(EXPORT_METER_ID, startMs, endMs);
+    const drill = telemetryDb.getAggregates('TOPSIDE-DRILL-RIG', startMs, endMs);
+    const hasFlow = flow.record_count > 0;
 
-    // Fallback calibrated values if live buffer has insufficient duration
-    const nominalGrossBpd = aggs.avg_net_oil_bpd > 1000 ? aggs.avg_net_oil_bpd * 1.05 : 124800;
-    const avgWaterCut = aggs.avg_water_cut_pct > 0.1 ? aggs.avg_water_cut_pct : 4.8;
-    const oilPurityFraction = 1.0 - avgWaterCut / 100;
-    const purifiedBpd = Math.round(nominalGrossBpd * oilPurityFraction);
-    const purifiedBarrels = Math.round(purifiedBpd);
+    // Calibrated fallbacks only when the day has no data at all
+    const nominalGrossBpd = hasFlow ? flow.avg_gross_liquid_bpd ?? flow.avg_net_oil_bpd : 124800;
+    const avgWaterCut = hasFlow ? flow.avg_water_cut_pct : 4.8;
+    const purifiedBpd = Math.round(hasFlow ? flow.avg_purified_oil_bpd ?? flow.avg_net_oil_bpd : nominalGrossBpd * (1 - avgWaterCut / 100));
+    const purifiedBarrels = purifiedBpd;
     const grossBarrels = Math.round(nominalGrossBpd);
-    const producedWaterBpd = Math.round(nominalGrossBpd * (avgWaterCut / 100));
-    const gasMmscfd = Number(((purifiedBpd * 480) / 1000000).toFixed(2));
+    const producedWaterBpd = Math.max(0, Math.round(nominalGrossBpd - purifiedBpd));
+    const gasMmscfd = Number(((purifiedBpd * GAS_OIL_RATIO_SCF_BBL) / 1000000).toFixed(2));
 
-    const avgP = aggs.avg_t_line_c > 0 ? aggs.max_p_line_bar : 248.5;
-    const maxP = aggs.max_p_line_bar > 0 ? aggs.max_p_line_bar : 266.8;
-    const avgT = aggs.avg_t_line_c > 0 ? aggs.avg_t_line_c : 56.4;
+    const avgP = hasFlow ? flow.avg_p_line_bar ?? (flow.max_p_line_bar + flow.min_p_line_bar) / 2 : 85.0;
+    const maxP = hasFlow ? flow.max_p_line_bar : 88.0;
+    const avgT = hasFlow ? flow.avg_t_line_c : 38.0;
+    const avgApi = hasFlow && flow.avg_api_gravity ? flow.avg_api_gravity : 43.5;
+    const avgDensity = hasFlow && flow.avg_corrected_density ? flow.avg_corrected_density : 807.2;
 
-    const avgTorque = aggs.avg_drill_torque_knm || 28.4;
-    const avgRop = aggs.avg_drill_rop_mhr || 13.2;
+    const avgTorque = drill.record_count > 0 ? drill.avg_drill_torque_knm ?? 28.4 : 28.4;
+    const avgRop = drill.record_count > 0 ? drill.avg_drill_rop_mhr ?? 12.5 : 12.5;
     const drillUptime = 23.6;
     const drilledMeters = Math.round(avgRop * drillUptime);
 
@@ -96,7 +105,7 @@ export class MidnightSettlementEngineService {
     const grossValueUsd = Math.round(purifiedBarrels * brentSpotUsd);
     const grossValueInrCr = Number(((grossValueUsd * usdToInr) / 10000000).toFixed(2));
 
-    const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgP}:44.5`;
+    const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgP.toFixed(1)}:${avgApi.toFixed(1)}`;
     let hashSig = `CERT-DGH-${dateStr.replace(/-/g, '')}`;
     try {
       if (typeof btoa !== 'undefined') {
@@ -122,8 +131,8 @@ export class MidnightSettlementEngineService {
       avg_line_pressure_bar: Number(avgP.toFixed(1)),
       max_line_pressure_bar: Number(maxP.toFixed(1)),
       avg_temperature_c: Number(avgT.toFixed(1)),
-      avg_api_gravity: 44.5,
-      avg_base_density: 806.2,
+      avg_api_gravity: Number(avgApi.toFixed(2)),
+      avg_base_density: Number(avgDensity.toFixed(1)),
       avg_drill_rop_mhr: Number(avgRop.toFixed(1)),
       total_drilled_meters: drilledMeters,
       avg_drill_torque_knm: Number(avgTorque.toFixed(1)),

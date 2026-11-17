@@ -2,18 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, FileText, X } from 'lucide-react';
 import { useRigStore } from '../../store/useRigStore';
 
-/** The project deck (docs/VARUNA-AI_KG-D6_Deck.pptx), rendered slide by slide */
+/** The project deck (docs/presentation/VARUNA-AI_Governor_Deck.pptx), rendered slide by slide */
 const SLIDES = [
   'VARUNA-AI',
-  'Problem statement',
-  'Solution',
-  'Backend',
-  'What is happening',
-  'Feasibility and viability',
-  'Impact and benefits',
-  'Research and references',
+  'Why it matters',
+  'The problem',
+  'Our solution',
+  'How it works',
+  'Live demo',
+  'Real numbers',
+  'What it can change for Maharashtra',
+  'Ready for a pilot',
+  'Thank you',
+  'Sources and image credits',
 ];
-const DECK_FILE = '/deck/VARUNA-AI_KG-D6_Deck.pptx';
+const DECK_FILE = '/deck/VARUNA-AI_Governor_Deck.pptx';
 
 export const SihPresentationModal: React.FC = () => {
   const isOpen = useRigStore((s) => s.isSihModalOpen);

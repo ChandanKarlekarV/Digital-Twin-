@@ -328,7 +328,7 @@ export default function App() {
                 <MenuLabel>Data & Reports</MenuLabel>
                 <MenuItem icon={Calendar} title="Production Ledger" hint="180-day history and daily settlement" onClick={() => runMenu(() => setEodModalOpen(true))} />
                 <MenuItem icon={FileCheck} title="Compliance Report" hint="DGH / ISO audit, export as PDF or CSV" onClick={() => runMenu(() => setReportModalOpen(true))} />
-                <MenuItem icon={FileText} title="Presentation" hint="8-slide project deck" onClick={() => runMenu(() => setSihModalOpen(true))} />
+                <MenuItem icon={FileText} title="Presentation" hint="Deck for the Governor of Maharashtra" onClick={() => runMenu(() => setSihModalOpen(true))} />
                 <div className="border-t border-line mt-1 pt-1">
                   <button
                     onClick={() => runMenu(() => fileInputRef.current?.click())}

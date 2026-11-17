@@ -377,7 +377,7 @@ export const CommandDock: React.FC = () => {
 
         {/* 5. MODALS & SYSTEM INTEGRATIONS */}
         <div className="pt-2 border-t border-reliance-cyan/20 grid grid-cols-2 gap-2">
-          {/* SIH 6-Page Presentation Deck Button */}
+          {/* Presentation deck */}
           <button
             onClick={() => {
               setSihModalOpen(true);
@@ -386,7 +386,7 @@ export const CommandDock: React.FC = () => {
             className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-600/30 hover:bg-amber-600/50 text-xs font-mono text-amber-200 border border-amber-400/50 transition-all cursor-pointer shadow-amber-glow font-bold"
           >
             <FileText className="w-4 h-4 text-amber-400 animate-pulse" />
-            <span>SIH 6-Page Presentation Deck &amp; Video Demo</span>
+            <span>Presentation Deck</span>
           </button>
 
           {/* Dedicated 6-Month Database Button */}

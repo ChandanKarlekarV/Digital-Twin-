@@ -57,8 +57,19 @@ src/voice        wake word, command parser, rig Q&A, speech
 src/vision       MediaPipe hand-gesture engine
 src/components   3D scene (canvas/) and HUD panels (hud/)
 scripts          model baking (convert-rig-model, rig-pack) and MediaPipe copy
-docs             project deck (VARUNA-AI_KG-D6_Deck.pptx)
+docs/presentation  presentation package (see below)
 ```
+
+## Presentation package (`docs/presentation`)
+
+| File | Use |
+|---|---|
+| `VARUNA-AI_Governor_Deck.pptx` / `.pdf` | 16:9 projector deck, 10 slides + sources, speaker notes hold the script |
+| `VARUNA-AI_Governor_Deck_PRINT-A4.pptx` / `.pdf` | A4 landscape hard copy for the table when there is no projector |
+| `VARUNA-AI_Presentation_Script.pdf` | Five-minute script for two presenters, demo steps, extension demos, Q&A |
+| `VARUNA-AI_Poster_A2.pdf` / `.png` | A2 portrait poster |
+
+The same deck is viewable in the app (Tools → Presentation) from `public/deck/`.
 
 ## Limits
 

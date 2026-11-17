@@ -17,6 +17,8 @@ import { telemetryDb } from '../../db/TelemetryDatabase';
 import { solveNetwork } from '../../physics/KgD6FlowModel';
 import { productionAt } from '../../data/kgd6Production';
 import { useLeakStatus } from '../../services/LeakDetector';
+import { KgD6WeatherService } from '../../services/KgD6WeatherService';
+import { drillTorsionalEngine } from '../../physics/DrillTorsionalStress';
 
 export const EmergencyIncidentPanel: React.FC = () => {
   const emergencyScenario = useRigStore((s) => s.emergencyScenario);
@@ -26,8 +28,6 @@ export const EmergencyIncidentPanel: React.FC = () => {
   const nextIncidentPhase = useRigStore((s) => s.nextIncidentPhase);
   const toggleIncidentModal = useRigStore((s) => s.toggleIncidentModal);
 
-  const currentRecord = useTelemetryStore((s) => s.currentRecord);
-  const activeHydraulicResult = useTelemetryStore((s) => s.activeHydraulicResult);
   // Measured manifold pressure against today's undisturbed network (re-evaluated on every telemetry update)
   useTelemetryStore((s) => s.currentRecord);
   const manifoldNow = telemetryDb.getLatest('MANIFOLD-D6-MAIN')?.p_line_bar;
@@ -36,8 +36,28 @@ export const EmergencyIncidentPanel: React.FC = () => {
   const riserAlphaBar = telemetryDb.getLatest('RISER-ALPHA')?.p_line_bar ?? baseline['RISER-ALPHA'].pBar;
   const riserAlphaDrop = baseline['RISER-ALPHA'].pBar - riserAlphaBar;
   const leak = useLeakStatus();
-  const activeDrillResult = useTelemetryStore((s) => s.activeDrillResult);
-  const activeMultiphaseResult = useTelemetryStore((s) => s.activeMultiphaseResult);
+  const fx = (v: number | undefined, d = 1) => (v === undefined || !Number.isFinite(v) ? '—' : v.toFixed(d));
+  const gasOf = (id: string) => (telemetryDb.getLatest(id)?.associated_gas_mmscfd ?? 0) / 35.3147;
+  const drillRec = telemetryDb.getLatest('TOPSIDE-DRILL-RIG');
+  const exportRec = telemetryDb.getLatest('TOPSIDE-MPFM-01');
+  const manifoldRec = telemetryDb.getLatest('MANIFOLD-D6-MAIN');
+  const wx = KgD6WeatherService.getCachedReport();
+  const splitA = gasOf('RISER-ALPHA') / Math.max(gasOf('RISER-ALPHA') + gasOf('RISER-BRAVO'), 1e-6);
+  const drillSF = drillRec ? drillTorsionalEngine.calculate({ torqueKNm: drillRec.drill_torque_knm ?? 0, rotarySpeedRPM: drillRec.drill_rpm ?? 0 }).safetyFactor : undefined;
+  const liveRows: [string, string][] =
+    emergencyScenario === 'pipe_blockage'
+      ? [['Manifold pressure rise', `+${fx(manifoldRiseBar)} bar`], ['Riser split A / B', `${fx(splitA * 100, 0)}% / ${fx((1 - splitA) * 100, 0)}%`], ['Block gas', `${fx(gasOf('MANIFOLD-D6-MAIN'), 2)} MMSCMD`]]
+      : emergencyScenario === 'hydrate_plug'
+      ? [['Manifold temperature', `${fx(manifoldRec?.t_line_c)} °C`], ['Manifold pressure rise', `+${fx(manifoldRiseBar)} bar`], ['Water cut', `${fx(manifoldRec?.water_cut_pct)}%`]]
+      : emergencyScenario === 'drill_damage' || emergencyScenario === 'stuck_drill'
+      ? [['Rotary speed', `${fx(drillRec?.drill_rpm, 0)} RPM`], ['Torque', `${fx(drillRec?.drill_torque_knm)} kNm`], ['Yield safety factor', fx(drillSF, 2)]]
+      : emergencyScenario === 'oil_overload'
+      ? [['Export condensate', `${Math.round(exportRec?.net_oil_bpd ?? 0).toLocaleString()} bbl/d`], ['Water cut', `${fx(exportRec?.water_cut_pct)}%`]]
+      : emergencyScenario === 'weather_squall'
+      ? [['Wind (live)', wx ? `${fx(wx.windSpeedKnots)} kt, gusts ${fx(wx.windGustsKnots)} kt` : '—'], ['Waves (live)', wx ? `Hs ${fx(wx.significantWaveHeightM, 2)} m` : '—']]
+      : emergencyScenario === 'rupture'
+      ? [['Riser Alpha pressure', `${fx(riserAlphaBar)} bar (${riserAlphaDrop >= 0 ? '−' : '+'}${fx(Math.abs(riserAlphaDrop))} bar)`], ['Mass balance', leak.state === 'normal' ? 'balanced' : `${fx(leak.imbalancePct)}% missing`]]
+      : [];
 
   const prevScenario = useRef<EmergencyScenario>('none');
   const prevPhase = useRef<number>(1);
@@ -112,89 +132,13 @@ export const EmergencyIncidentPanel: React.FC = () => {
             <span className="text-white font-bold">{phaseData?.label}</span>
           </div>
 
-          {emergencyScenario === 'pipe_blockage' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">MANIFOLD ΔP SURGE:</span>
-                <span className="text-white font-bold">+{manifoldRiseBar.toFixed(1)} bar</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">CHOKE CONSTRICTION:</span>
-                <span className="text-reliance-red font-bold animate-pulse">{activeHydraulicResult?.blockageSeverityPct}%</span>
-              </div>
-            </>
-          )}
-
-          {emergencyScenario === 'drill_damage' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">DOWNHOLE TORQUE:</span>
-                <span className="text-white font-bold">{((activeDrillResult?.torqueNm || 0) / 1000).toFixed(1)} kNm</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">YIELD SAFETY FACTOR:</span>
-                <span className="text-reliance-red font-bold animate-pulse">{activeDrillResult?.safetyFactor.toFixed(2)}</span>
-              </div>
-            </>
-          )}
-
-          {emergencyScenario === 'oil_overload' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">NET OIL GATHERING:</span>
-                <span className="text-white font-bold">{Math.round(activeMultiphaseResult?.net_oil_bpd || 0).toLocaleString()} BPD</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">WATER-CUT SURGE:</span>
-                <span className="text-amber-300 font-bold">{activeMultiphaseResult?.water_cut_percentage.toFixed(1)}%</span>
-              </div>
-            </>
-          )}
-
-          {emergencyScenario === 'weather_squall' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">SIGNIFICANT WAVE HEIGHT:</span>
-                <span className="text-white font-bold">{(1.5 + incidentPhase * 1.8).toFixed(1)} m</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">STORM TIDAL CURRENT:</span>
-                <span className="text-cyan-300 font-bold">{(2.4 + incidentPhase * 1.6).toFixed(1)} kt</span>
-              </div>
-            </>
-          )}
-
-          {emergencyScenario === 'rupture' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">RISER ALPHA PRESSURE:</span>
-                <span className="text-white font-bold">
-                  {riserAlphaBar.toFixed(1)} bar ({riserAlphaDrop >= 0 ? '-' : '+'}
-                  {Math.abs(riserAlphaDrop).toFixed(1)} bar)
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">MASS BALANCE:</span>
-                <span className="text-white font-bold">
-                  {leak.state === 'normal' ? 'balanced' : `${leak.imbalancePct.toFixed(1)}% missing`}
-                </span>
-              </div>
-            </>
-          )}
-
-          {emergencyScenario === 'hydrate_plug' && (
-            <>
-              <div className="flex justify-between">
-                <span className="text-red-200">SEABED TEMP:</span>
-                <span className="text-white font-bold">{currentRecord?.t_line_c.toFixed(1)}°C (&lt; 4.0°C)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-red-200">DIFFERENTIAL ΔP:</span>
-                <span className="text-white font-bold">+38.5 bar</span>
-              </div>
-            </>
-          )}
-        </div>
+          {/* Live readings from the asset each drill affects */}
+          {liveRows.map(([label, value]) => (
+            <div key={label} className="flex justify-between">
+              <span className="text-red-200">{label}:</span>
+              <span className="text-white font-bold">{value}</span>
+            </div>
+          ))}        </div>
 
         <div className="p-2 rounded-lg bg-reliance-dark/80 border border-white/10 text-[10px] space-y-1">
           <div className="text-reliance-cyan font-bold">RECOMMENDED TACTICAL ACTION:</div>

@@ -10,6 +10,7 @@
 
 import { useRigStore, CurrentFlowPower, MetoceanCondition, TidePhase } from '../store/useRigStore';
 import { KgD6WeatherService } from '../services/KgD6WeatherService';
+import { MJ_FIELD } from '../data/kgd6Production';
 
 export interface DynamicTidePhaseDefinition {
   index: number;
@@ -35,7 +36,7 @@ export const TIDE_PHASES_SCHEDULE: DynamicTidePhaseDefinition[] = [
 /** Seawater density (kg/m³), gravity, model water depth to the wellheads/reservoir (m) */
 const RHO_SEA = 1025;
 const G = 9.81;
-const DEPTH_M = 2040;
+const DEPTH_M = MJ_FIELD.waterDepthM;
 const P_ATM_BAR = 1.01325;
 const KNOT_MS = 0.514444;
 

@@ -9,7 +9,7 @@ export interface DrillMechanicsInput {
   rotarySpeedRPM: number;    // Rotary speed (RPM)
   outerRadiusM?: number;     // Drill pipe outer radius (m, default: 0.084m = 6-5/8" pipe)
   innerRadiusM?: number;     // Drill pipe inner radius (m, default: 0.0749m = 5.901" ID)
-  drillLengthM?: number;     // Total drillstring length (m, default: 2040m)
+  drillLengthM?: number;     // Total drillstring length (m, MJ wells ~4,200 m)
   steelYieldStressMPa?: number; // S-135 grade steel yield shear stress (MPa, default: 537.5 MPa)
   isJamActive?: boolean;     // Mechanical keyseat or bit stuck flag
 }
@@ -31,7 +31,6 @@ export class DrillTorsionalStressEngine {
   private readonly DEFAULT_R_OUTER = 0.0841; // 6-5/8" OD drill pipe (0.168m dia)
   private readonly DEFAULT_R_INNER = 0.0749; // 5.901" ID (6-5/8" 27.7 ppf, 0.362" wall)
   private readonly DEFAULT_YIELD_SHEAR_MPA = 537.5; // S-135: 931 MPa tensile yield / sqrt(3) (von Mises)
-  private readonly SHEAR_MODULUS_GPA = 79.3; // High-strength steel G (GPa)
 
   public calculate(input: DrillMechanicsInput): DrillMechanicsResult {
     const rO = input.outerRadiusM || this.DEFAULT_R_OUTER;

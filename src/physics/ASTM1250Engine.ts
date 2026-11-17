@@ -135,7 +135,8 @@ export class ASTM1250Engine {
    */
   public classifyAPIGrade(api: number): string {
     if (api >= 45.0) return 'Very Light Condensate / Natural Gasoline';
-    if (api >= 31.1) return 'Light Crude Oil (KG-D6 Spec)';
+    if (api >= 40) return 'Light Condensate (KG-D6)';
+    if (api >= 31.1) return 'Light Crude Oil';
     if (api >= 22.3) return 'Medium Crude Oil';
     if (api >= 10.0) return 'Heavy Crude Oil';
     return 'Extra Heavy Crude Oil / Bitumen';

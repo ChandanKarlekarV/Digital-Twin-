@@ -191,266 +191,127 @@ export interface IncidentMetadata {
   };
 }
 
+/**
+ * Incident drills. Each phase's text describes what the twin's physics actually does in that
+ * phase (TelemetryEmitter.incidentTarget); live values appear in the panels, so the text
+ * avoids fixed numbers except where the model produces them. Phase 4 is recovery.
+ */
+const phase = (label: string, description: string, actionRecommended: string, tacticalVoiceAlert: string) => ({ label, description, actionRecommended, tacticalVoiceAlert });
+
 export const INCIDENT_SCENARIOS_CATALOG: Record<EmergencyScenario, IncidentMetadata> = {
   none: {
     id: 'none',
-    title: 'Nominal Subsea Operations',
-    shortLabel: 'ALL NOMINAL',
+    title: 'Normal operations',
+    shortLabel: 'ALL NORMAL',
     category: 'flowline',
     targetAssetId: 'MANIFOLD-D6-MAIN',
-    primaryRisk: 'Zero Active Failures',
+    primaryRisk: 'None',
     phases: {
-      1: {
-        label: 'Baseline Monitoring',
-        description: 'All 7 deepwater assets within safe operating envelope.',
-        actionRecommended: 'Maintain autonomous 10 Hz telemetry polling.',
-        tacticalVoiceAlert: 'All subsea telemetry nominal. Operating envelope verified.',
-      },
-      2: { label: 'Baseline', description: 'Nominal', actionRecommended: 'None', tacticalVoiceAlert: 'Nominal.' },
-      3: { label: 'Baseline', description: 'Nominal', actionRecommended: 'None', tacticalVoiceAlert: 'Nominal.' },
-      4: { label: 'Baseline', description: 'Nominal', actionRecommended: 'None', tacticalVoiceAlert: 'Nominal.' },
+      1: phase('Monitoring', 'All metered assets inside their operating envelope.', 'Keep monitoring.', 'All readings normal.'),
+      2: phase('Monitoring', 'Normal.', 'None.', 'Normal.'),
+      3: phase('Monitoring', 'Normal.', 'None.', 'Normal.'),
+      4: phase('Monitoring', 'Normal.', 'None.', 'Normal.'),
     },
   },
   pipe_blockage: {
     id: 'pipe_blockage',
-    title: 'Severe Oil Flow Congestion & Paraffin Wax / Hydrate Blockage',
+    title: 'Riser Alpha flow restriction',
     shortLabel: 'PIPE CONGESTION',
     category: 'flowline',
     targetAssetId: 'MANIFOLD-D6-MAIN',
-    primaryRisk: 'Rapid ΔP backpressure spike, flow starvation, upstream pipe overpressure rupture',
+    primaryRisk: 'Back-pressure on the wells, lost production, low-flow cooling toward hydrate conditions',
     phases: {
-      1: {
-        label: 'Phase 1: Incipient Wax/Hydrate Deposition',
-        description: 'Viscous boundary layer thickening detected. ΔP differential begins creeping (+8 bar). Flow velocity decreases by 12%.',
-        actionRecommended: 'Initiate continuous DTS thermal scanning and prepare chemical injection skid.',
-        tacticalVoiceAlert: 'Warning. Subsea pipeline flow constriction detected at Gathering Header. Viscous drag increasing.',
-      },
-      2: {
-        label: 'Phase 2: Flow Choking & Slugging Acceleration',
-        description: 'Effective hydraulic diameter reduced by 55%. Differential ΔP surges to +28 bar. Multiphase slugging observed.',
-        actionRecommended: 'Throttle topside choke to 40%. Prime subsea MEG (methanol) injection pumps.',
-        tacticalVoiceAlert: 'Caution. Severe flow choking in subsea pipeline. Manifold differential pressure exceeding operating threshold.',
-      },
-      3: {
-        label: 'Phase 3: Critical Flowline Occlusion (ESD Trip)',
-        description: 'Near-total solid blockage. Differential ΔP reaches critical +62 bar. Downstream flow drops below cutoff.',
-        actionRecommended: 'Emergency automated SSIV closure. Maximum rate MEG dosing injected into blocked section.',
-        tacticalVoiceAlert: 'Emergency Shutdown. Total pipe blockage detected. Downstream starvation. Initiating automated MEG injection.',
-      },
-      4: {
-        label: 'Phase 4: Chemical Remediation & Controlled Depressurization',
-        description: 'Hydrate dissociation in progress. Differential pressure returning to safe margin (+6 bar).',
-        actionRecommended: 'Gradually reopen SSIV actuator. Resume standard gathering protocol.',
-        tacticalVoiceAlert: 'Remediation successful. Hydrate plug dissociated. Line pressure stabilizing toward nominal.',
-      },
+      1: phase('Phase 1: Restriction building', 'Friction in riser Alpha rises. Manifold pressure starts to climb and flow shifts to riser Bravo.', 'Watch manifold pressure and the riser flow split; prepare chemical injection.', 'Warning. Flow restriction building in riser Alpha.'),
+      2: phase('Phase 2: Flow choking', 'The wells feel the back-pressure and block flow falls. Riser Bravo carries most of the gas.', 'Reduce well chokes; prime MEG injection.', 'Caution. Riser Alpha is choking. Manifold pressure rising.'),
+      3: phase('Phase 3: Near-total blockage', 'Riser Alpha almost closed: manifold pressure about 45 bar above normal, and the low flow cools the line toward hydrate conditions.', 'Inject MEG at maximum rate; consider shutting in riser Alpha.', 'Emergency. Riser Alpha nearly blocked. Manifold pressure critical.'),
+      4: phase('Phase 4: Restriction clearing', 'The restriction eases: pressure falls back and flow returns to both risers.', 'Reopen gradually and confirm the riser split is balanced.', 'Restriction clearing. Pressures returning to normal.'),
     },
   },
   drill_damage: {
     id: 'drill_damage',
-    title: 'Drillstring Damage, Diamond Cutter Shearing & Downhole Jam',
+    title: 'Drill bit damage and stick-slip',
     shortLabel: 'DRILL DAMAGE',
     category: 'drilling',
     targetAssetId: 'DRILL-SYSTEM',
-    primaryRisk: 'Downhole drill bit shearing, drill pipe twist-off, severe borehole casing wall damage',
+    primaryRisk: 'Bit cutter damage, torque overload, drill-string twist-off',
     phases: {
-      1: {
-        label: 'Phase 1: High-Frequency Torsional Oscillation',
-        description: 'Stick-slip torsional vibrations detected. Downhole torque oscillates ±14 kNm. Bit tooth wear index elevated.',
-        actionRecommended: 'Reduce top-drive rotary speed from 120 RPM to 80 RPM. Monitor WOB (Weight on Bit).',
-        tacticalVoiceAlert: 'Warning. Stick-slip downhole torsional oscillation detected on rotary drillstring.',
-      },
-      2: {
-        label: 'Phase 2: Drill Bit Cutter Degradation & Over-Torque',
-        description: 'PDC diamond cutters sheared. Torque spikes to 46 kNm (>38 kNm limit). Standpipe pressure surges.',
-        actionRecommended: 'Disengage top-drive auto-feed. Prepare emergency jar firing.',
-        tacticalVoiceAlert: 'Caution. Downhole torque overload at 46 kilonewton-meters. Drill bit degradation critical.',
-      },
-      3: {
-        label: 'Phase 3: Catastrophic Drill Jam & Motor Stall (ESD Trip)',
-        description: 'Rotary drill core 100% stalled in bedrock borehole. Torsional shear stress at 94% yield strength.',
-        actionRecommended: 'Automated top-drive power cutout executed. Hydraulic slips engaged to prevent pipe loss.',
-        tacticalVoiceAlert: 'Emergency. Drill string mechanical jam. Top-drive auto-cutout executed to prevent pipe twist-off.',
-      },
-      4: {
-        label: 'Phase 4: Torque Relief & Controlled Bit Extraction',
-        description: 'Back-off torque applied. Drill string cleared from borehole obstruction.',
-        actionRecommended: 'Inspect drill assembly via acoustic DAS. Replace damaged cutter head before spudding.',
-        tacticalVoiceAlert: 'Drill string freed. Torque released. Rig floor secured for cutter head inspection.',
-      },
+      1: phase('Phase 1: Stick-slip', 'Torque oscillates at the string’s first torsional mode (about 0.19 Hz) and rotary speed starts to fall.', 'Reduce rotary speed and weight on bit.', 'Warning. Stick-slip vibration on the drill string.'),
+      2: phase('Phase 2: Over-torque', 'Torque swings grow as the bit loses cutters; rotary speed falls further.', 'Pick up off bottom; prepare to trip out.', 'Caution. Drill string torque overload.'),
+      3: phase('Phase 3: Stall', 'The bit stalls (0 RPM) and the string holds stall torque.', 'Cut top-drive power; set slips.', 'Emergency. Drill string stalled. Top drive cut out.'),
+      4: phase('Phase 4: Released', 'Torque relieved; rotation resumes at reduced speed.', 'Trip out and replace the bit.', 'Drill string free. Rotation restored at reduced speed.'),
     },
   },
   oil_overload: {
     id: 'oil_overload',
-    title: 'Topside Separator Flooding & Multiphase Oil Overload Surge',
-    shortLabel: 'OIL OVERLOAD',
+    title: 'Condensate surge into the separator',
+    shortLabel: 'LIQUID SURGE',
     category: 'topside',
-    targetAssetId: 'TOPSIDE-DRILL-RIG',
-    primaryRisk: 'Separator vessel liquid level saturation (>95%), gas carry-under, flare header overpressure',
+    targetAssetId: 'TOPSIDE-MPFM-01',
+    primaryRisk: 'Separator high-high level, liquid carry-over into gas compression',
     phases: {
-      1: {
-        label: 'Phase 1: Reservoir Multiphase Surge Inflow',
-        description: 'Production flow rate increases abruptly from 34,200 to 48,500 BPD. Separator vessel liquid level at 76%.',
-        actionRecommended: 'Ramp secondary separation train. Monitor Coriolis MPFM density calibration.',
-        tacticalVoiceAlert: 'Advisory. Multiphase reservoir surge detected. Gathering rate rising to 48,500 barrels per day.',
-      },
-      2: {
-        label: 'Phase 2: Liquid Level Saturation & High Water-Cut Spike',
-        description: 'Net production surges to 58,000 BPD. Water-cut spikes to 18.5%. First-stage separator vessel liquid level at 88%.',
-        actionRecommended: 'Step down wellhead choke positions by 25%. Divert surplus crude to buffer tanks.',
-        tacticalVoiceAlert: 'Warning. First stage separator liquid level approaching high-high limit. Water cut elevated.',
-      },
-      3: {
-        label: 'Phase 3: High-High Level Trip & Safety Relief Lift (ESD Trip)',
-        description: 'Separator vessel level exceeds 95%. Liquid carry-over into gas compressors detected. Pressure relief valve lifts.',
-        actionRecommended: 'Automated platform ESD trip. Wellhead wing valves throttled to prevent environmental flare overfill.',
-        tacticalVoiceAlert: 'Emergency Trip. Topside separator vessel flooding. Automated wellhead choke reduction engaged.',
-      },
-      4: {
-        label: 'Phase 4: Vessel Degassing & Controlled Flow Normalization',
-        description: 'Buffer storage absorption complete. Liquid levels normalized to 58%. Production stabilized at 36,000 BPD.',
-        actionRecommended: 'Reset separator level alarms. Balance multi-train throughput.',
-        tacticalVoiceAlert: 'Separator liquid levels restored to nominal. Topside process units stabilized.',
-      },
+      1: phase('Phase 1: Liquid surge', 'Condensate arriving topside rises about 25% above the published rate.', 'Watch separator level; check meter density.', 'Advisory. Condensate surge arriving topside.'),
+      2: phase('Phase 2: High level, more water', 'Liquids about 50% above normal and water cut climbing.', 'Choke back the wells; route surplus to storage.', 'Warning. Separator level high and water cut rising.'),
+      3: phase('Phase 3: High-high level', 'Liquids about 80% above normal; risk of carry-over into the gas train.', 'Trip the wells to protect the compressors.', 'Emergency. Separator high-high level.'),
+      4: phase('Phase 4: Normalising', 'Liquids back to about 10% above normal; water cut falling.', 'Reset level alarms; balance the trains.', 'Separator levels back to normal.'),
     },
   },
   weather_squall: {
     id: 'weather_squall',
-    title: 'Sudden Cyclonic Weather Squall & Extreme Metocean Tidal Shift',
+    title: 'Severe weather squall',
     shortLabel: 'WEATHER SQUALL',
     category: 'metocean',
     targetAssetId: 'TOPSIDE-DRILL-RIG',
-    primaryRisk: 'Significant wave height surge (8.8m), extreme hull hydrodynamic drag, mooring line tension breach',
+    primaryRisk: 'Crane and helideck operations outside limits; wave loading on the jacket and risers',
     phases: {
-      1: {
-        label: 'Phase 1: Barometric Drop & Wind Bearing Rotation',
-        description: 'Barometric pressure drops 18 hPa. Wind shifts rapidly from NE to SW with gusts reaching 42 kt.',
-        actionRecommended: 'Engage platform dynamic positioning thrusters. Alert topside crane operators.',
-        tacticalVoiceAlert: 'Metocean advisory. Sudden cyclonic squall inbound. Wind bearing shifting Southwest at 42 knots.',
-      },
-      2: {
-        label: 'Phase 2: Significant Wave Height Surge & Tidal Current Drag',
-        description: 'Wave height rises to 5.8m. Subsea current surges to 4.8 kt. Platform pitch/roll reaches ±3.5 degrees.',
-        actionRecommended: 'Suspend crane lifts. Lower helipad windsocks and secure subsea deployment winches.',
-        tacticalVoiceAlert: 'Caution. Metocean conditions deteriorating to Monsoon status. Wave heights climbing past 5.8 meters.',
-      },
-      3: {
-        label: 'Phase 3: Cyclonic Sea State & Mooring Overload (ESD Trip)',
-        description: 'Extreme wave heights peak at 8.8m. Current speed reaches 8.2 kt. Mooring line #3 tension reaches 82% MBL.',
-        actionRecommended: 'Execute deepwater disconnect readiness. Ballast hull to storm draft (-21m).',
-        tacticalVoiceAlert: 'Severe Weather Alert. Cyclonic conditions active. Wave heights 8.8 meters. Rig ballasted to storm draft.',
-      },
-      4: {
-        label: 'Phase 4: Squall Dissipation & Subsea Hydrodynamic Stabilization',
-        description: 'Wind speed easing to 18 kt. Significant wave height subsiding to 2.1m. Mooring tensions balanced.',
-        actionRecommended: 'Perform subsea riser flex-joint visual inspection. Resume full production.',
-        tacticalVoiceAlert: 'Weather squall has passed. Metocean currents returning to moderate baseline. Platform secure.',
-      },
+      1: phase('Phase 1: Squall approaching', 'Pressure falling and wind backing; gusts approaching crane limits (35–38 kt).', 'Warn crane operators; check the live weather panel.', 'Weather advisory. Squall approaching.'),
+      2: phase('Phase 2: Wind and waves building', 'Gusts above crane limits and waves building.', 'Stop crane lifts; close the helideck.', 'Caution. Crane lifts stopped. Helideck closed.'),
+      3: phase('Phase 3: Storm peak', 'Peak wind and waves; the hologram shows the platform response.', 'Secure loose equipment; keep personnel inside.', 'Severe weather. Personnel to stay inside.'),
+      4: phase('Phase 4: Passing', 'Wind and sea easing.', 'Inspect risers and cranes before resuming.', 'Squall passing. Inspect before resuming work.'),
     },
   },
   rupture: {
     id: 'rupture',
-    title: 'Subsea Production Riser Catastrophic Rupture & Leak',
-    shortLabel: 'PIPE RUPTURE',
+    title: 'Riser Alpha loss of containment',
+    shortLabel: 'RISER LEAK',
     category: 'flowline',
     targetAssetId: 'RISER-ALPHA',
-    primaryRisk: 'Massive line decompression (-68 bar), seawater ingress, environmental hydrocarbon discharge',
+    primaryRisk: 'Gas and condensate released to sea from riser Alpha',
     phases: {
-      1: {
-        label: 'Phase 1: Wall Thinning & Micro-Fissure Burst',
-        description: 'Acoustic DAS burst spike at 84 dB. Localized pressure dip of -12 bar detected.',
-        actionRecommended: 'Verify optical fiber DAS anomaly location on Riser Alpha.',
-        tacticalVoiceAlert: 'Warning. Micro-fissure acoustic signature detected along subsea riser hang-off.',
-      },
-      2: {
-        label: 'Phase 2: Rapid Decompression & Seawater Intrusion',
-        description: 'Pressure drops -42 bar. Water-cut spikes to 48% due to deepwater hydrostatic ingress.',
-        actionRecommended: 'Prepare Subsea Isolation Valve (SSIV) actuation.',
-        tacticalVoiceAlert: 'Caution. Rapid decompression on Riser Alpha. Seawater ingress detected.',
-      },
-      3: {
-        label: 'Phase 3: Catastrophic Riser Shear (ESD Trip)',
-        description: 'Full pipe wall breach. Line pressure crashes to 18 bar. Acoustic emission exceeds 104 dB.',
-        actionRecommended: 'Immediate ESD-1 subsea isolation. Close wellhead subsea wing valves.',
-        tacticalVoiceAlert: 'Emergency. Catastrophic subsea riser rupture. Automated subsea isolation valve tripped.',
-      },
-      4: {
-        label: 'Phase 4: Complete Wellhead Isolation & Pressure Containment',
-        description: 'SSIV closed. Leak isolated to containment sector. Surface sheen containment deployed.',
-        actionRecommended: 'Dispatch ROV (Remotely Operated Vehicle) for subsea clamp installation.',
-        tacticalVoiceAlert: 'Riser isolated. Subsea containment established. Zero active blowout flow.',
-      },
+      1: phase('Phase 1: Small leak', 'About 2% of riser Alpha’s flow escapes. The mass balance starts to drift; only the leak detector can see it.', 'Watch the mass-balance panel.', 'Advisory. Mass balance drifting on the riser section.'),
+      2: phase('Phase 2: Leak growing', 'About 6% escapes. Riser Alpha pressure falls below the model and the mass-balance alarm trips.', 'Confirm with subsea leak sensors or an ROV; prepare SSIV closure.', 'Warning. Leak detected on riser Alpha.'),
+      3: phase('Phase 3: Major leak', 'About 15% of riser Alpha’s flow is lost.', 'Close the riser Alpha subsea isolation valve.', 'Emergency. Major leak on riser Alpha. Close the isolation valve.'),
+      4: phase('Phase 4: Isolated', 'SSIV closed: riser Alpha is isolated and all flow goes through riser Bravo.', 'Send an ROV to inspect and clamp the riser.', 'Riser Alpha isolated. Flow diverted to riser Bravo.'),
     },
   },
   hydrate_plug: {
     id: 'hydrate_plug',
-    title: 'Cryogenic Seabed Hydrate Ice Crystallization',
+    title: 'Hydrate forming in the manifold',
     shortLabel: 'HYDRATE PLUG',
     category: 'wellhead',
-    targetAssetId: 'XT-WELLHEAD-02',
-    primaryRisk: 'Cryogenic temperature (<3.5°C) combined with high pressure forming solid methane hydrate ice',
+    targetAssetId: 'MANIFOLD-D6-MAIN',
+    primaryRisk: 'Solid gas hydrate blocking the manifold at high pressure and low temperature',
     phases: {
-      1: {
-        label: 'Phase 1: Thermal Boundary Layer Subcooling',
-        description: 'Wellhead seabed fluid temperature drops to 4.8°C. Hydrate subcooling envelope reached.',
-        actionRecommended: 'Activate subsea heating trace elements on wellhead tree.',
-        tacticalVoiceAlert: 'Advisory. Seabed flowline entering hydrate formation thermodynamic envelope.',
-      },
-      2: {
-        label: 'Phase 2: Hydrate Crystal Slurry Nucleation',
-        description: 'Crystalline hydrate slurries forming. Fluid temperature drops to 3.2°C. Pressure differential rises +18 bar.',
-        actionRecommended: 'Initiate continuous chemical methanol (MEG) dosing at 15 L/min.',
-        tacticalVoiceAlert: 'Caution. Solid hydrate crystals nucleating in wellhead choke valve.',
-      },
-      3: {
-        label: 'Phase 3: Solid Hydrate Blockage Lockout (ESD Trip)',
-        description: 'Solid methane hydrate ice plug completely occluding flowline. Temperature 2.6°C. ΔP at +44 bar.',
-        actionRecommended: 'Isolate upstream tree. Ramp high-pressure thermodynamic MEG chemical melt.',
-        tacticalVoiceAlert: 'Emergency Trip. Solid hydrate ice plug confirmed. Chemical dissolution sequence active.',
-      },
-      4: {
-        label: 'Phase 4: Hydrate Melting & Flow Path Restoration',
-        description: 'Hydrate ice melted via MEG injection. Fluid temperature restored to 14.5°C. Full bore flow restored.',
-        actionRecommended: 'Normalize continuous thermodynamic chemical injection rate.',
-        tacticalVoiceAlert: 'Hydrate plug completely dissolved. Full wellhead flow bore restored.',
-      },
+      1: phase('Phase 1: Hydrate starting', 'Restriction growing in the manifold with free water arriving; flow falls and the lines cool.', 'Start MEG injection.', 'Advisory. Hydrate risk in the manifold.'),
+      2: phase('Phase 2: Slurry', 'Restriction tightens; well-head pressures rise as flow falls.', 'Increase MEG dosing.', 'Caution. Hydrate restriction growing.'),
+      3: phase('Phase 3: Plug', 'Manifold close to blocked; wells near shut-in pressure.', 'Isolate the wells; depressurise and dose MEG.', 'Emergency. Hydrate plug in the manifold.'),
+      4: phase('Phase 4: Melted', 'Plug dissolving; flow and temperature recovering.', 'Reduce MEG to maintenance rate.', 'Hydrate plug cleared. Flow recovering.'),
     },
   },
   stuck_drill: {
     id: 'stuck_drill',
-    title: 'Mechanical Drill Pipe Keyseat Jam & Over-Torque',
+    title: 'Stuck drill pipe',
     shortLabel: 'STUCK DRILL',
     category: 'drilling',
     targetAssetId: 'DRILL-SYSTEM',
-    primaryRisk: 'Differential sticking in subterranean formation, rotational lockup, drillstring twist-off',
+    primaryRisk: 'Differential sticking, rotational lock-up, twist-off',
     phases: {
-      1: {
-        label: 'Phase 1: Drag Force Creep & RPM Fluctuation',
-        description: 'Rotary torque rising (+8 kNm). Overpull force of 40 MT registered on derrick load cells.',
-        actionRecommended: 'Circulate drilling mud at maximum flow rate to clear borehole cuttings.',
-        tacticalVoiceAlert: 'Advisory. Borehole drag force increasing on drill assembly.',
-      },
-      2: {
-        label: 'Phase 2: Rotational Drag Overload',
-        description: 'Torque reaches 42 kNm. Standpipe pressure increases +32 bar due to mud annulus restriction.',
-        actionRecommended: 'Reciprocate drillstring while applying left-hand torque back-off.',
-        tacticalVoiceAlert: 'Warning. High borehole mechanical resistance. Torque exceeding nominal threshold.',
-      },
-      3: {
-        label: 'Phase 3: Mechanical Keyseat Jam (ESD Trip)',
-        description: 'Complete mechanical lock. RPM drops to zero. Top drive motor exceeds overload trip current.',
-        actionRecommended: 'Trip top-drive breaker. Engage hydraulic jarring tool with 120 MT upward impact.',
-        tacticalVoiceAlert: 'Emergency. Drill string mechanically locked. Automated motor cutout active.',
-      },
-      4: {
-        label: 'Phase 4: Jar Impact Release & Borehole Clearance',
-        description: 'Downhole jarring successful. Drill pipe freed. Rotation restored at 60 RPM.',
-        actionRecommended: 'Perform wiper trip to ream tight borehole section.',
-        tacticalVoiceAlert: 'Drill string successfully freed from borehole keyseat. Rotational drive restored.',
-      },
+      1: phase('Phase 1: Drag rising', 'Rotary speed falling and torque oscillating as drag builds.', 'Circulate at full rate to clean the hole.', 'Advisory. Drag increasing on the drill string.'),
+      2: phase('Phase 2: Overload', 'Speed falls further; torque swings grow.', 'Work the pipe; apply back-off torque.', 'Warning. Drill string torque above normal.'),
+      3: phase('Phase 3: Stuck', 'Rotation stops (0 RPM) at stall torque.', 'Cut the top drive; fire the jars.', 'Emergency. Drill string stuck. Top drive cut out.'),
+      4: phase('Phase 4: Freed', 'Pipe freed; rotation restored at reduced speed.', 'Ream the tight section before drilling on.', 'Drill string freed. Rotation restored.'),
     },
   },
 };
-
 export interface RigAssetInfo {
   id: string;
   name: string;
@@ -463,11 +324,11 @@ export interface RigAssetInfo {
 export const ASSET_CATALOG: Record<string, RigAssetInfo> = {
   'TOPSIDE-DRILL-RIG': {
     id: 'TOPSIDE-DRILL-RIG',
-    name: 'Reliance KG-D6 Semi-Submersible Platform',
+    name: 'KG-D6 production platform',
     category: 'topside',
     depthMeters: 0,
     position: [0, 8, 0],
-    description: 'Deepwater Semi-Submersible Production Hub with Integrated Process Modules & Mezzanine Decks',
+    description: 'Fixed production platform with process modules, cranes, helideck and drilling derrick',
   },
   'DRILL-SYSTEM': {
     id: 'DRILL-SYSTEM',
@@ -483,15 +344,15 @@ export const ASSET_CATALOG: Record<string, RigAssetInfo> = {
     category: 'topside',
     depthMeters: 0,
     position: [-12, 18, 0],
-    description: 'Pedestal-mounted electro-hydraulic lattice cranes rated for 150 MT subsea deployment and topside supply handling',
+    description: 'Two pedestal deck cranes for supply and equipment handling'
   },
   'PILLAR-FOUNDATION': {
     id: 'PILLAR-FOUNDATION',
-    name: 'Buoyant Stability Columns & Submerged Pontoons',
+    name: 'Support legs & foundation',
     category: 'topside',
     depthMeters: -5,
     position: [0, -5, 0],
-    description: 'Four high-strength submerged stability columns providing dynamic hydro-static buoyancy and mooring tension',
+    description: 'Four steel jacket legs carrying the topside to the seabed foundation'
   },
   'RISER-ALPHA': {
     id: 'RISER-ALPHA',
@@ -499,23 +360,23 @@ export const ASSET_CATALOG: Record<string, RigAssetInfo> = {
     category: 'riser',
     depthMeters: -8,
     position: [0, -6, 0],
-    description: 'High-pressure flexible multi-phase dynamic production risers linking subsea manifolds to topside separation units',
+    description: 'Two production risers carrying gas and condensate from the subsea manifold to the topside'
   },
   'MANIFOLD-D6-MAIN': {
     id: 'MANIFOLD-D6-MAIN',
     name: 'Subsea Production Manifold Hub D6-M1',
     category: 'seabed',
-    depthMeters: -1020,
+    depthMeters: -1000,
     position: [0, -10.5, 0],
-    description: '4-Slot high-pressure dual-header subsea gathering manifold rated at 690 bar (10,000 psi) with electro-hydraulic choke valves',
+    description: 'Subsea gathering manifold commingling the wells before the risers'
   },
   'SUBSEA-BEDROCK': {
     id: 'SUBSEA-BEDROCK',
-    name: 'Subterranean KG-D6 Geological Reservoir',
+    name: 'Reservoir and wells',
     category: 'seabed',
-    depthMeters: -2040,
+    depthMeters: -4200,
     position: [0, -35, 0],
-    description: 'Deepwater Miocene turbidite sandstone formation and downhole borehole casing spanning down to 2,040 meters subsea depth',
+    description: 'HPHT gas-condensate reservoir; MJ field wells reach about 4,200 m below sea level'
   },
 };
 
@@ -709,19 +570,22 @@ export const useRigStore = create<RigState>((set, get) => ({
   isAutoSimulatingPhases: false,
 
   setEmergencyScenario: (scenario, phase = 1) => {
-    // If setting a weather squall, update metocean state directly
+    // A squall drill holds the storm current (pausing the live feed); ending it resumes live data
     if (scenario === 'weather_squall') {
       set({
         emergencyScenario: scenario,
         incidentPhase: phase,
         metoceanCondition: 'cyclonic',
-        currentFlowPower: 'extreme',
-        currentSpeedKnots: 8.2,
+        currentFlowPower: 'storm',
+        currentSpeedKnots: 3.5,
+        isDynamicTideCycling: false,
       });
     } else {
+      const wasSquall = get().emergencyScenario === 'weather_squall';
       set({
         emergencyScenario: scenario,
         incidentPhase: phase,
+        ...(wasSquall ? { isDynamicTideCycling: true, metoceanCondition: 'calm' as MetoceanCondition } : {}),
       });
     }
   },
@@ -744,9 +608,9 @@ export const useRigStore = create<RigState>((set, get) => ({
 
   toggleAutoSimulatePhases: () => set((s) => ({ isAutoSimulatingPhases: !s.isAutoSimulatingPhases })),
 
-  // Water Current, Tides & Flow Dynamics (Default: Moderate NE flow at 2.4 kt)
+  // Water current (replaced within seconds by the live Open-Meteo feed)
   currentFlowPower: 'moderate',
-  currentSpeedKnots: 2.4,
+  currentSpeedKnots: 1.2,
   currentDirectionDeg: 45,
   currentDirectionLabel: 'NE (045°)',
   tidePhase: 'flood',
@@ -755,28 +619,29 @@ export const useRigStore = create<RigState>((set, get) => ({
   dynamicTideSecondsRemaining: 60,
 
   setCurrentFlowPower: (power) => {
-    let speed = 2.4;
+    // Surface-current regimes for the block (same as the tidal fallback in DynamicTideEngine)
+    let speed = 1.2;
     let metocean: MetoceanCondition = 'calm';
     let tide: TidePhase = 'flood';
 
     if (power === 'slow') {
-      speed = 0.6;
+      speed = 0.3;
       metocean = 'calm';
       tide = 'slack';
     } else if (power === 'moderate') {
-      speed = 2.4;
+      speed = 1.2;
       metocean = 'calm';
       tide = 'flood';
     } else if (power === 'fast') {
-      speed = 4.6;
+      speed = 2.0;
       metocean = 'monsoon';
       tide = 'flood';
     } else if (power === 'extreme') {
-      speed = 8.2;
+      speed = 2.8;
       metocean = 'cyclonic';
       tide = 'spring_surge';
     } else if (power === 'storm') {
-      speed = 8.8;
+      speed = 3.5;
       metocean = 'cyclonic';
       tide = 'spring_surge';
     }
@@ -794,16 +659,16 @@ export const useRigStore = create<RigState>((set, get) => ({
     let power: CurrentFlowPower = 'moderate';
     let metocean: MetoceanCondition = 'calm';
 
-    if (speed < 1.2) {
+    if (speed < 0.75) {
       power = 'slow';
       metocean = 'calm';
-    } else if (speed < 3.5) {
+    } else if (speed < 1.6) {
       power = 'moderate';
       metocean = 'calm';
-    } else if (speed < 6.5) {
+    } else if (speed < 2.4) {
       power = 'fast';
       metocean = 'monsoon';
-    } else if (speed < 8.5) {
+    } else if (speed < 3.2) {
       power = 'extreme';
       metocean = 'cyclonic';
     } else {
@@ -1222,7 +1087,7 @@ export const useRigStore = create<RigState>((set, get) => ({
 
   voiceStatus: {
     isSpeaking: false,
-    lastMessage: 'VARUNA-AI Online. Subsea monitoring active at 2,040m depth.',
+    lastMessage: 'VARUNA-AI online. Monitoring the KG-D6 block.',
     timestamp: Date.now(),
   },
   setVoiceStatus: (status) =>

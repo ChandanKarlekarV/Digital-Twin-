@@ -148,6 +148,8 @@ export interface Disturbance {
   flowFactor?: number;
   /** Fraction (0-1) of riser Alpha's flow lost to sea above its riser-base meter (loss of containment) */
   leakFraction?: number;
+  /** Multiplies the condensate rate (liquid surge) */
+  liquidFactor?: number;
 }
 
 const liquids = (block: BlockProduction, share: number) => {
@@ -225,7 +227,7 @@ export function solveNetwork(block: BlockProduction, d: Disturbance = {}): Recor
   }
   q *= d.flowFactor ?? 1;
   const n = networkAt(q, d);
-  const b = { ...block, gasMmscmd: q, liquidsBpd: block.liquidsBpd * (q / qPub) };
+  const b = { ...block, gasMmscmd: q, liquidsBpd: block.liquidsBpd * (q / qPub) * (d.liquidFactor ?? 1) };
 
   const node = (id: string, p: number, t: number, share: number, pipeD: number, vertical: boolean): AssetState => {
     const l = liquids(b, share);

@@ -1,5 +1,6 @@
 import { useRigStore, EmergencyScenario, IncidentPhase, INCIDENT_SCENARIOS_CATALOG } from '../store/useRigStore';
-import { useTelemetryStore } from '../store/useTelemetryStore';
+import { telemetryDb } from '../db/TelemetryDatabase';
+import { KgD6WeatherService } from '../services/KgD6WeatherService';
 
 export interface ElevenLabsVoiceOption {
   id: string;
@@ -225,51 +226,54 @@ class VarunaVoiceSynthesizer {
     }, 450);
   }
 
-  /**
-   * Speak a concise tactical subsea diagnostic for the selected asset
-   */
+  /** Spoken summary of the clicked asset, from its newest live reading (no fixed claims) */
   public speakDiagnostic(assetId: string): void {
     this.playSonarPing(920, 0.1);
-
-    const record = useTelemetryStore.getState().currentRecord;
-    const pVal = record ? Math.round(record.p_line_bar) : 242;
-    const bpdVal = record ? Math.round(record.net_oil_bpd).toLocaleString() : '34,200';
-
-    const rpm = record?.drill_rpm ?? 120;
-    const torque = (record?.drill_torque_knm ?? 28.4).toFixed(1);
-
-    let message = '';
+    const f = (v: number | undefined, d = 1) => (v === undefined || !Number.isFinite(v) ? 'unavailable' : v.toLocaleString('en-US', { maximumFractionDigits: d }));
+    const gas = (id: string) => f(((telemetryDb.getLatest(id)?.associated_gas_mmscfd ?? NaN) / 35.3147), 1);
+    const w = KgD6WeatherService.getCachedReport();
+    const flowLine = (id: string, name: string) => {
+      const r = telemetryDb.getLatest(id);
+      return r
+        ? `${name}: ${f(r.p_line_bar)} bar, ${f(r.t_line_c)} degrees, ${gas(id)} million standard cubic metres of gas and ${f(r.net_oil_bpd, 0)} barrels of condensate a day.`
+        : `${name}: no reading yet.`;
+    };
+    let message: string;
     switch (assetId) {
-      case 'DRILL-SYSTEM':
-        message = `Here's the drill string. It's turning at ${rpm} RPM with about ${torque} kNm of torque. Everything looks normal.`;
+      case 'DRILL-SYSTEM': {
+        const r = telemetryDb.getLatest('TOPSIDE-DRILL-RIG');
+        message = r
+          ? `Drill string: ${f(r.drill_rpm, 0)} RPM, ${f(r.drill_torque_knm)} kilonewton metres of torque, drilling ${f(r.drill_rop_mhr)} metres an hour.`
+          : 'Drill string: no reading yet.';
         break;
+      }
       case 'CRANE-SYSTEM':
-        message = `These are the pedestal cranes. Hydraulic pressure is steady at 210 bar, and they're rated for 150 tonnes.`;
+        message = w
+          ? `Cranes: wind is ${f(w.windSpeedKnots)} knots, gusting ${f(w.windGustsKnots)}. ${w.windGustsKnots < 35 ? 'Inside the crane wind limits.' : 'Above the crane wind limits: stop lifting.'}`
+          : 'Cranes: live wind not loaded yet.';
         break;
       case 'PILLAR-FOUNDATION':
-        message = `This is the jacket and its support legs. Load is balanced across all four columns, and the structure is stable.`;
+        message = w
+          ? `Support legs: current ${f(w.oceanCurrentSpeedKt)} knots, significant wave height ${f(w.significantWaveHeightM)} metres.`
+          : 'Support legs: live sea state not loaded yet.';
         break;
       case 'RISER-ALPHA':
       case 'RISER-BRAVO':
-      case 'SUBSEA-PIPES':
-        message = `This is the production riser. Line pressure is ${pVal} bar, and it's carrying about ${bpdVal} BPD. Wall integrity is good.`;
+        message = flowLine(assetId, assetId === 'RISER-ALPHA' ? 'Riser Alpha' : 'Riser Bravo');
         break;
       case 'MANIFOLD-D6-MAIN':
       case 'XT-WELLHEAD-01':
       case 'XT-WELLHEAD-02':
-        message = `You're looking at the subsea manifold. Header pressure is ${pVal} bar, gathering about ${bpdVal} BPD. All branch valves are open and healthy.`;
+        message = flowLine('MANIFOLD-D6-MAIN', 'Subsea manifold');
         break;
       case 'SUBSEA-BEDROCK':
-        message = `This is the seabed and the rock below it. The reservoir sits around two thousand metres down, and the borehole casing is holding well.`;
+        message = 'Reservoir: the MJ field wells reach about 4,200 metres below sea level in 700 to 1,200 metres of water.';
         break;
-      case 'TOPSIDE-DRILL-RIG':
       default:
-        message = `This is the KG-D6 platform. Line pressure is ${pVal} bar, and all topside systems are running normally.`;
-        break;
+        message = flowLine('TOPSIDE-MPFM-01', 'Platform export');
     }
     this.speakCustom(message);
   }
-
   /** Two-note rising chime (~150 ms) acknowledging the wake word. */
   public playWakeChime(): void {
     if (this.isMuted) return;

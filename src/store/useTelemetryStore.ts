@@ -5,7 +5,11 @@ import { CoriolisCalculationResult, coriolisEngine } from '../physics/CoriolisEn
 import { MultiphaseDeconvolutionResult, multiphaseCutEngine } from '../physics/MultiphaseCut';
 import { HydraulicCalculationResult, darcyWeisbachEngine } from '../physics/DarcyWeisbachHydraulics';
 import { DrillMechanicsResult, drillTorsionalEngine } from '../physics/DrillTorsionalStress';
-import { useRigStore } from './useRigStore';
+import { condensateDensity, CONDENSATE_RHO_15C, gasDensity, GAS_RHO_STD } from '../physics/KgD6FlowModel';
+import { telemetryDb } from '../db/TelemetryDatabase';
+
+/** Inside diameters of each metered line, m (design assumptions, as in KgD6FlowModel) */
+const PIPE_ID: Record<string, number> = { 'RISER-ALPHA': 0.3048, 'RISER-BRAVO': 0.3048, 'MANIFOLD-D6-MAIN': 0.4064, 'XT-WELLHEAD-01': 0.2032, 'XT-WELLHEAD-02': 0.2032, 'TOPSIDE-MPFM-01': 0.3048 };
 
 interface TelemetryState {
   currentRecord: TelemetryRecord | null;
@@ -51,7 +55,6 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   updateTelemetry: (raw, filtered) => {
     // Compute line-by-line physics derivations
     const active = filtered; // Filtered is default authoritative state
-    const { emergencyScenario, incidentPhase } = useRigStore.getState();
 
     const coriolisRes = coriolisEngine.computeDensityFromFrequency(
       active.f_osc_hz,
@@ -62,33 +65,35 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       active.t_line_c,
       active.p_line_bar
     );
+    // Same chain as the flow computer: in-situ condensate density from ASTM D1250 forward
     const multiphaseRes = multiphaseCutEngine.deconvolveFlow(
       coriolisRes.temp_compensated_density_kg_m3,
-      astmRes.rho_base * 0.98, // In-situ expanded oil
+      condensateDensity(active.t_line_c, active.p_line_bar),
       active.gross_mass_rate,
-      astmRes.rho_base
+      CONDENSATE_RHO_15C
     );
 
-    // Calculate Hydraulic pipe parameters
-    const isBlockage = emergencyScenario === 'pipe_blockage' || emergencyScenario === 'hydrate_plug';
-    const blockageRatio = isBlockage ? Math.min(0.92, 0.2 + incidentPhase * 0.22) : 0.0;
+    // Pipe hydraulics of the gas-condensate mixture in this asset's line (no-slip density,
+    // gas viscosity). Restrictions are already in the network physics, so none is added here.
+    const gasKgS = ((active.associated_gas_mmscfd ?? 0) / 35.3147) * 1e6 * GAS_RHO_STD / 86400;
+    const gasM3S = gasKgS / gasDensity(active.p_line_bar, active.t_line_c);
+    const liqM3S = active.gross_mass_rate / Math.max(coriolisRes.temp_compensated_density_kg_m3, 1);
+    const mixKgS = gasKgS + active.gross_mass_rate;
     const hydraulicRes = darcyWeisbachEngine.calculate({
-      massRateKgS: active.gross_mass_rate,
-      densityKgM3: coriolisRes.temp_compensated_density_kg_m3,
-      blockageRatio,
+      massRateKgS: mixKgS,
+      densityKgM3: mixKgS / Math.max(gasM3S + liqM3S, 1e-6),
+      pipeDiameterM: PIPE_ID[active.asset_id] ?? 0.3048,
+      pipeLengthM: 1000,
+      viscosityPaS: 2.0e-5,
     });
 
-    // Calculate Drill Mechanics parameters
-    const isDrillIssue = emergencyScenario === 'drill_damage' || emergencyScenario === 'stuck_drill';
-    const baseTorque = 28.4;
-    const addedTorque = isDrillIssue ? incidentPhase * 6.5 : 0;
-    const isJam = isDrillIssue && incidentPhase >= 3;
+    // Drill mechanics from the newest drill-string reading
+    const drill = active.asset_id === 'TOPSIDE-DRILL-RIG' ? active : telemetryDb.getLatest('TOPSIDE-DRILL-RIG');
     const drillRes = drillTorsionalEngine.calculate({
-      torqueKNm: baseTorque + addedTorque,
-      rotarySpeedRPM: isJam ? 0 : Math.max(0, 120 - (isDrillIssue ? incidentPhase * 30 : 0)),
-      isJamActive: isJam,
+      torqueKNm: drill?.drill_torque_knm ?? 28.4,
+      rotarySpeedRPM: drill?.drill_rpm ?? 120,
+      isJamActive: (drill?.drill_rpm ?? 120) === 0,
     });
-
     set((state) => {
       const activeRecord = state.displayFilterMode === 'kalman' ? filtered : raw;
       const newHistory = [...state.historyBuffer, activeRecord];

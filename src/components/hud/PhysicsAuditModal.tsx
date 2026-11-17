@@ -386,7 +386,7 @@ Net_Standard_Oil_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd || 0)},Bar
 
                   <div className="pt-2 border-t border-white/10">
                     <div className="text-[11px] font-mono text-reliance-textMuted mb-1">
-                      Net Dry Oil Mass Flow Rate:
+                      Net Condensate Mass Flow Rate:
                     </div>
                     <KaTeXBlock math={`\\dot{m}_{\\text{net\\_oil}} = \\dot{m}_{\\text{total}} \\times \\left[1 - \\left(\\text{WC} \\cdot \\frac{\\rho_{\\text{water}}}{\\rho_{\\text{mix}}}\\right)\\right] = ${netMass}\\,\\text{kg/s}`} />
                   </div>
@@ -443,10 +443,10 @@ Net_Standard_Oil_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd || 0)},Bar
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-reliance-cyan/20 bg-reliance-navy/70 flex items-center justify-between text-xs font-mono text-reliance-textMuted shrink-0">
-          <span>MATHEMATICAL KERNEL: RELIANCE SUBSEA CYBER-PHYSICAL SUITE v2.0</span>
+          <span>Values from the selected asset's live meter record</span>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-300">10 Hz LIVE REACTIVE SOLVER</span>
+            <span className="text-emerald-300">Live · updates 25 times a second</span>
           </div>
         </div>
       </div>

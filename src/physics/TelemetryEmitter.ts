@@ -77,43 +77,56 @@ interface Incident {
   dWC: number;
   rupture: number;
   rpm: number;
+  liquid: number;
+  stickSlip: number;
 }
-const CALM: Incident = { flow: 1, kRiserA: 1, kManifold: 1, dWC: 0, rupture: 0, rpm: DRILL.rpm };
+const CALM: Incident = { flow: 1, kRiserA: 1, kManifold: 1, dWC: 0, rupture: 0, rpm: DRILL.rpm, liquid: 1, stickSlip: 0 };
 
-/** Target disturbance for an incident drill phase (1-4) */
+/**
+ * Target disturbance for an incident drill phase (1-4). Phases 1-3 escalate; phase 4 is
+ * the recovery the incident catalog describes (restriction clearing, riser isolated,
+ * drill string freed...). Flow and pressure follow from the network physics.
+ */
 function incidentTarget(scenario: string, phase: number): Incident {
   const i = { ...CALM };
-  const ph = Math.max(1, Math.min(4, phase));
+  const ph = Math.max(1, Math.min(4, phase)) - 1;
   switch (scenario) {
-    case 'pipe_blockage': // restriction in riser Alpha: its friction rises, block flow falls
-      i.kRiserA = [4, 15, 60, 400][ph - 1]; // flow and pressures follow from the well deliverability
+    case 'pipe_blockage': // restriction in riser Alpha
+      i.kRiserA = [4, 15, 60, 2][ph];
       break;
-    case 'hydrate_plug': // hydrate building in the manifold; free water arrives with it
-      i.kManifold = [3, 10, 40, 250][ph - 1];
-      i.dWC = 3.5 * ph;
+    case 'hydrate_plug': // hydrate in the manifold; free water arrives with it
+      i.kManifold = [3, 10, 40, 1.5][ph];
+      i.dWC = [3.5, 7, 10.5, 2][ph];
       break;
-    case 'rupture': // loss of containment in riser Alpha: this share of its flow escapes to sea
-      i.rupture = [0.02, 0.06, 0.15, 0.4][ph - 1];
+    case 'rupture': // loss of containment in riser Alpha; phase 4 = SSIV closed, riser isolated
+      i.rupture = [0.02, 0.06, 0.15, 0][ph];
+      i.kRiserA = [1, 1, 1, 1e5][ph];
+      break;
+    case 'oil_overload': // condensate surge into the topside separator
+      i.liquid = [1.25, 1.5, 1.8, 1.1][ph];
+      i.dWC = [2, 6, 12, 2][ph];
       break;
     case 'stuck_drill':
     case 'drill_damage':
-      i.rpm = Math.max(0, DRILL.rpm - 32 * ph);
+      i.rpm = [96, 64, 0, 60][ph];
+      i.stickSlip = [0.25, 0.5, 0.75, 0.1][ph];
       break;
   }
   return i;
 }
 
 const STATUS: Record<string, (ph: number) => number> = {
-  pipe_blockage: (ph) => (ph >= 3 ? 2 : 1),
-  hydrate_plug: (ph) => (ph >= 3 ? 2 : 3),
+  pipe_blockage: (ph) => (ph === 3 ? 2 : ph === 4 ? 0 : 1),
+  hydrate_plug: (ph) => (ph === 3 ? 2 : ph === 4 ? 0 : 3),
   rupture: () => 0, // no flag from the drill itself: the mass-balance detector must find it
-  stuck_drill: (ph) => (ph >= 3 ? 4 : 1),
-  drill_damage: (ph) => (ph >= 3 ? 4 : 1),
-};
-const AFFECTS: Record<string, string[]> = {
+  oil_overload: (ph) => (ph === 3 ? 2 : ph === 4 ? 0 : 1),
+  stuck_drill: (ph) => (ph === 3 ? 4 : ph === 4 ? 0 : 1),
+  drill_damage: (ph) => (ph === 3 ? 4 : ph === 4 ? 0 : 1),
+};const AFFECTS: Record<string, string[]> = {
   pipe_blockage: ['RISER-ALPHA', 'MANIFOLD-D6-MAIN'],
   hydrate_plug: ['MANIFOLD-D6-MAIN', 'XT-WELLHEAD-01'],
   rupture: ['RISER-ALPHA', 'MANIFOLD-D6-MAIN'],
+  oil_overload: ['TOPSIDE-MPFM-01'],
   stuck_drill: [DRILL_ASSET],
   drill_damage: [DRILL_ASSET],
 };
@@ -199,10 +212,13 @@ class TelemetryEmitterService {
     return STORE_HZ;
   }
 
-  /** Runs the fixed steps owed since the last wake-up (capped at 0.25 s after a stall) */
+  /**
+   * Runs the fixed steps owed since the last wake-up. Background tabs only wake about once a
+   * second, so up to 2 s is caught up (~400 steps, ~12 ms); longer stalls skip ahead.
+   */
   private pump(): void {
     const now = performance.now();
-    this.acc = Math.min(this.acc + (now - this.lastWall) / 1000, 0.25);
+    this.acc = Math.min(this.acc + (now - this.lastWall) / 1000, 2);
     this.lastWall = now;
     while (this.acc >= DT) {
       this.acc -= DT;
@@ -237,6 +253,7 @@ class TelemetryEmitterService {
     const d: Disturbance = {
       flowFactor: this.incident.flow,
       leakFraction: this.incident.rupture,
+      liquidFactor: this.incident.liquid,
       kFactor: { 'RISER-ALPHA': this.incident.kRiserA, 'MANIFOLD-D6-MAIN': this.incident.kManifold },
     };
     const block = productionAt();
@@ -305,7 +322,7 @@ class TelemetryEmitterService {
     // Drilling: torque, ROP and standpipe pressure from the drill-string model
     const rpm = this.incident.rpm;
     const dState = drillState(rpm, DRILL.wobKn);
-    const stuck = scenario === 'stuck_drill' || scenario === 'drill_damage' ? phase / 4 : 0;
+    const stuck = this.incident.stickSlip;
     // Stick-slip: torsional oscillation at the string's first mode, growing with the drill phase
     const torqueTrue = dState.torqueKnm * (1 + 0.25 * stuck * Math.sin(2 * Math.PI * STICK_SLIP_HZ * this.simTime));
     const torque = this.drillSensors.torque.step(torqueTrue, dt);

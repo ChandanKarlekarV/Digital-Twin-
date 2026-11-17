@@ -124,7 +124,7 @@ export function answerRigQuestion(raw: string, parsed: ParsedVoiceCommand | null
   if (metric === 'tide' || metric === 'quake' || metric === 'fx') return liveAnswer(metric);
   if (metric === 'status') return rigStatus();
   if (metric === 'about') return ABOUT;
-  if (metric === 'depth') return 'The twin models 2,040 metres from sea level to the reservoir, the depth of the drill string and wells.';
+  if (metric === 'depth') return 'The MJ field lies in 700 to 1,200 metres of water, and its wells reach about 4,200 metres below sea level. The twin models 1,000 metres of water.';
 
   const asset = assetFor(text, parsed) ?? (metric === 'drill' ? { id: 'TOPSIDE-DRILL-RIG', name: 'the drill system' } : metric === 'flow' || metric === 'gas' ? { id: 'TOPSIDE-MPFM-01', name: 'the topside export meter' } : { id: 'MANIFOLD-D6-MAIN', name: 'the subsea manifold' });
   if ('pipeOnly' in asset) {

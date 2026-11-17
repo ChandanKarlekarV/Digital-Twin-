@@ -217,11 +217,11 @@ export const CommandDock: React.FC = () => {
 
           <div className="grid grid-cols-5 gap-1 mb-2">
             {[
-              { id: 'slow', label: 'SLOW', sub: '0.6 kt' },
-              { id: 'moderate', label: 'MOD', sub: '2.4 kt' },
-              { id: 'fast', label: 'FAST', sub: '4.6 kt' },
-              { id: 'extreme', label: 'SURGE', sub: '8.2 kt' },
-              { id: 'storm', label: 'STORM', sub: '8.8 kt' },
+              { id: 'slow', label: 'SLOW', sub: '0.3 kt' },
+              { id: 'moderate', label: 'MOD', sub: '1.2 kt' },
+              { id: 'fast', label: 'FAST', sub: '2.0 kt' },
+              { id: 'extreme', label: 'SURGE', sub: '2.8 kt' },
+              { id: 'storm', label: 'STORM', sub: '3.5 kt' },
             ].map((p) => {
               const isActive = currentFlowPower === p.id;
               return (

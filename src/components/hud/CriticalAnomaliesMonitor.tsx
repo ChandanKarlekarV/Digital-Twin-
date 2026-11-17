@@ -9,6 +9,7 @@ import {
   Scale,
 } from 'lucide-react';
 import { useLeakStatus, leakDetector } from '../../services/LeakDetector';
+import { telemetryDb } from '../../db/TelemetryDatabase';
 import {
   useRigStore,
   EmergencyScenario,
@@ -74,26 +75,26 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
   const quickAlertItems = [
     {
       id: 'pipe_blockage' as EmergencyScenario,
-      label: 'Pressure fluctuation',
-      sub: 'Choke / Blockage ΔP',
+      label: 'Line pressure',
+      sub: 'Selected asset',
       icon: Gauge,
       val: currentRecord ? `${currentRecord.p_line_bar.toFixed(1)} bar` : '254.2 bar',
       isTriggered: emergencyScenario === 'pipe_blockage' || emergencyScenario === 'rupture',
     },
     {
       id: 'hydrate_plug' as EmergencyScenario,
-      label: 'Temperature warning',
-      sub: 'Cryogenic Seabed (<4°C)',
+      label: 'Line temperature',
+      sub: 'Selected asset',
       icon: Thermometer,
       val: currentRecord ? `${currentRecord.t_line_c.toFixed(1)} °C` : '48.6 °C',
       isTriggered: emergencyScenario === 'hydrate_plug',
     },
     {
       id: 'stuck_drill' as EmergencyScenario,
-      label: 'Signal loss',
-      sub: 'Drillstring Torque Load',
+      label: 'Drill torque',
+      sub: 'Drill string',
       icon: Radio,
-      val: emergencyScenario === 'stuck_drill' ? '42.0 kNm' : '28.4 kNm',
+      val: `${(telemetryDb.getLatest('TOPSIDE-DRILL-RIG')?.drill_torque_knm ?? 0).toFixed(1)} kNm`,
       isTriggered: emergencyScenario === 'stuck_drill' || emergencyScenario === 'drill_damage',
     },
   ];

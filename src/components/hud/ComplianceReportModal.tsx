@@ -31,34 +31,36 @@ export const ComplianceReportModal: React.FC = () => {
   };
 
   const handleDownloadCsv = () => {
-    const csvContent = `data:text/csv;charset=utf-8,Section,Parameter,Observed_Value,Units,Compliance_Standard,Status
-ASSET_INFO,Asset_Name,${assetInfo?.name || selectedAssetId},N/A,ISO 14224,VERIFIED
-ASSET_INFO,Field_Location,Reliance KG-D6 Deepwater Basin,Coordinates: 16°18'00"N 82°20'00"E (Block KG-DWN-98/3),DGH India,VERIFIED
-ASSET_INFO,Water_Depth,2040,meters,Subsea Deepwater Class,VERIFIED
-METROLOGY,Oscillation_Frequency,${currentRecord?.f_osc_hz.toFixed(2)},Hz,API MPMS 5.6,COMPLIANT
-METROLOGY,Resonant_Period,${activeCoriolisResult?.period_us.toFixed(2)},microseconds,API MPMS 5.6,COMPLIANT
-METROLOGY,Temperature_Comp_Density,${activeCoriolisResult?.temp_compensated_density_kg_m3.toFixed(2)},kg/m3,ASTM D1250,COMPLIANT
-METROLOGY,Correction_CTL,${activeAstmResult?.ctl.toFixed(6)},factor,ASTM D1250-04,COMPLIANT
-METROLOGY,Correction_CPL,${activeAstmResult?.cpl.toFixed(6)},factor,ASTM D1250-04,COMPLIANT
-METROLOGY,Standard_Base_Density,${activeAstmResult?.rho_base.toFixed(2)},kg/m3,ASTM D1250,COMPLIANT
-METROLOGY,Standard_API_Gravity,${activeAstmResult?.api_gravity.toFixed(2)},deg_API,ASTM D1250 / API MPMS 11.1,COMPLIANT
-HYDRAULICS,Pipe_Flow_Velocity,${activeHydraulicResult?.flowVelocityMS.toFixed(3)},m/s,Darcy-Weisbach,COMPLIANT
-HYDRAULICS,Reynolds_Number,${activeHydraulicResult?.reynoldsNumber},Re,Darcy-Weisbach,COMPLIANT
-HYDRAULICS,Friction_Factor,${activeHydraulicResult?.frictionFactor.toFixed(5)},f_D,Haaland Formula,COMPLIANT
-HYDRAULICS,Pressure_Drop_DeltaP,${activeHydraulicResult?.pressureDropBar.toFixed(2)},bar,Darcy-Weisbach,COMPLIANT
-DRILLING,Drill_Torque,${activeDrillResult?.torqueNm.toFixed(0)},Nm,API Spec 5DP,COMPLIANT
-DRILLING,Torsional_Shear_Stress,${activeDrillResult?.torsionalShearStressMPa.toFixed(2)},MPa,API Spec 5DP,COMPLIANT
-DRILLING,Yield_Safety_Factor,${activeDrillResult?.safetyFactor.toFixed(3)},ratio,API Spec 5DP,COMPLIANT
-MULTIPHASE,Water_Cut_Percentage,${activeMultiphaseResult?.water_cut_percentage.toFixed(2)},%,API MPMS 20.1,COMPLIANT
-MULTIPHASE,Net_Standard_Oil_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd || 0)},Barrels/Day,API MPMS 11.1,COMPLIANT
+    // Status says where each value comes from; the twin does not certify compliance
+    const csvContent = `Section,Parameter,Value,Units,Method_Standard,Source
+ASSET_INFO,Asset_Name,${assetInfo?.name || selectedAssetId},N/A,ISO 14224,TWIN
+ASSET_INFO,Field_Location,KG-D6 block KG-DWN-98/3,16.30N 82.33E,DGH India,PUBLISHED
+ASSET_INFO,Water_Depth,700-1200,meters,MJ field (operator data),PUBLISHED
+METROLOGY,Oscillation_Frequency,${currentRecord?.f_osc_hz.toFixed(2)},Hz,API MPMS 5.6,MEASURED
+METROLOGY,Resonant_Period,${activeCoriolisResult?.period_us.toFixed(2)},microseconds,API MPMS 5.6,COMPUTED
+METROLOGY,Temperature_Comp_Density,${activeCoriolisResult?.temp_compensated_density_kg_m3.toFixed(2)},kg/m3,ASTM D1250,COMPUTED
+METROLOGY,Correction_CTL,${activeAstmResult?.ctl.toFixed(6)},factor,ASTM D1250-04,COMPUTED
+METROLOGY,Correction_CPL,${activeAstmResult?.cpl.toFixed(6)},factor,ASTM D1250-04,COMPUTED
+METROLOGY,Standard_Base_Density,${activeAstmResult?.rho_base.toFixed(2)},kg/m3,ASTM D1250,COMPUTED
+METROLOGY,Standard_API_Gravity,${activeAstmResult?.api_gravity.toFixed(2)},deg_API,ASTM D1250 / API MPMS 11.1,COMPUTED
+HYDRAULICS,Pipe_Flow_Velocity,${activeHydraulicResult?.flowVelocityMS.toFixed(3)},m/s,Darcy-Weisbach,COMPUTED
+HYDRAULICS,Reynolds_Number,${activeHydraulicResult?.reynoldsNumber},Re,Darcy-Weisbach,COMPUTED
+HYDRAULICS,Friction_Factor,${activeHydraulicResult?.frictionFactor.toFixed(5)},f_D,Haaland Formula,COMPUTED
+HYDRAULICS,Pressure_Drop_DeltaP,${activeHydraulicResult?.pressureDropBar.toFixed(2)},bar,Darcy-Weisbach,COMPUTED
+DRILLING,Drill_Torque,${activeDrillResult?.torqueNm.toFixed(0)},Nm,API Spec 5DP,COMPUTED
+DRILLING,Torsional_Shear_Stress,${activeDrillResult?.torsionalShearStressMPa.toFixed(2)},MPa,API Spec 5DP,COMPUTED
+DRILLING,Yield_Safety_Factor,${activeDrillResult?.safetyFactor.toFixed(3)},ratio,API Spec 5DP,COMPUTED
+MULTIPHASE,Water_Cut_Percentage,${activeMultiphaseResult?.water_cut_percentage.toFixed(2)},%,API MPMS 20.1,COMPUTED
+MULTIPHASE,Net_Condensate_BPD,${Math.round(activeMultiphaseResult?.net_oil_bpd || 0)},Barrels/Day,API MPMS 11.1,COMPUTED
 `;
-    const encodedUri = encodeURI(csvContent);
+    const url = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `RELIANCE_KGD6_COMPLIANCE_AUDIT_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (

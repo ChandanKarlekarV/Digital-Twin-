@@ -35,7 +35,7 @@ export const HolographicTargetPointer: React.FC = () => {
     () => [
       {
         id: 'helipad',
-        label: 'CAP 437 HELIDECK',
+        label: 'HELIDECK',
         category: 'topside',
         center: new THREE.Vector3(-22.0, 32.4, -3.2),
         radius: 12.0,
@@ -43,7 +43,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'crane1',
-        label: 'PORT CRANE 1 (LATTICE BOOM)',
+        label: 'CRANE 1 (LATTICE BOOM)',
         category: 'topside',
         center: new THREE.Vector3(-3.9, 33.1, 8.5),
         radius: 14.0,
@@ -51,7 +51,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'crane2',
-        label: 'STARBOARD CRANE 2 (PEDESTAL)',
+        label: 'CRANE 2 (PEDESTAL)',
         category: 'topside',
         center: new THREE.Vector3(-9.9, 28.4, -9.7),
         radius: 12.0,
@@ -59,7 +59,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'command_dock',
-        label: 'TACTICAL COMMAND DOCK BRIDGE',
+        label: 'COMMAND DOCK',
         category: 'bridge',
         center: new THREE.Vector3(0.0, 16.0, 0.0),
         radius: 15.0,
@@ -83,7 +83,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe1',
-        label: 'SUBSEA PIPE 1 (RISER ALPHA)',
+        label: 'PIPE 1 (RISER ALPHA)',
         category: 'subsea',
         center: new THREE.Vector3(-12.0, -18.0, 18.0),
         radius: 9.0,
@@ -91,7 +91,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe2',
-        label: 'SUBSEA PIPE 2 (RISER BRAVO)',
+        label: 'PIPE 2 (RISER BRAVO)',
         category: 'subsea',
         center: new THREE.Vector3(12.0, -18.0, 18.0),
         radius: 9.0,
@@ -99,7 +99,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe3',
-        label: 'SUBSEA PIPE 3 (EXPORT FLOWLINE)',
+        label: 'PIPE 3 (INFIELD FLOWLINE 1)',
         category: 'subsea',
         center: new THREE.Vector3(-12.0, -18.0, -18.0),
         radius: 9.0,
@@ -107,7 +107,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe4',
-        label: 'SUBSEA PIPE 4 (GAS INJECTION)',
+        label: 'PIPE 4 (INFIELD FLOWLINE 2)',
         category: 'subsea',
         center: new THREE.Vector3(12.0, -18.0, -18.0),
         radius: 9.0,
@@ -115,7 +115,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe5',
-        label: 'SUBSEA PIPE 5 (NORTH-WEST HEADER)',
+        label: 'PIPE 5 (INFIELD FLOWLINE 3)',
         category: 'subsea',
         center: new THREE.Vector3(-28.0, -16.0, 0.0),
         radius: 9.0,
@@ -123,7 +123,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe6',
-        label: 'SUBSEA PIPE 6 (SOUTH-EAST HEADER)',
+        label: 'PIPE 6 (INFIELD FLOWLINE 4)',
         category: 'subsea',
         center: new THREE.Vector3(28.0, -16.0, 0.0),
         radius: 9.0,
@@ -131,7 +131,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe7',
-        label: 'SUBSEA PIPE 7 (WELLHEAD 07 TRUNK)',
+        label: 'PIPE 7 (INFIELD FLOWLINE 5)',
         category: 'subsea',
         center: new THREE.Vector3(0.0, -16.0, -28.0),
         radius: 9.0,
@@ -139,7 +139,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe8',
-        label: 'SUBSEA PIPE 8 (WELLHEAD 08 TRUNK)',
+        label: 'PIPE 8 (INFIELD FLOWLINE 6)',
         category: 'subsea',
         center: new THREE.Vector3(0.0, -16.0, 28.0),
         radius: 9.0,
@@ -147,7 +147,7 @@ export const HolographicTargetPointer: React.FC = () => {
       },
       {
         id: 'pipe9',
-        label: 'SUBSEA PIPE 9 (CORE GATHERING HEADER)',
+        label: 'PIPE 9 (MANIFOLD HEADER)',
         category: 'subsea',
         center: new THREE.Vector3(0.0, -15.5, 0.0),
         radius: 9.0,

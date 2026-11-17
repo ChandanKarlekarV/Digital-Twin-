@@ -1,81 +1,68 @@
-# VARUNA-AI | Reliance KG-D6 Subsea Digital Twin & Edge AI Dashboard
+# VARUNA-AI · KG-D6 Digital Twin
 
-> **Visual Analytics & Real-Time Underwater Network Assessment AI (VARUNA-AI)**  
-> High-Fidelity Cyber-Physical Subsea Digital Twin for the Reliance KG-D6 Deepwater Block (Krishna Godavari Basin, Bay of Bengal).
+A browser-based holographic digital twin of the Reliance KG-D6 deepwater gas block
+(Krishna-Godavari basin, Bay of Bengal), with a voice assistant and hand-gesture control.
 
----
+## Run it
 
-## ⚡ Quick Start: One-Click Install & Run
-
-### Option 1: Double-Click Launcher (Windows)
-Double-click **[`install-and-run.bat`](install-and-run.bat)**.
-* Automatically verifies Node.js runtime.
-* Automatically installs all dependencies (`npm install`).
-* Automatically builds the production bundle with GLSL shaders (`npm run build`).
-* Launches the hardware-accelerated, borderless native desktop window.
-
-### Option 2: PowerShell
-```powershell
-.\install-and-run.ps1
-```
-
-### Option 3: Terminal / CLI
 ```bash
-# 1. Install dependencies
-npm install
-
-# 2. Build production assets
-npm run build
-
-# 3. Launch native desktop application
-npm start
+npm install      # also copies the offline MediaPipe hand-tracking model into public/
+npm run dev      # http://localhost:1420
+npm run build    # production build in dist/ (deployed by Vercel)
+npm test         # voice, gestures, physics, leak detection and integration suites
 ```
 
-For hot-reload development mode:
-```bash
-npm run dev
+Windows shortcuts: `install-and-run.bat` / `install-and-run.ps1`, or `npm start` to serve the built app locally.
+
+## What is real and what is modelled
+
+| Data | Source |
+|---|---|
+| Gas and oil + condensate production | Reliance quarterly results (latest: Q2 FY27, 24.0 MMSCMD, 15,903 bbl/d) — `src/data/kgd6Production.ts` |
+| Wind, waves, currents, sea temperature, tide | Open-Meteo, live |
+| USD/INR (ledger values) | European Central Bank reference rates, live and historical |
+| Earthquakes within 1,000 km | USGS, live |
+| Pressures, temperatures, per-asset flows | Computed by the physics model from the published rate (plant sensor data is not public) |
+
+Values that are design assumptions (pipe sizes, gas composition, meter accuracy, equipment
+ratings) are labelled `ASSUMPTION` in the code and tagged **design** in the UI.
+
+## Physics (`src/physics`)
+
+- 200 Hz fixed-step simulation, records stored at 50 Hz (`TelemetryEmitter.ts`).
+- Network model (`KgD6FlowModel.ts`): real-gas density (Papay Z, Sutton), pipe friction,
+  riser gas column, well deliverability, parallel-riser flow split, flowline cooling,
+  Gregory-Scott slugging, drill-string torque / ROP / stick-slip.
+- Flow computer (`MeterComputer.ts`): Coriolis density → water cut → ASTM D1250 base
+  density and API, with Kalman filtering.
+- Leak detection (`src/services/LeakDetector.ts`): compensated mass balance (API RP 1130)
+  between the subsea manifold and topside meters, CUSUM alarm, riser location.
+
+## Interaction
+
+- **Voice:** say “Varuna”, then a command (“exploded view”, “open crane two”) or a question
+  about the rig (“what is the manifold pressure?”, “is there a leak?”, “what is the tide?”).
+- **Gestures:** open palm rotates, two hands zoom, thumb up/down changes layer,
+  1–5 fingers select a part and a fist opens it, two fists toggle the exploded view.
+- **Incident drills:** blockage, hydrate, riser leak, liquid surge, drill damage / stuck pipe,
+  weather squall — each phase driven by the physics.
+
+## Project layout
+
+```
+src/data         published production data
+src/physics      flow network, metering, drilling, tide engine
+src/services     leak detector, live feeds, weather, settlement, AI rules
+src/voice        wake word, command parser, rig Q&A, speech
+src/vision       MediaPipe hand-gesture engine
+src/components   3D scene (canvas/) and HUD panels (hud/)
+scripts          model baking (convert-rig-model, rig-pack) and MediaPipe copy
+docs             project deck (VARUNA-AI_KG-D6_Deck.pptx)
 ```
 
----
+## Limits
 
-## 🚀 Features & Architecture
-
-1. **Native Desktop Viewport Dominance**:
-   - 3D Viewport maintains **100% screen coverage** with hardware GPU acceleration (`--enable-gpu-rasterization`).
-   - Reliance Industrial Theme: Deep Sea Navy (`#001726` / `#002B49`), Reliance Brand Blue (`#004B87`), Warning Red (`#ED1B24`), and Cyan Telemetry (`#00F0FF`).
-
-2. **Embedded High-Speed Time-Series Storage Kernel**:
-   - Seeded with **12,102 records** over 7 days across 6 subsea & topside nodes.
-   - Sub-millisecond SQL range queries executing in **$0.616\text{ ms}$**.
-
-3. **Petroleum Physics Foundation Engine (10 Hz)**:
-   - **Coriolis Mass Flow Meter Model**: Resonant period $\tau = 10^6 / f$, non-linear temperature compensation ($K_T$).
-   - **ASTM D1250 / API MPMS 11.1 Standards**: Newton-Raphson base density convergence at $15.56^\circ\text{C}$ ($60^\circ\text{F}$) and $45.49^\circ\text{API}$ classification.
-   - **Multiphase Cut & Net Oil Deconvolution**: Water-cut emulsion split and Net Standard BPD rate calculation.
-   - **Real-Time 1D Kalman Filter**: $67.5\%$ noise variance suppression and bad packet rejection.
-
-4. **3D Subsea Environment & Shaders**:
-   - Detailed semi-submersible platform, derrick mast ($+42\text{m}$), helideck, separators, and flare boom.
-   - Subsea floor ($-2,040\text{m}$) with `MANIFOLD-D6-MAIN`, `XT-01` & `XT-02` Christmas trees, and an animated inspection ROV.
-   - Steel catenary risers (SCR) with animated multiphase hydrocarbon fluid pulses.
-   - Custom GLSL Gerstner wave ocean with Metocean swell reactivity (*Calm*, *Monsoon*, *Cyclonic*).
-   - Cinematic **"Dive Subsea"** camera controller with dynamic volumetric fog (`fogExp2`, density: $0.022$, color: `#001322`).
-
-5. **Multi-Spectral Scanning Modes**:
-   - **Thermal DTS (Infrared)**: Inferno false-color thermal dissipation from $85^\circ\text{C}$ into $3.5^\circ\text{C}$ seawater.
-   - **Acoustic DAS (Sonic)**: Holographic neon wireframe with traveling acoustic frequency waves and Reliance Red stress alerts.
-   - **Gamma Radiometric Tomography (MPFM)**: 3D cross-sectional cut showing Gas core void, intermediate Oil phase, Annular Water boundary, and Beer-Lambert attenuation rates.
-
-6. **Tactical Voice & Mathematical Derivation Inspector**:
-   - **VARUNA-AI Tactical Voice**: Authoritative Web Speech & Web Audio diagnostics and sonar pips.
-   - **KaTeX Physics Derivation Inspector**: Interactive modal showing step-by-step LaTeX derivations with live values.
-   - **Automated ESD Engine**: Real-time simulation of *Pipe Ruptures* (-68 bar), *Drill Lock*, and *Hydrate Ice Plugs*.
-
----
-
-## 🧪 Verification & Automated Tests
-To run the automated verification test suite:
-```bash
-npm run test:integration
-```
-Result: **9/9 Tests Passed (100% Success)**.
+This is a twin driven by published data, not a plant system. Connecting it to a real
+platform needs read-only access to the operator's historian or SCADA (OPC-UA / Modbus),
+the real line geometry and meter specifications, calibration against field history, and
+validation before any operational use. It is advisory only and never a safety system.

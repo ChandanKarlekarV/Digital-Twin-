@@ -372,7 +372,7 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="text-xs font-sans text-emerald-300 font-semibold mt-1">
                   {currentRecord && currentRecord.api_gravity > 40
                     ? 'KG-D6 Premium Light Condensate'
-                    : 'Light Crude Oil'}
+                    : 'Gas condensate'}
                 </div>
               </div>
             </div>
@@ -492,7 +492,7 @@ export const TelemetryDrawer: React.FC = () => {
                     <th className="py-2 px-2">Asset</th>
                     <th className="py-2 px-2">Press</th>
                     <th className="py-2 px-2">Temp</th>
-                    <th className="py-2 px-2 text-emerald-300">Net Oil</th>
+                    <th className="py-2 px-2 text-emerald-300">Condensate</th>
                     <th className="py-2 px-2">WC%</th>
                   </tr>
                 </thead>

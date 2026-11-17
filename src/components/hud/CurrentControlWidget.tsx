@@ -12,7 +12,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useRigStore, CurrentFlowPower } from '../../store/useRigStore';
-import { TIDE_PHASES_SCHEDULE } from '../../physics/DynamicTideEngine';
+import { TIDE_PHASES_SCHEDULE, dynamicTideEngine } from '../../physics/DynamicTideEngine';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 export const CurrentControlWidget: React.FC = () => {
@@ -45,7 +45,7 @@ export const CurrentControlWidget: React.FC = () => {
     {
       id: 'slow',
       label: 'Slack',
-      speedText: '0.6 kt (0.3 m/s)',
+      speedText: '0.3 kt (0.15 m/s)',
       color: 'text-emerald-400',
       bgActive: 'bg-emerald-500/20 border-emerald-400 text-emerald-300',
       border: 'border-emerald-500/30',
@@ -53,7 +53,7 @@ export const CurrentControlWidget: React.FC = () => {
     {
       id: 'moderate',
       label: 'Moderate',
-      speedText: '2.4 kt (1.2 m/s)',
+      speedText: '1.2 kt (0.62 m/s)',
       color: 'text-reliance-cyan',
       bgActive: 'bg-reliance-blue/60 border-reliance-cyan text-white shadow-cyan-glow',
       border: 'border-reliance-cyan/40',
@@ -61,7 +61,7 @@ export const CurrentControlWidget: React.FC = () => {
     {
       id: 'fast',
       label: 'Strong',
-      speedText: '4.6 kt (2.4 m/s)',
+      speedText: '2.0 kt (1.03 m/s)',
       color: 'text-amber-400',
       bgActive: 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-amber-glow',
       border: 'border-amber-500/30',
@@ -69,7 +69,7 @@ export const CurrentControlWidget: React.FC = () => {
     {
       id: 'extreme',
       label: 'Surge',
-      speedText: '8.2 kt (4.2 m/s)',
+      speedText: '2.8 kt (1.44 m/s)',
       color: 'text-orange-400',
       bgActive: 'bg-orange-500/30 border-orange-400 text-orange-200 shadow-amber-glow',
       border: 'border-orange-500/40',
@@ -77,7 +77,7 @@ export const CurrentControlWidget: React.FC = () => {
     {
       id: 'storm',
       label: 'Storm',
-      speedText: '8.8 kt (4.5 m/s)',
+      speedText: '3.5 kt (1.80 m/s)',
       color: 'text-rose-400',
       bgActive: 'bg-rose-500/35 border-rose-400 text-rose-200 shadow-red-glow animate-pulse',
       border: 'border-rose-500/50',
@@ -234,17 +234,26 @@ export const CurrentControlWidget: React.FC = () => {
               </button>
             </div>
 
-            {/* Countdown Progress Bar */}
-            <div className="flex items-center justify-between text-[9px] text-reliance-textMuted">
-              <span>{TIDE_PHASES_SCHEDULE[tidePhaseIndex]?.label}</span>
-              <span className="text-white font-bold">{dynamicTideSecondsRemaining}s left</span>
-            </div>
-            <div className="w-full h-1 bg-reliance-navy rounded-full overflow-hidden">
-              <div
-                className="h-full bg-reliance-cyan transition-all duration-1000"
-                style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
-              />
-            </div>
+            {/* Source: the live Open-Meteo current, or the tidal fallback with its phase countdown */}
+            {dynamicTideEngine.isLive ? (
+              <div className="flex items-center justify-between text-[10px] text-ink-muted">
+                <span>Open-Meteo surface current at the block</span>
+                <span className="text-success-300 font-semibold">Live</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-[9px] text-reliance-textMuted">
+                  <span>Offline tidal model · {TIDE_PHASES_SCHEDULE[tidePhaseIndex]?.label}</span>
+                  <span className="text-white font-bold">{dynamicTideSecondsRemaining}s left</span>
+                </div>
+                <div className="w-full h-1 bg-reliance-navy rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-reliance-cyan transition-all duration-1000"
+                    style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* 1. FLOW POWER SELECTOR (Slow -> Moderate -> Fast -> Extreme -> Storm) */}
@@ -299,7 +308,7 @@ export const CurrentControlWidget: React.FC = () => {
             <input
               type="range"
               min="0.2"
-              max="10.0"
+              max="4.0"
               step="0.1"
               value={currentSpeedKnots}
               onChange={(e) => setCurrentSpeedKnots(parseFloat(e.target.value))}

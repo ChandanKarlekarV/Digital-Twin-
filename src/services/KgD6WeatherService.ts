@@ -66,6 +66,11 @@ export class KgD6WeatherService {
   private static lastFetchTime = 0;
   private static readonly CACHE_TTL_MS = 180000; // 3 minutes
 
+  /** Last fetched report without a network call (null until the first fetch) */
+  public static getCachedReport(): KgD6WeatherReport | null {
+    return this.cachedReport;
+  }
+
   public static async getLiveWeather(forceRefresh = false): Promise<KgD6WeatherReport> {
     const now = Date.now();
     if (!forceRefresh && this.cachedReport && now - this.lastFetchTime < this.CACHE_TTL_MS) {
@@ -146,16 +151,17 @@ export class KgD6WeatherService {
 
         let seaState = 'State 3: Slight (0.5 - 1.25m)';
         let alertStatus: KgD6WeatherReport['incoisAlertStatus'] = 'GREEN_NORMAL';
-        let alertMsg = 'Sea state nominal. Subsea operations within safe envelope.';
+        // The twin's own thresholds on the live data (not an INCOIS/IMD bulletin)
+        let alertMsg = 'Waves and wind inside normal operating limits.';
 
         if (waveHeight >= 4.0 || windKnots >= 34) {
           seaState = 'State 6: Very Rough (4.0 - 6.0m)';
           alertStatus = 'RED_CYCLONE_WARNING';
-          alertMsg = 'INCOIS WARNING: Cyclonic squall warning in Central Bay of Bengal. Stand down crane lifts.';
+          alertMsg = 'Waves of 4 m or more, or wind of 34 kt or more: stop crane lifts and close the helideck.';
         } else if (waveHeight >= 2.5 || windKnots >= 22) {
           seaState = 'State 4: Moderate (1.25 - 2.5m)';
           alertStatus = 'YELLOW_WATCH';
-          alertMsg = 'Monsoon swell advisory. Moderate hydrodynamic drift on subsea risers.';
+          alertMsg = 'Waves of 2.5 m or more, or wind of 22 kt or more: plan lifts carefully.';
         }
 
         const report: KgD6WeatherReport = {
@@ -254,7 +260,7 @@ export class KgD6WeatherService {
       oceanCurrentDirectionDeg: 45,
       seaStateClassification: 'State 4: Moderate (1.25 - 2.5m)',
       incoisAlertStatus: 'GREEN_NORMAL',
-      incoisAlertMessage: 'INCOIS ADVISORY: Bay of Bengal sea state moderate. Standard subsea DP-2 operations approved.',
+      incoisAlertMessage: 'Live weather unavailable: showing typical Bay of Bengal conditions.',
       forecast24h: hours,
       isLiveFetched: false,
     };

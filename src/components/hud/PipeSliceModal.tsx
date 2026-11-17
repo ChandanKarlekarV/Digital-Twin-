@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useRigStore } from '../../store/useRigStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
+import { telemetryDb } from '../../db/TelemetryDatabase';
 import { varunaVoice } from '../../voice/VarunaVoiceSynthesizer';
 
 export const PipeSliceModal: React.FC = () => {
@@ -17,7 +18,6 @@ export const PipeSliceModal: React.FC = () => {
   const setPipeSliceModalOpen = useRigStore((s) => s.setPipeSliceModalOpen);
   const setPipeSliced = useRigStore((s) => s.setPipeSliced);
 
-  const currentRecord = useTelemetryStore((s) => s.currentRecord);
   const activeHydraulicResult = useTelemetryStore((s) => s.activeHydraulicResult);
   const activeMultiphaseResult = useTelemetryStore((s) => s.activeMultiphaseResult);
 
@@ -145,7 +145,7 @@ export const PipeSliceModal: React.FC = () => {
                     </div>
 
                     <div className="relative z-10 font-mono text-[10px] text-emerald-300 font-bold">
-                      MULTIPHASE CORE (CRUDE + GAS SLUGS)
+                      MULTIPHASE CORE (GAS + CONDENSATE SLUGS)
                     </div>
                     <div className="relative z-10 font-mono text-[10px] text-reliance-cyan font-bold">
                       {activeHydraulicResult?.flowVelocityMS.toFixed(2) || '2.40'} m/s • {Math.round(activeMultiphaseResult?.net_oil_bpd || 31469).toLocaleString()} BPD
@@ -221,19 +221,19 @@ export const PipeSliceModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">OUTER DIAMETER</div>
-                  <div className="text-sm font-extrabold text-white">355.6 mm (14")</div>
+                  <div className="text-sm font-extrabold text-white">12" riser (design)</div>
                 </div>
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">WALL THICKNESS</div>
-                  <div className="text-sm font-extrabold text-reliance-cyan">18.40 mm</div>
+                  <div className="text-sm font-extrabold text-reliance-cyan">18.4 mm (design)</div>
                 </div>
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">DESIGN BURST LIMIT</div>
-                  <div className="text-sm font-extrabold text-white">480 bar (6,960 psi)</div>
+                  <div className="text-sm font-extrabold text-white">480 bar (design)</div>
                 </div>
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">CORROSION ALLOWANCE</div>
-                  <div className="text-sm font-extrabold text-emerald-400">3.0 mm (0.02 used)</div>
+                  <div className="text-sm font-extrabold text-emerald-400">3.0 mm (design)</div>
                 </div>
               </div>
             </div>
@@ -265,7 +265,7 @@ export const PipeSliceModal: React.FC = () => {
                 </div>
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">DYNAMIC VISCOSITY</div>
-                  <div className="text-sm font-extrabold text-white">14.8 cP (0.0148 Pa·s)</div>
+                  <div className="text-sm font-extrabold text-white">0.020 cP (gas)</div>
                 </div>
                 <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10">
                   <div className="text-[9px] text-reliance-textMuted">WATER-CUT RATIO</div>
@@ -281,23 +281,23 @@ export const PipeSliceModal: React.FC = () => {
               <div className="flex items-center justify-between text-[11px] text-purple-300 font-bold">
                 <span className="flex items-center gap-1.5">
                   <Thermometer className="w-4 h-4 text-purple-400" />
-                  <span>OPTICAL FIBER DTS / DAS TRACES</span>
+                  <span>RISER TEMPERATURE PROFILE</span>
                 </span>
-                <span className="text-[9px] text-emerald-400 font-bold">10 Hz LIVE</span>
+                <span className="text-[9px] text-emerald-400 font-bold">LIVE</span>
               </div>
 
               <div className="p-2 rounded-xl bg-reliance-dark/80 border border-white/10 text-[10px] space-y-1">
                 <div className="flex justify-between">
-                  <span className="text-reliance-textMuted">HANG-OFF TEMP (+12m):</span>
-                  <span className="text-white font-bold">{currentRecord?.t_line_c.toFixed(1)}°C</span>
+                  <span className="text-reliance-textMuted">TOPSIDE ARRIVAL:</span>
+                  <span className="text-white font-bold">{telemetryDb.getLatest('TOPSIDE-MPFM-01')?.t_line_c.toFixed(1) ?? '—'}°C</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-reliance-textMuted">MID-WATER TEMP (-45m):</span>
-                  <span className="text-white font-bold">18.2°C</span>
+                  <span className="text-reliance-textMuted">RISER BASE (SEABED):</span>
+                  <span className="text-white font-bold">{telemetryDb.getLatest('RISER-ALPHA')?.t_line_c.toFixed(1) ?? '—'}°C</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-reliance-textMuted">SEABED TOUCHDOWN (-118m):</span>
-                  <span className="text-white font-bold">5.8°C</span>
+                  <span className="text-reliance-textMuted">SEABED WATER (ASSUMED):</span>
+                  <span className="text-white font-bold">6.0°C</span>
                 </div>
               </div>
             </div>

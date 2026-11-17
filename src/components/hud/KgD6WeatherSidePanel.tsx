@@ -56,9 +56,9 @@ export const KgD6WeatherSidePanel: React.FC = () => {
   }, []);
 
   const handleSimulateStorm = () => {
+    // The incident panel announces the drill; no second voice line here
     setCurrentFlowPower('storm');
     setEmergencyScenario('weather_squall', 2);
-    varunaVoice.speakCustom('Tropical Cyclone Storm conditions simulated in KG-D6 Basin. Extreme wave heights active.');
   };
 
   return (
@@ -134,7 +134,7 @@ export const KgD6WeatherSidePanel: React.FC = () => {
                 : 'text-reliance-textMuted hover:text-white'
             }`}
           >
-            10S TIDES
+            TIDES
           </button>
         </div>
 
@@ -154,7 +154,7 @@ export const KgD6WeatherSidePanel: React.FC = () => {
               <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
                 <div className="font-bold uppercase tracking-wider text-[10px]">
-                  INCOIS / IMD DEEPWATER ADVISORY
+                  SEA-STATE ADVISORY (TWIN THRESHOLDS ON LIVE DATA)
                 </div>
                 <div className="text-[10px] opacity-90 mt-0.5">
                   {weather.incoisAlertMessage}
@@ -232,9 +232,9 @@ export const KgD6WeatherSidePanel: React.FC = () => {
               <div className="flex items-center justify-between text-[10px] text-reliance-textMuted uppercase mb-2">
                 <span className="flex items-center gap-1.5 text-reliance-cyan font-bold">
                   <Radio className="w-3.5 h-3.5 animate-pulse text-reliance-cyan" />
-                  <span>DOPPLER RADAR • BAY OF BENGAL</span>
+                  <span>BLOCK LOCATION (ILLUSTRATIVE)</span>
                 </span>
-                <span className="text-emerald-400 text-[9px] font-bold">250 KM RANGE</span>
+                <span className="text-ink-muted text-[9px]">not a radar feed</span>
               </div>
 
               <div className="relative w-full h-32 bg-black/40 rounded-lg overflow-hidden border border-reliance-cyan/20 flex items-center justify-center">
@@ -267,10 +267,10 @@ export const KgD6WeatherSidePanel: React.FC = () => {
               <div>
                 <div className="text-xs font-mono font-bold text-rose-300 flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span>SIMULATE TROPICAL STORM</span>
+                  <span>WEATHER SQUALL DRILL</span>
                 </div>
                 <div className="text-[9px] font-mono text-reliance-textMuted">
-                  Triggers 8.8 kt surge, 6.5m swell & cyclonic sea state
+                  Holds the storm current (3.5 kt) and runs the squall incident drill
                 </div>
               </div>
               <button

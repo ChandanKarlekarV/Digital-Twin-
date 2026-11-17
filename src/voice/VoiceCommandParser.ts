@@ -50,7 +50,7 @@ export interface ParsedVoiceCommand {
   num?: number;
   /** false when a required number is still missing (e.g. "open crane") */
   complete: boolean;
-  /** 0..1 â€” how much of the utterance the matched phrase explains */
+  /** 0..1: how much of the utterance the matched phrase explains */
   score: number;
   phrase: string;
 }

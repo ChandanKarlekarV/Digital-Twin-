@@ -61,5 +61,17 @@ check(r.worst === 'alarm' && (r.firstAlarm ?? 99) < 15, 'larger leak (6%) alarms
 check(/Riser Alpha/.test(r.status.location ?? ''), 'leak located on riser Alpha', r.status.location);
 check(Math.abs(r.status.lossMmscmd - 0.06 * 0.5 * 24) < 0.3, 'loss size ~ 6% of riser Alpha (~0.7 MMSCMD)', `${r.status.lossMmscmd.toFixed(2)} MMSCMD`);
 
+fresh();
+scenario('oil_overload', 3); // condensate surge: more liquid on both meters, nothing lost
+r = run(40);
+check(r.worst !== 'alarm', 'no false alarm: condensate surge', r.worst);
+
+fresh();
+scenario('rupture', 4); // SSIV closed: riser Alpha isolated, flow through Bravo
+run(40);
+leakDetector.reset();
+r = run(40);
+check(r.worst !== 'alarm', 'isolated riser: balance restored', `${r.worst}, ${r.status.imbalancePct.toFixed(2)}%`);
+
 console.log(fail ? `${fail} failures` : 'all passed');
 process.exit(fail ? 1 : 0);

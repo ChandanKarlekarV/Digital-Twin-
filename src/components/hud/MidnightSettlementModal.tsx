@@ -211,11 +211,11 @@ export const MidnightSettlementModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 2: Net Dry Purified Oil */}
+            {/* Card 2: Net condensate */}
             <div className="p-3 rounded-2xl bg-reliance-deepnavy/90 border border-emerald-500/40 flex flex-col justify-between shadow-sm">
               <div className="text-[10px] text-emerald-300 uppercase font-bold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Net Purified Oil</span>
+                <span>Net Condensate</span>
               </div>
               <div className="text-lg font-extrabold text-emerald-300 mt-1">
                 {(analytics.total_purified_dry_barrels / 1000000).toFixed(2)} M <span className="text-xs font-normal">bbl</span>
@@ -369,7 +369,7 @@ export const MidnightSettlementModal: React.FC = () => {
                     </div>
 
                     <div className="p-2 rounded-xl bg-reliance-deepnavy/90 border border-emerald-500/30">
-                      <div className="text-[9px] text-emerald-300">NET PURIFIED OIL</div>
+                      <div className="text-[9px] text-emerald-300">NET CONDENSATE</div>
                       <div className="font-bold text-emerald-300 mt-0.5">{selectedRecord.purified_oil_bpd.toLocaleString()} BPD</div>
                       <div className="text-[8.5px] text-emerald-400/80">ASTM D1250: {selectedRecord.purity_compliance_pct}% Purity</div>
                     </div>
@@ -412,7 +412,7 @@ export const MidnightSettlementModal: React.FC = () => {
                       <th className="py-2.5 px-3">Date (Midnight 00:00)</th>
                       <th className="py-2.5 px-3">Gross BPD</th>
                       <th className="py-2.5 px-3">Water-Cut</th>
-                      <th className="py-2.5 px-3 text-emerald-300">Net Purified Oil</th>
+                      <th className="py-2.5 px-3 text-emerald-300">Net Condensate</th>
                       <th className="py-2.5 px-3">Gas (MMSCFD)</th>
                       <th className="py-2.5 px-3">Avg Press / Temp</th>
                       <th className="py-2.5 px-3">Drill ROP &amp; Footage</th>

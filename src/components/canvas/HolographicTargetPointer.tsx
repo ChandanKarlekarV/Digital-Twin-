@@ -260,7 +260,7 @@ export const HolographicTargetPointer: React.FC = () => {
           <div className="bg-black/90 border border-cyan-400/80 rounded-lg p-2 font-mono text-[10px] text-white shadow-cyan-glow backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 whitespace-nowrap min-w-[180px]">
             <div className="flex items-center gap-1.5 pb-1 border-b border-cyan-400/30 text-cyan-300 font-extrabold tracking-wide">
               <span className="w-2 h-2 rounded-full bg-cyan-300 animate-ping" />
-              <span>🎯 TARGET LOCKED</span>
+              <span>Target locked</span>
             </div>
             <div className="pt-1 text-white font-bold text-[11px]">
               {activeTarget.label}

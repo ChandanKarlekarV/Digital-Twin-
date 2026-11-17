@@ -13,45 +13,36 @@ export const VarunaVoiceIndicator: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center gap-3 px-3.5 py-1.5 rounded-xl glass-panel border border-reliance-cyan/25 bg-reliance-deepnavy/85 shadow-dock">
-      {/* Voice Status Waveform Animation */}
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4].map((bar) => (
+    <div className="hidden lg:flex items-center gap-2.5 h-10 pl-3 pr-1 rounded-md glass-pill w-[clamp(220px,24vw,340px)]">
+      {/* Speaking indicator */}
+      <div className="flex items-end gap-0.5 h-4 shrink-0" aria-hidden>
+        {[1, 2, 3].map((bar) => (
           <span
-            key={`wave-bar-${bar}`}
-            className={`w-1 rounded-full bg-reliance-cyan transition-all duration-150 ${
-              voiceStatus.isSpeaking
-                ? bar % 2 === 0
-                  ? 'h-4 animate-bounce'
-                  : 'h-6 animate-pulse'
-                : 'h-2 opacity-40'
+            key={bar}
+            className={`w-0.5 rounded-full bg-accent-400 transition-all duration-150 ${
+              voiceStatus.isSpeaking ? (bar === 2 ? 'h-4 animate-pulse' : 'h-2.5 animate-pulse') : 'h-1.5 opacity-50'
             }`}
           />
         ))}
       </div>
 
-      {/* Transcript Text */}
-      <div className="max-w-[280px] sm:max-w-md overflow-hidden">
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-reliance-cyan font-bold tracking-wide">
-          <Radio className="w-3 h-3 text-emerald-400" />
-          <span>VARUNA TACTICAL VOICE</span>
+      {/* Last thing VARUNA said */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1 text-[10px] font-medium text-ink-muted">
+          <Radio className="w-3 h-3 text-success-400" />
+          VARUNA-AI
         </div>
-        <p className="text-[11px] font-sans text-white/90 truncate leading-tight">
-          {voiceStatus.lastMessage || 'Subsea telemetry monitoring active.'}
+        <p className="text-[11px] text-ink truncate leading-tight" title={voiceStatus.lastMessage}>
+          {voiceStatus.lastMessage || 'Monitoring the rig.'}
         </p>
       </div>
 
-      {/* Mute Toggle Button */}
       <button
         onClick={handleToggleMute}
-        title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
-        className="p-1.5 rounded-lg hover:bg-reliance-blue/40 text-reliance-textMuted hover:text-white transition-all cursor-pointer border border-transparent hover:border-reliance-cyan/30"
+        title={isMuted ? 'Unmute voice' : 'Mute voice'}
+        className="btn btn-icon border-transparent bg-transparent shrink-0"
       >
-        {isMuted ? (
-          <VolumeX className="w-3.5 h-3.5 text-reliance-red" />
-        ) : (
-          <Volume2 className="w-3.5 h-3.5 text-reliance-cyan" />
-        )}
+        {isMuted ? <VolumeX className="w-3.5 h-3.5 text-danger-400" /> : <Volume2 className="w-3.5 h-3.5 text-ink-muted" />}
       </button>
     </div>
   );

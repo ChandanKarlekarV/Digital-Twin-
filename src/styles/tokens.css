@@ -1,0 +1,79 @@
+/*
+ * VARUNA design tokens. Every colour in the UI resolves to one of these, as "R G B" triplets
+ * so Tailwind can apply opacity (bg-accent-400/20). tailwind.config.js maps the Tailwind
+ * families onto them: cyan/sky/blue/indigo/violet/purple/fuchsia -> accent, emerald/green/
+ * teal/lime -> success, amber/yellow/orange -> warning, red/rose/pink -> danger.
+ */
+:root {
+  /* Surfaces: deep blue-grey steps, flat (no gradients) */
+  --bg: 6 11 17;
+  --surface: 12 20 29;
+  --surface-2: 17 28 39;
+  --surface-3: 24 38 52;
+  --border: 40 58 76;
+  --border-strong: 62 86 108;
+
+  /* Text */
+  --text: 228 236 242;
+  --text-muted: 139 156 172;
+  --text-faint: 96 113 129;
+
+  /* Accent: muted hologram cyan */
+  --accent-50: 238 249 251;
+  --accent-100: 213 240 245;
+  --accent-200: 174 226 236;
+  --accent-300: 132 210 226;
+  --accent-400: 92 194 214;
+  --accent-500: 58 169 192;
+  --accent-600: 44 135 156;
+  --accent-700: 36 107 124;
+  --accent-800: 30 82 96;
+  --accent-900: 23 62 73;
+  --accent-950: 14 39 47;
+
+  /* Success */
+  --success-50: 237 248 242;
+  --success-100: 211 239 223;
+  --success-200: 168 223 192;
+  --success-300: 123 205 160;
+  --success-400: 85 187 134;
+  --success-500: 59 160 109;
+  --success-600: 46 127 87;
+  --success-700: 38 101 70;
+  --success-800: 31 78 55;
+  --success-900: 24 59 42;
+  --success-950: 15 38 27;
+
+  /* Warning */
+  --warning-50: 252 246 234;
+  --warning-100: 247 232 200;
+  --warning-200: 239 210 147;
+  --warning-300: 230 186 98;
+  --warning-400: 220 164 68;
+  --warning-500: 195 138 46;
+  --warning-600: 156 109 36;
+  --warning-700: 122 85 30;
+  --warning-800: 93 65 25;
+  --warning-900: 70 49 20;
+  --warning-950: 45 31 12;
+
+  /* Danger */
+  --danger-50: 252 238 237;
+  --danger-100: 248 214 211;
+  --danger-200: 240 173 167;
+  --danger-300: 231 132 123;
+  --danger-400: 222 99 88;
+  --danger-500: 200 74 63;
+  --danger-600: 163 59 50;
+  --danger-700: 129 47 40;
+  --danger-800: 99 37 33;
+  --danger-900: 74 28 25;
+  --danger-950: 47 17 15;
+
+  /* Shape, elevation, layout */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-panel: 0 8px 24px rgb(0 0 0 / 0.45);
+  --side-panel-w: 400px;
+}

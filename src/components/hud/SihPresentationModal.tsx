@@ -75,7 +75,7 @@ export const SihPresentationModal: React.FC = () => {
         {/* ================= TOP CONTROLS & NAVIGATION ================= */}
         <div className="flex items-center justify-between px-5 py-3 bg-slate-900 text-white shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/40 text-amber-400">
+            <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-400">
               <FileText className="w-4 h-4" />
             </div>
             <div>
@@ -132,13 +132,13 @@ export const SihPresentationModal: React.FC = () => {
               }`}
             >
               <Video className="w-3.5 h-3.5" />
-              <span>{isPlayingVideoDemo ? 'STOP DEMO' : '🎥 VIDEO DEMO'}</span>
+              <span>{isPlayingVideoDemo ? 'Stop demo' : 'Play demo'}</span>
             </button>
 
             {/* Download PPTX */}
             <button
               onClick={handleDownloadPptx}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-mono text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-mono text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
               title="Download Microsoft PowerPoint .pptx"
             >
               <Download className="w-3.5 h-3.5" />

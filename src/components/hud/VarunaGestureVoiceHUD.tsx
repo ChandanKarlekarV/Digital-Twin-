@@ -99,7 +99,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
       ctx.strokeRect(6, 6, w - 12, h - 12);
 
       // Corner brackets
-      ctx.strokeStyle = '#00ffff';
+      ctx.strokeStyle = '#5CC2D6';
       ctx.lineWidth = 2;
       // Top-left
       ctx.beginPath();
@@ -129,12 +129,12 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
       // Render Hand 1 (Cyan)
       if (result.primaryHand && result.primaryHand.landmarks.length > 0) {
         const hand = result.primaryHand;
-        drawHandSkeleton(ctx, hand.landmarks, w, h, '#00e5ff', '#ffffff');
+        drawHandSkeleton(ctx, hand.landmarks, w, h, '#5CC2D6', '#E4ECF2');
 
         // Hand Role Tag
         const hx = hand.centroid.x * w;
         const hy = hand.centroid.y * h;
-        ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ffff';
+        ctx.fillStyle = hand.role === 'ZOOM' ? '#AEE2EC' : '#5CC2D6';
         ctx.font = 'bold 7.5px monospace';
         ctx.fillText(
           `HAND 1: [${hand.gesture || 'TRACKING'}]`,
@@ -146,7 +146,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
         if ((hand.gesture === 'INDEX_1' || (hand as any)._isPoint) && hand.indexTip) {
           ctx.beginPath();
           ctx.arc(hand.indexTip.x * w, hand.indexTip.y * h, 7, 0, Math.PI * 2);
-          ctx.strokeStyle = '#00e5ff';
+          ctx.strokeStyle = '#5CC2D6';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -155,11 +155,11 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
       // Render Hand 2 (Emerald/Yellow)
       if (result.secondaryHand && result.secondaryHand.landmarks.length > 0) {
         const hand = result.secondaryHand;
-        drawHandSkeleton(ctx, hand.landmarks, w, h, '#00ff88', '#ffea00');
+        drawHandSkeleton(ctx, hand.landmarks, w, h, '#55BB86', '#DCA444');
 
         const hx = hand.centroid.x * w;
         const hy = hand.centroid.y * h;
-        ctx.fillStyle = hand.role === 'ZOOM' ? '#ff00ff' : '#00ff88';
+        ctx.fillStyle = hand.role === 'ZOOM' ? '#AEE2EC' : '#55BB86';
         ctx.font = 'bold 7.5px monospace';
         ctx.fillText(
           `HAND 2: [${hand.gesture || 'TRACKING'}]`,
@@ -170,7 +170,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
         if ((hand.gesture === 'INDEX_1' || (hand as any)._isPoint) && hand.indexTip) {
           ctx.beginPath();
           ctx.arc(hand.indexTip.x * w, hand.indexTip.y * h, 7, 0, Math.PI * 2);
-          ctx.strokeStyle = '#00ff88';
+          ctx.strokeStyle = '#55BB86';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -187,7 +187,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
 
         ctx.save();
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = '#00ffff';
+        ctx.strokeStyle = '#5CC2D6';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(p1x, p1y);
@@ -198,14 +198,14 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
         // Center Midpoint Reticle
         ctx.beginPath();
         ctx.arc(midX, midY, 8, 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffea00';
+        ctx.strokeStyle = '#DCA444';
         ctx.lineWidth = 1.8;
         ctx.stroke();
 
         ctx.fillStyle = 'rgba(255, 234, 0, 0.25)';
         ctx.fill();
 
-        ctx.fillStyle = '#ffea00';
+        ctx.fillStyle = '#DCA444';
         ctx.font = 'bold 8px monospace';
         ctx.fillText(`DIST: ${result.handDistance.toFixed(2)}`, midX - 20, midY - 10);
 
@@ -329,7 +329,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-reliance-cyan animate-pulse" />
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-reliance-cyan flex items-center gap-1">
-              <span>VARUNA DUAL-HAND HOLOGRAPHIC VISION</span>
+              <span>Voice and gestures</span>
             </span>
           </div>
 
@@ -361,7 +361,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                 />
                 <div>
                   <div className="font-extrabold tracking-wide">
-                    {isVarunaAwake ? 'VARUNA AWAKE' : 'VARUNA SLEEPING'}
+                    {isVarunaAwake ? 'Listening' : 'Standing by'}
                   </div>
                   <div className="text-[8px] opacity-80">
                     {isVarunaAwake
@@ -374,7 +374,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
               <button
                 onClick={wakeVaruna}
                 className="px-2 py-1 rounded-lg bg-reliance-blue/70 hover:bg-reliance-blue border border-reliance-cyan/40 text-white font-bold text-[9px] transition-all cursor-pointer flex items-center gap-1 shrink-0 shadow-sm"
-                title="Manually wake Varuna AI"
+                title="Wake VARUNA without speaking"
               >
                 <Power className="w-2.5 h-2.5 text-emerald-300" />
                 <span>WAKE</span>
@@ -389,18 +389,14 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     isListeningSpeech ? 'text-purple-400 animate-pulse' : 'text-reliance-textMuted'
                   }`}
                 />
-                <div className={`truncate italic text-[9px] ${isVarunaAwake ? "text-emerald-300" : "text-white/40"}`}>
+                <div className={`truncate text-[10px] ${isVarunaAwake ? 'text-success-300' : 'text-ink-faint'}`}>
                   {isVarunaAwake
-                    ? (voiceTranscript ? `"${voiceTranscript}"` : '🎙️ Listening... say your command')
-                    : '💤 Say "Varuna" to activate...'}
+                    ? (voiceTranscript ? `“${voiceTranscript}”` : 'Listening, say a command')
+                    : 'Say “Varuna” to start'}
                 </div>
               </div>
-              <button
-                onClick={() => wakeVaruna()}
-                className="px-2 py-0.5 rounded bg-emerald-500/30 hover:bg-emerald-500/50 border border-emerald-400/50 text-emerald-200 text-[8px] font-bold cursor-pointer shrink-0 transition-all shadow-sm"
-                title="Click to awaken Varuna immediately"
-              >
-                🎙️ Wake Varuna
+              <button onClick={() => wakeVaruna()} className="btn h-6 px-2 text-[10px]" title="Wake VARUNA without speaking">
+                Wake
               </button>
             </div>
 
@@ -451,9 +447,9 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                   {/* Mode & FPS info */}
                   <div className="absolute bottom-1 right-1 text-[7px] text-emerald-400 bg-black/85 px-1.5 py-0.5 rounded border border-emerald-500/30">
                     {gestureSpatial?.activeMode === 'DECOUPLED_DUAL'
-                      ? '🤖 RIGHT=ZOOM (✌️🤙) | LEFT=ORBIT (👆🤚)'
+                      ? 'Right hand zooms, left hand orbits'
                       : gestureSpatial?.activeMode === 'DUAL_MOVE_ZOOM'
-                      ? '⚡ SIMULTANEOUS MOVE+ZOOM'
+                      ? 'Moving and zooming'
                       : 'WEBCAM MULTI-TRACK 30 FPS'}
                   </div>
                 </div>
@@ -464,7 +460,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     <div className="flex items-center gap-1.5 text-cyan-200">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                       <span className="font-extrabold text-[8.5px] tracking-wide">
-                        🎯 LOCKED: [{targetedPartId.toUpperCase().replace('_', ' ')}]
+                        LOCKED: [{targetedPartId.toUpperCase().replace('_', ' ')}]
                       </span>
                     </div>
                     <button
@@ -530,7 +526,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                       title="Pointing Index Finger -> Laser Pointer Targeting"
                     >
                       <Crosshair className="w-2.5 h-2.5 text-blue-300" />
-                      <span>👆 Point Laser</span>
+                      <span>Point</span>
                     </button>
 
                     <button
@@ -539,7 +535,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                       title="Open Palm -> Freeze camera in place with zero drift"
                     >
                       <Hand className="w-2.5 h-2.5 text-rose-300" />
-                      <span>🖐️ Freeze Palm</span>
+                      <span>Freeze</span>
                     </button>
 
                     <button
@@ -556,11 +552,11 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                   <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1 text-[7.5px]">
                     <span className="text-white/60 font-bold" title="Hold the pose steady for under a second">HOLD:</span>
                     {[
-                      { idx: 1, name: '☝️ Point: Helipad' },
-                      { idx: 2, name: '✌️ 2: Crane 1' },
-                      { idx: 3, name: '3: Crane 2' },
-                      { idx: 4, name: '4: Dock' },
-                      { idx: 5, name: '🤙 Quarters' },
+                      { idx: 1, name: '1 finger: Helipad' },
+                      { idx: 2, name: '2 fingers: Crane 1' },
+                      { idx: 3, name: '3 fingers: Crane 2' },
+                      { idx: 4, name: '4 fingers: Dock' },
+                      { idx: 5, name: 'Shaka: Quarters' },
                     ].map((item) => (
                       <button
                         key={item.idx}
@@ -584,9 +580,9 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
               <div className="p-2.5 rounded-xl bg-reliance-navy/50 border border-white/10 text-center space-y-2">
                 <div className="text-[9px] text-reliance-textMuted">
                   {cameraErrorMessage ? (
-                    <span className="text-amber-300">⚠️ {cameraErrorMessage}</span>
+                    <span className="text-amber-300">{cameraErrorMessage}</span>
                   ) : (
-                    'Open palm moves the view, still palm freezes it, point to aim and hold to open, fist to reassemble.'
+                    'Open palm: move. Still palm: freeze. Point and hold: open a part. Fist: reassemble.'
                   )}
                 </div>
 
@@ -598,7 +594,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                   >
                     <Video className="w-3 h-3 text-reliance-cyan" />
                     <span>
-                      {cameraPermissionState === 'requesting' ? 'CONNECTING...' : 'START WEBCAM'}
+                      {cameraPermissionState === 'requesting' ? 'Connecting...' : 'Start camera'}
                     </span>
                   </button>
                 </div>
@@ -615,7 +611,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     : 'bg-reliance-navy/50 border-white/10 text-white/80 hover:border-amber-400/40'
                 }`}
               >
-                <span>{isSplitViewActive ? 'ASSEMBLE' : 'SPLIT RIG'}</span>
+                <span>{isSplitViewActive ? 'Assemble' : 'Exploded view'}</span>
                 <Layers className="w-3 h-3 text-amber-400" />
               </button>
 
@@ -627,7 +623,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     : 'bg-reliance-navy/50 border-white/10 text-white/80 hover:border-cyan-400/40'
                 }`}
               >
-                <span>{isPipeSliced ? 'CLOSE SLICE' : 'SLICE PIPE 1'}</span>
+                <span>{isPipeSliced ? 'Close section' : 'Pipe 1 section'}</span>
                 <Scissors className="w-3 h-3 text-cyan-400" />
               </button>
             </div>

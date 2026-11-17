@@ -32,7 +32,7 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
   const quickAlertItems = [
     {
       id: 'pipe_blockage' as EmergencyScenario,
-      label: 'Pressure Fluctuation',
+      label: 'Pressure fluctuation',
       sub: 'Choke / Blockage ΔP',
       icon: Gauge,
       val: currentRecord ? `${currentRecord.p_line_bar.toFixed(1)} bar` : '254.2 bar',
@@ -40,7 +40,7 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
     },
     {
       id: 'hydrate_plug' as EmergencyScenario,
-      label: 'Temp Warning',
+      label: 'Temperature warning',
       sub: 'Cryogenic Seabed (<4°C)',
       icon: Thermometer,
       val: currentRecord ? `${currentRecord.t_line_c.toFixed(1)} °C` : '48.6 °C',
@@ -48,7 +48,7 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
     },
     {
       id: 'stuck_drill' as EmergencyScenario,
-      label: 'Signal Loss / Jam',
+      label: 'Signal loss',
       sub: 'Drillstring Torque Load',
       icon: Radio,
       val: emergencyScenario === 'stuck_drill' ? '42.0 kNm' : '28.4 kNm',
@@ -79,7 +79,7 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
           </div>
           <div>
             <h3 className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
-              <span>CRITICAL ANOMALIES</span>
+              <span>Anomalies</span>
               {isIncidentActive && (
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
               )}
@@ -90,7 +90,7 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
                   ACTIVE: {currentMeta?.shortLabel} (PHASE {incidentPhase}/4)
                 </span>
               ) : (
-                'ALL SENSOR CHANNELS NOMINAL'
+                'All sensors normal'
               )}
             </div>
           </div>
@@ -100,10 +100,10 @@ export const CriticalAnomaliesMonitor: React.FC = () => {
           <button
             onClick={toggleIncidentModal}
             className="px-1.5 py-0.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/40 text-[9px] font-mono text-rose-200 transition-all cursor-pointer flex items-center gap-1"
-            title="Open Full Incident Stepper Suite"
+            title="Open incident drills"
           >
             <Sliders className="w-2.5 h-2.5" />
-            <span>SUITE</span>
+            <span>Drills</span>
           </button>
           <button
             onClick={() => setIsExpanded(!isExpanded)}

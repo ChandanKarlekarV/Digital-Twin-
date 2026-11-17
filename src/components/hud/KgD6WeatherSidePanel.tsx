@@ -73,28 +73,13 @@ export const KgD6WeatherSidePanel: React.FC = () => {
 
   return (
     <div
-      className={`fixed top-14 bottom-8 right-0 z-40 flex transition-transform duration-300 ease-out ${
-        isWeatherPanelOpen ? 'translate-x-0' : 'translate-x-[calc(100%-24px)]'
+      className={`fixed top-14 bottom-8 right-0 z-40 w-side max-w-full transition-transform duration-300 ease-out ${
+        isWeatherPanelOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
+      aria-hidden={!isWeatherPanelOpen}
     >
-      {/* Retracted Weather Neon Trigger Edge */}
-      <button
-        onClick={toggleWeatherPanel}
-        className="w-6 h-40 my-auto -ml-3 rounded-l-xl glass-panel border-y border-l border-amber-400/60 bg-reliance-deepnavy/95 text-amber-300 hover:bg-reliance-navy transition-all flex flex-col items-center justify-center gap-2 shadow-amber-glow cursor-pointer"
-        title={isWeatherPanelOpen ? 'Close KG-D6 Weather Report' : 'Open KG-D6 Live Weather & Marine Forecast'}
-      >
-        {isWeatherPanelOpen ? (
-          <ChevronRight className="w-4 h-4" />
-        ) : (
-          <Wind className="w-4 h-4 animate-pulse text-amber-400" />
-        )}
-        <span className="[writing-mode:vertical-lr] text-[9px] font-mono font-bold tracking-widest text-amber-300 uppercase rotate-180">
-          WEATHER
-        </span>
-      </button>
-
-      {/* Main Slide-Out Weather Drawer */}
-      <div className="w-88 sm:w-96 h-full glass-panel border-l border-amber-400/40 bg-reliance-deepnavy/98 p-4 shadow-dock text-white font-sans backdrop-blur-2xl flex flex-col overflow-hidden">
+      {/* Slide-out panel; its tab lives in the shared SidePanelRail */}
+      <div className="w-full h-full glass-panel border-l p-4 text-ink font-sans flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-amber-400/20 pb-3 mb-3 shrink-0">
           <div>
@@ -271,7 +256,7 @@ export const KgD6WeatherSidePanel: React.FC = () => {
                 <div className="absolute h-full w-px bg-reliance-cyan/15" />
 
                 {/* Sweep Hand */}
-                <div className="absolute w-1/2 h-0.5 bg-gradient-to-r from-transparent to-reliance-cyan origin-left animate-spin-slow left-1/2" />
+                <div className="absolute w-1/2 h-0.5 bg-reliance-cyan origin-left animate-spin-slow left-1/2" />
 
                 {/* Center Rig Dot */}
                 <div className="relative z-10 flex flex-col items-center">
@@ -383,7 +368,7 @@ export const KgD6WeatherSidePanel: React.FC = () => {
                 </div>
                 <div className="w-full h-1.5 bg-reliance-navy rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-reliance-cyan to-emerald-400 transition-all duration-1000"
+                    className="h-full bg-reliance-cyan transition-all duration-1000"
                     style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
                   />
                 </div>

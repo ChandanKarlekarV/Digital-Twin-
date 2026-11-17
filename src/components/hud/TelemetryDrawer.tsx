@@ -151,39 +151,20 @@ export const TelemetryDrawer: React.FC = () => {
 
   return (
     <div
-      className={`fixed top-14 bottom-8 right-0 z-40 flex transition-transform duration-300 ease-out ${
-        isTelemetryDrawerOpen ? 'translate-x-0' : 'translate-x-[calc(100%-24px)]'
+      className={`fixed top-14 bottom-8 right-0 z-40 w-side max-w-full transition-transform duration-300 ease-out ${
+        isTelemetryDrawerOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
+      aria-hidden={!isTelemetryDrawerOpen}
     >
-      {/* Retracted Neon Blue Trigger Edge */}
-      <button
-        onClick={toggleTelemetryDrawer}
-        className="w-6 h-40 my-auto -ml-3 rounded-l-xl glass-panel border-y border-l border-reliance-cyan/60 bg-reliance-deepnavy/95 text-reliance-cyan hover:bg-reliance-navy transition-all flex flex-col items-center justify-center gap-2 shadow-cyan-glow cursor-pointer"
-        title={isTelemetryDrawerOpen ? 'Retract Telemetry Drawer' : 'Expand Telemetry Drawer'}
-      >
-        {isTelemetryDrawerOpen ? (
-          <ChevronRight className="w-4 h-4" />
-        ) : (
-          <ChevronLeft className="w-4 h-4 animate-pulse" />
-        )}
-        <span className="[writing-mode:vertical-lr] text-[9px] font-mono font-bold tracking-widest text-reliance-cyan uppercase rotate-180">
-          TELEMETRY &amp; DB
-        </span>
-      </button>
-
-      {/* Main Slide-out Panel */}
-      <div
-        className={`${
-          drawerTab === 'database' ? 'w-[420px] sm:w-[480px]' : 'w-84 sm:w-96'
-        } h-full glass-panel border-l border-reliance-cyan/40 bg-reliance-deepnavy/98 p-3.5 shadow-dock text-white font-sans backdrop-blur-xl flex flex-col overflow-hidden transition-all duration-200`}
-      >
+      {/* Slide-out panel; its tab lives in the shared SidePanelRail */}
+      <div className="w-full h-full glass-panel border-l p-3.5 text-ink font-sans flex flex-col overflow-hidden">
         {/* Header & Mode Switcher */}
         <div className="border-b border-reliance-cyan/20 pb-2.5 mb-2.5 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div>
               <div className="flex items-center gap-1.5 text-[10px] font-mono text-reliance-cyan font-bold uppercase tracking-wider">
                 <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                <span>MPFM TELEMETRY (50.0 Hz / 20ms)</span>
+                <span>Live telemetry · 50 Hz</span>
               </div>
               <h2 className="text-sm font-extrabold text-white truncate max-w-[240px]">
                 {assetInfo?.name || selectedAssetId || 'KG-D6 Subsea Complex'}
@@ -212,7 +193,7 @@ export const TelemetryDrawer: React.FC = () => {
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-reliance-cyan" />
-              <span>LIVE SENSORS</span>
+              <span>Live sensors</span>
             </button>
 
             <button
@@ -227,7 +208,7 @@ export const TelemetryDrawer: React.FC = () => {
               }`}
             >
               <Database className="w-3.5 h-3.5 text-emerald-400" />
-              <span>4-5 WKS DATABASE</span>
+              <span>5-week history</span>
             </button>
           </div>
         </div>
@@ -237,7 +218,7 @@ export const TelemetryDrawer: React.FC = () => {
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Kalman Filter vs Raw Toggle */}
             <div className="mb-2.5 shrink-0 p-1.5 rounded-xl bg-reliance-dark/80 border border-reliance-cyan/20 flex items-center justify-between">
-              <span className="text-[10px] font-mono text-reliance-textMuted px-1">SIGNAL FILTER:</span>
+              <span className="text-[10px] font-mono text-reliance-textMuted px-1">Filter</span>
               <div className="flex gap-1">
                 <button
                   onClick={() => setDisplayFilterMode('kalman')}
@@ -247,7 +228,7 @@ export const TelemetryDrawer: React.FC = () => {
                       : 'text-reliance-textMuted hover:text-white'
                   }`}
                 >
-                  1D KALMAN
+                  Kalman
                 </button>
                 <button
                   onClick={() => setDisplayFilterMode('raw')}
@@ -257,7 +238,7 @@ export const TelemetryDrawer: React.FC = () => {
                       : 'text-reliance-textMuted hover:text-white'
                   }`}
                 >
-                  RAW SENSOR
+                  Raw
                 </button>
               </div>
             </div>
@@ -269,7 +250,7 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-reliance-textMuted font-mono flex items-center gap-1.5 text-[11px]">
                     <Droplets className="w-3.5 h-3.5 text-emerald-400" />
-                    NET DRY OIL RATE
+                    Net oil rate
                   </span>
                   <span className="text-[10px] text-emerald-400 font-mono font-bold">ASTM D1250</span>
                 </div>
@@ -284,9 +265,9 @@ export const TelemetryDrawer: React.FC = () => {
                 </div>
                 {/* Real-time Flow Sparkline */}
                 <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-[9px] font-mono text-reliance-textMuted">FLOW TREND (4s)</span>
+                  <span className="text-[9px] font-mono text-reliance-textMuted">Last 4 s</span>
                   <svg width="160" height="24" className="overflow-visible">
-                    <path d={sparklines.flow} fill="none" stroke="#00F0FF" strokeWidth="1.5" />
+                    <path d={sparklines.flow} fill="none" stroke="currentColor" className="text-accent-400" strokeWidth="1.5" />
                   </svg>
                 </div>
               </div>
@@ -296,10 +277,10 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-reliance-textMuted font-mono flex items-center gap-1.5 text-[11px]">
                     <Gauge className="w-3.5 h-3.5 text-reliance-cyan" />
-                    LINE PRESSURE
+                    Line pressure
                   </span>
                   <span className="text-[10px] text-reliance-cyan font-mono">
-                    {currentRecord && currentRecord.p_line_bar > 200 ? 'HIGH-P DEEPWATER' : 'DECK P'}
+                    {currentRecord && currentRecord.p_line_bar > 200 ? 'Subsea' : 'Topside'}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
@@ -312,12 +293,13 @@ export const TelemetryDrawer: React.FC = () => {
                   </div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-[9px] font-mono text-reliance-textMuted">PRESSURE NOISE</span>
+                  <span className="text-[9px] font-mono text-reliance-textMuted">Sensor noise</span>
                   <svg width="160" height="24" className="overflow-visible">
                     <path
                       d={sparklines.pressure}
                       fill="none"
-                      stroke={displayFilterMode === 'kalman' ? '#10B981' : '#F59E0B'}
+                      stroke="currentColor"
+                className={displayFilterMode === 'kalman' ? 'text-success-400' : 'text-warning-400'}
                       strokeWidth="1.5"
                     />
                   </svg>
@@ -343,13 +325,13 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="p-2.5 rounded-xl bg-reliance-navy/60 border border-reliance-cyan/20">
                   <div className="text-[10px] font-mono text-reliance-textMuted flex items-center gap-1 mb-1">
                     <Waves className="w-3 h-3 text-sky-400" />
-                    WATER-CUT (WC)
+                    Water cut
                   </div>
                   <div className="text-base font-bold font-mono text-white">
                     {currentRecord?.water_cut_pct.toFixed(2) || '---'}
                     <span className="text-[10px] text-reliance-textMuted ml-1">%</span>
                   </div>
-                  <div className="text-[9px] font-mono text-emerald-400">LOW EMULSION</div>
+                  <div className="text-[9px] font-mono text-emerald-400">Low emulsion</div>
                 </div>
               </div>
 
@@ -358,9 +340,9 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-reliance-textMuted font-mono flex items-center gap-1.5 text-[11px]">
                     <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    CORIOLIS RESONANCE (1/f)
+                    Coriolis frequency
                   </span>
-                  <span className="text-[10px] text-amber-400 font-mono">TUBE STIFFNESS</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Tube stiffness</span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <div className="text-lg font-bold font-mono text-white">
@@ -405,7 +387,7 @@ export const TelemetryDrawer: React.FC = () => {
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-reliance-blue/70 hover:bg-reliance-blue text-xs font-mono text-reliance-cyan border border-reliance-cyan/40 transition-all cursor-pointer shadow-cyan-glow font-bold"
               >
                 <FileCode className="w-4 h-4" />
-                <span>EXAMINE LaTeX DERIVATION CHAIN</span>
+                <span>Show the equations</span>
               </button>
             </div>
           </div>
@@ -422,7 +404,7 @@ export const TelemetryDrawer: React.FC = () => {
               </div>
               <div className="grid grid-cols-6 gap-1">
                 {[
-                  { id: 0, label: '5 Wks' },
+                  { id: 0, label: 'All' },
                   { id: 1, label: 'Wk 1' },
                   { id: 2, label: 'Wk 2' },
                   { id: 3, label: 'Wk 3' },
@@ -593,7 +575,7 @@ export const TelemetryDrawer: React.FC = () => {
                   setEodModalOpen(true);
                   varunaVoice.speakCustom('Launching KG-D6 6-Month AI Production Ledger and Midnight Settlement.');
                 }}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-gradient-to-r from-emerald-600/40 to-cyan-600/40 hover:from-emerald-600/60 hover:to-cyan-600/60 text-xs font-mono text-emerald-200 border border-emerald-400/50 transition-all cursor-pointer shadow-emerald-glow font-bold"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-600/40 hover:bg-emerald-600/60 text-xs font-mono text-emerald-200 border border-emerald-400/50 transition-all cursor-pointer shadow-emerald-glow font-bold"
               >
                 <Calendar className="w-3.5 h-3.5 text-emerald-400" />
                 <span>EXPAND 180-DAY PRODUCTION LEDGER</span>

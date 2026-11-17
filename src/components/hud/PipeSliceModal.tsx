@@ -95,7 +95,6 @@ export const PipeSliceModal: React.FC = () => {
             {/* Visual Cross-Section Dissection Diagram */}
             <div className="relative flex-1 min-h-[300px] rounded-2xl bg-black/60 border border-reliance-cyan/40 p-4 flex flex-col justify-between overflow-hidden shadow-inner">
               {/* Holographic Grid Overlay */}
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#00ffff0d_1px,transparent_1px),linear-gradient(to_bottom,#00ffff0d_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
 
               {/* Top HUD Header */}
               <div className="relative z-10 flex items-center justify-between text-xs font-mono">
@@ -140,7 +139,7 @@ export const PipeSliceModal: React.FC = () => {
                   <div
                     className={`w-full h-16 rounded-xl border-2 transition-all flex items-center justify-between px-4 relative overflow-hidden ${
                       activeLayer === 'fluid' || activeLayer === 'all'
-                        ? 'border-emerald-400/80 bg-gradient-to-r from-emerald-500/30 via-cyan-500/30 to-emerald-500/30 shadow-emerald-glow'
+                        ? 'border-emerald-400/80 bg-emerald-500/30 shadow-emerald-glow'
                         : 'border-white/10 bg-transparent'
                     }`}
                   >

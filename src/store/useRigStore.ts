@@ -653,7 +653,7 @@ export const useRigStore = create<RigState>((set, get) => ({
   cameraViewMode: 'topside',
   setCameraViewMode: (mode) => set({ cameraViewMode: mode }),
   selectedAssetId: 'RISER-ALPHA',
-  setSelectedAssetId: (id) => set({ selectedAssetId: id, isTelemetryDrawerOpen: !!id }),
+  setSelectedAssetId: (id) => set(id ? { selectedAssetId: id, isTelemetryDrawerOpen: true, isWeatherPanelOpen: false } : { selectedAssetId: id, isTelemetryDrawerOpen: false }),
 
   customObjUrl: '/models/rig.bin.gz',
   customObjFileName: 'KG-D6 rig (built-in)',
@@ -786,8 +786,9 @@ export const useRigStore = create<RigState>((set, get) => ({
 
   // Weather Side Panel
   isWeatherPanelOpen: false,
-  setWeatherPanelOpen: (open) => set({ isWeatherPanelOpen: open }),
-  toggleWeatherPanel: () => set((s) => ({ isWeatherPanelOpen: !s.isWeatherPanelOpen })),
+  setWeatherPanelOpen: (open) => set(open ? { isWeatherPanelOpen: true, isTelemetryDrawerOpen: false } : { isWeatherPanelOpen: false }),
+  // The two right-hand panels share one slot: opening one closes the other
+  toggleWeatherPanel: () => set((s) => (s.isWeatherPanelOpen ? { isWeatherPanelOpen: false } : { isWeatherPanelOpen: true, isTelemetryDrawerOpen: false })),
 
   // ElevenLabs Voice Integration
   elevenLabsApiKey: cachedApiKey,
@@ -828,7 +829,7 @@ export const useRigStore = create<RigState>((set, get) => ({
   setSihModalOpen: (open) => set({ isSihModalOpen: open }),
 
   isTelemetryDrawerOpen: true,
-  toggleTelemetryDrawer: () => set((s) => ({ isTelemetryDrawerOpen: !s.isTelemetryDrawerOpen })),
+  toggleTelemetryDrawer: () => set((s) => (s.isTelemetryDrawerOpen ? { isTelemetryDrawerOpen: false } : { isTelemetryDrawerOpen: true, isWeatherPanelOpen: false })),
 
   isPhysicsModalOpen: false,
   setPhysicsModalOpen: (open) => set({ isPhysicsModalOpen: open }),
@@ -1085,7 +1086,7 @@ export const useRigStore = create<RigState>((set, get) => ({
       say(speech);
     };
     const focus = (mode: CameraViewMode, assetId: string, modal: HolographicComponentType, speech: string) =>
-      openPanel({ cameraViewMode: mode, selectedAssetId: assetId, activeHoloModal: modal, isTelemetryDrawerOpen: true }, speech);
+      openPanel({ cameraViewMode: mode, selectedAssetId: assetId, activeHoloModal: modal, isTelemetryDrawerOpen: true, isWeatherPanelOpen: false }, speech);
 
     switch (parsed.id) {
       case 'split_view':
@@ -1160,13 +1161,13 @@ export const useRigStore = create<RigState>((set, get) => ({
       case 'presentation':
         return openPanel({ isSihModalOpen: true }, 'Opening the presentation deck.');
       case 'database':
-        return openPanel({ isTelemetryDrawerOpen: true, isEodModalOpen: true }, 'Opening the six month production ledger.');
+        return openPanel({ isTelemetryDrawerOpen: true, isWeatherPanelOpen: false, isEodModalOpen: true }, 'Opening the six month production ledger.');
       case 'compliance':
         return openPanel({ isReportModalOpen: true }, 'Opening the compliance audit report.');
       case 'physics_report':
         return openPanel({ isPhysicsModalOpen: true }, 'Showing the physics and equations report.');
       case 'weather':
-        set({ isWeatherPanelOpen: true });
+        set({ isWeatherPanelOpen: true, isTelemetryDrawerOpen: false });
         import('../services/KgD6WeatherService').then(({ KgD6WeatherService }) =>
           KgD6WeatherService.getSpokenWeatherForecast().then(say).catch(() => say('Opening the weather panel.'))
         );

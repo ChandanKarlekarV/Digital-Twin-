@@ -1,113 +1,139 @@
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --reliance-navy: #002B49;
-    --reliance-deepnavy: #001726;
-    --reliance-blue: #004B87;
-    --reliance-red: #ED1B24;
-    --reliance-cyan: #00F0FF;
-    --reliance-dark: #0A0E14;
-  }
-
   body {
-    background-color: #0A0E14;
-    color: #F4F6F9;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--text));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     user-select: none;
     -webkit-user-select: none;
     overflow: hidden;
   }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid rgb(var(--accent-400));
+    outline-offset: 2px;
+  }
 }
 
-/* Custom Glassmorphism UI classes */
+@layer components {
+  /* Buttons: one height, one radius, token colours; states differ by fill, not glow */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md border text-[11px] font-semibold tracking-wide whitespace-nowrap shrink-0
+      transition-colors cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed;
+    background: rgb(var(--surface-2) / 0.95);
+    border-color: rgb(var(--border));
+    color: rgb(var(--text));
+  }
+  .btn:hover {
+    background: rgb(var(--surface-3));
+    border-color: rgb(var(--border-strong));
+  }
+  .btn-active,
+  .btn-active:hover {
+    background: rgb(var(--accent-900));
+    border-color: rgb(var(--accent-500));
+    color: rgb(var(--accent-100));
+  }
+  .btn-primary {
+    background: rgb(var(--accent-500));
+    border-color: rgb(var(--accent-400));
+    color: rgb(var(--bg));
+  }
+  .btn-primary:hover {
+    background: rgb(var(--accent-400));
+  }
+  .btn-icon {
+    @apply w-8 px-0;
+  }
+
+  /* Dropdown menus */
+  .menu {
+    @apply absolute top-full mt-2 p-1.5 rounded-lg z-50 text-xs;
+    background: rgb(var(--surface) / 0.98);
+    border: 1px solid rgb(var(--border));
+    box-shadow: var(--shadow-panel);
+  }
+  .menu-label {
+    @apply px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider;
+    color: rgb(var(--text-faint));
+  }
+  .menu-item {
+    @apply w-full px-2.5 py-2 rounded-md text-left flex items-center gap-2.5 transition-colors cursor-pointer;
+    color: rgb(var(--text));
+  }
+  .menu-item:hover {
+    background: rgb(var(--surface-3));
+  }
+  .menu-item[aria-pressed='true'] {
+    background: rgb(var(--accent-900));
+  }
+}
+
+/* Panels: flat token surface, hairline border, one soft shadow */
 .glass-panel {
-  background: rgba(0, 43, 73, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 240, 255, 0.22);
-  box-shadow: 0 8px 32px 0 rgba(0, 10, 25, 0.65);
-}
-
-.glass-panel-hover:hover {
-  background: rgba(0, 75, 135, 0.85);
-  border-color: rgba(0, 240, 255, 0.55);
-  box-shadow: 0 0 15px rgba(0, 240, 255, 0.35);
+  background: rgb(var(--surface) / 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgb(var(--border));
+  box-shadow: var(--shadow-panel);
 }
 
 .glass-panel-alert {
-  background: rgba(40, 10, 15, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(237, 27, 36, 0.6);
-  box-shadow: 0 0 25px rgba(237, 27, 36, 0.45);
+  background: rgb(var(--danger-950) / 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgb(var(--danger-500) / 0.7);
+  box-shadow: var(--shadow-panel);
 }
 
 .glass-pill {
-  background: rgba(0, 23, 38, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 240, 255, 0.3);
+  background: rgb(var(--surface) / 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgb(var(--border));
 }
 
-/* Tactical Grid Background */
-.tactical-grid {
-  background-size: 30px 30px;
-  background-image: 
-    linear-gradient(to right, rgba(0, 240, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
-/* Custom Scrollbar for HUD panels */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
-
 ::-webkit-scrollbar-track {
-  background: rgba(0, 23, 38, 0.6);
+  background: rgb(var(--surface));
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.3);
+  background: rgb(var(--border-strong));
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.6);
+  background: rgb(var(--accent-600));
 }
 
-/* KaTeX custom overrides for dark theme */
+/* KaTeX on the dark theme */
 .katex {
-  color: #F4F6F9 !important;
+  color: rgb(var(--text)) !important;
   font-size: 1.05em !important;
 }
-
 .katex .mord.mathnormal {
-  color: #00F0FF !important;
+  color: rgb(var(--accent-300)) !important;
 }
-
 .katex .mord {
-  color: #F4F6F9 !important;
+  color: rgb(var(--text)) !important;
 }
-
-.katex .mbin, .katex .mrel {
-  color: #8EA8BF !important;
-}
-
-/* CRT / Subsea scanline overlay for tactical HUD */
-.scanlines {
-  background: linear-gradient(
-    rgba(18, 16, 16, 0) 50%, 
-    rgba(0, 0, 0, 0.25) 50%
-  ), linear-gradient(
-    90deg,
-    rgba(255, 0, 0, 0.03),
-    rgba(0, 255, 0, 0.01),
-    rgba(0, 0, 255, 0.03)
-  );
-  background-size: 100% 3px, 6px 100%;
-  pointer-events: none;
+.katex .mbin,
+.katex .mrel {
+  color: rgb(var(--text-muted)) !important;
 }

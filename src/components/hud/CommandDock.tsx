@@ -392,7 +392,7 @@ export const CommandDock: React.FC = () => {
               setSihModalOpen(true);
               setCommandDockOpen(false);
             }}
-            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-amber-600/30 to-orange-600/30 hover:from-amber-600/50 hover:to-orange-600/50 text-xs font-mono text-amber-200 border border-amber-400/50 transition-all cursor-pointer shadow-amber-glow font-bold"
+            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-600/30 hover:bg-amber-600/50 text-xs font-mono text-amber-200 border border-amber-400/50 transition-all cursor-pointer shadow-amber-glow font-bold"
           >
             <FileText className="w-4 h-4 text-amber-400 animate-pulse" />
             <span>SIH 6-Page Presentation Deck &amp; Video Demo</span>
@@ -404,7 +404,7 @@ export const CommandDock: React.FC = () => {
               setEodModalOpen(true);
               setCommandDockOpen(false);
             }}
-            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 hover:from-emerald-600/50 hover:to-cyan-600/50 text-xs font-mono text-emerald-200 border border-emerald-400/50 transition-all cursor-pointer shadow-emerald-glow font-bold"
+            className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 text-xs font-mono text-emerald-200 border border-emerald-400/50 transition-all cursor-pointer shadow-emerald-glow font-bold"
           >
             <Calendar className="w-4 h-4 text-emerald-400" />
             <span>6-Month AI Production Ledger &amp; Database</span>

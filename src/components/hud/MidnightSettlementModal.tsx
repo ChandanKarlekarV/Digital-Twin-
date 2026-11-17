@@ -152,7 +152,7 @@ export const MidnightSettlementModal: React.FC = () => {
         {/* ================= MODAL HEADER ================= */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-reliance-cyan/20 bg-reliance-navy/60">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-br from-reliance-cyan/20 to-blue-600/30 border border-reliance-cyan/50 shadow-cyan-glow">
+            <div className="p-2.5 rounded-2xl bg-reliance-cyan/20 border border-reliance-cyan/50 shadow-cyan-glow">
               <Calendar className="w-5 h-5 text-reliance-cyan animate-pulse" />
             </div>
             <div>
@@ -176,10 +176,10 @@ export const MidnightSettlementModal: React.FC = () => {
             <button
               onClick={handleTriggerSettlement}
               disabled={isSettling}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/30 to-orange-500/30 hover:from-amber-500/50 hover:to-orange-500/50 border border-amber-400 text-amber-200 font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-amber-glow"
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400 text-amber-200 font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-amber-glow"
             >
               <Zap className={`w-3.5 h-3.5 ${isSettling ? 'animate-spin text-amber-300' : 'text-amber-400'}`} />
-              <span>{isSettling ? 'RECONCILING...' : '⚡ RECONCILE MIDNIGHT (NOW)'}</span>
+              <span>{isSettling ? 'Settling...' : 'Settle today now'}</span>
             </button>
 
             <button

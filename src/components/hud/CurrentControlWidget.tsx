@@ -46,7 +46,7 @@ export const CurrentControlWidget: React.FC = () => {
   }[] = [
     {
       id: 'slow',
-      label: 'SLOW TIDE',
+      label: 'Slack',
       speedText: '0.6 kt (0.3 m/s)',
       color: 'text-emerald-400',
       bgActive: 'bg-emerald-500/20 border-emerald-400 text-emerald-300',
@@ -54,7 +54,7 @@ export const CurrentControlWidget: React.FC = () => {
     },
     {
       id: 'moderate',
-      label: 'MODERATE',
+      label: 'Moderate',
       speedText: '2.4 kt (1.2 m/s)',
       color: 'text-reliance-cyan',
       bgActive: 'bg-reliance-blue/60 border-reliance-cyan text-white shadow-cyan-glow',
@@ -62,7 +62,7 @@ export const CurrentControlWidget: React.FC = () => {
     },
     {
       id: 'fast',
-      label: 'FAST FLOW',
+      label: 'Strong',
       speedText: '4.6 kt (2.4 m/s)',
       color: 'text-amber-400',
       bgActive: 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-amber-glow',
@@ -70,7 +70,7 @@ export const CurrentControlWidget: React.FC = () => {
     },
     {
       id: 'extreme',
-      label: 'EXTREME SURGE',
+      label: 'Surge',
       speedText: '8.2 kt (4.2 m/s)',
       color: 'text-orange-400',
       bgActive: 'bg-orange-500/30 border-orange-400 text-orange-200 shadow-amber-glow',
@@ -78,7 +78,7 @@ export const CurrentControlWidget: React.FC = () => {
     },
     {
       id: 'storm',
-      label: 'CYCLONIC STORM',
+      label: 'Storm',
       speedText: '8.8 kt (4.5 m/s)',
       color: 'text-rose-400',
       bgActive: 'bg-rose-500/35 border-rose-400 text-rose-200 shadow-red-glow animate-pulse',
@@ -129,7 +129,7 @@ export const CurrentControlWidget: React.FC = () => {
           <Waves className="w-4 h-4 text-reliance-cyan animate-pulse" />
           <div>
             <h3 className="text-[11px] font-bold font-mono tracking-wider uppercase text-reliance-cyan flex items-center gap-1.5">
-              <span>ENVIRONMENTAL CONDITIONS & TIDES</span>
+              <span>Sea conditions</span>
             </h3>
             <div className="text-[9px] font-mono text-reliance-textMuted flex items-center gap-2">
               <span>
@@ -216,7 +216,7 @@ export const CurrentControlWidget: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1 text-reliance-cyan font-bold">
                 <Zap className="w-3.5 h-3.5 animate-pulse" />
-                <span>10s DYNAMIC TIDE PHASE</span>
+                <span>Automatic current (live feed)</span>
               </span>
               <button
                 onClick={() => setDynamicTideCycling(!isDynamicTideCycling)}
@@ -243,7 +243,7 @@ export const CurrentControlWidget: React.FC = () => {
             </div>
             <div className="w-full h-1 bg-reliance-navy rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-reliance-cyan to-emerald-400 transition-all duration-1000"
+                className="h-full bg-reliance-cyan transition-all duration-1000"
                 style={{ width: `${(dynamicTideSecondsRemaining / 60) * 100}%` }}
               />
             </div>
@@ -254,7 +254,7 @@ export const CurrentControlWidget: React.FC = () => {
             <div className="flex items-center justify-between text-[10px] font-mono text-reliance-textMuted uppercase mb-1.5">
               <span className="flex items-center gap-1">
                 <Zap className="w-3 h-3 text-reliance-cyan" />
-                <span>Water Flow Power Level</span>
+                <span>Current strength</span>
               </span>
               <span className="text-[9px] font-bold text-reliance-cyan uppercase">
                 {currentFlowPower}
@@ -292,7 +292,7 @@ export const CurrentControlWidget: React.FC = () => {
             <div className="flex items-center justify-between text-[10px] font-mono text-reliance-textMuted mb-1">
               <span className="flex items-center gap-1">
                 <Gauge className="w-3 h-3 text-reliance-cyan" />
-                <span>Water Flow Velocity</span>
+                <span>Current speed</span>
               </span>
               <span className="font-bold text-reliance-cyan text-[11px]">
                 {currentSpeedKnots.toFixed(1)} Knots ({(currentSpeedKnots * 0.5144).toFixed(2)} m/s)
@@ -314,7 +314,7 @@ export const CurrentControlWidget: React.FC = () => {
             <div className="flex items-center justify-between text-[10px] font-mono text-reliance-textMuted mb-1.5">
               <span className="flex items-center gap-1">
                 <Compass className="w-3 h-3 text-amber-400" />
-                <span>Current Drift Direction</span>
+                <span>Current direction</span>
               </span>
               <span className="font-bold text-amber-300 text-[11px]">
                 {currentDirectionLabel}

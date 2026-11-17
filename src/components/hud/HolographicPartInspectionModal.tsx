@@ -657,7 +657,6 @@ export const HolographicPartInspectionModal: React.FC = () => {
           <div className={`flex flex-col space-y-3 ${isExpanded3D ? 'col-span-1 h-full min-h-[550px]' : 'lg:col-span-7'}`}>
             <div className="relative flex-1 min-h-[360px] sm:min-h-[460px] lg:min-h-[500px] rounded-2xl bg-black/85 border border-reliance-cyan/40 p-3 flex flex-col justify-between overflow-hidden shadow-inner">
               {/* Holographic Grid Overlay */}
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#00ffff0d_1px,transparent_1px),linear-gradient(to_bottom,#00ffff0d_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
 
               {/* 3D Canvas Rendering */}
               <div className="absolute inset-0">
@@ -695,7 +694,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
                   }`}
                   title="Toggle 360° Auto-Rotation"
                 >
-                  <span>🔄 360° ROTATE</span>
+                  <span>Rotate 360°</span>
                   <span className={`w-1.5 h-1.5 rounded-full ${autoRotate ? 'bg-cyan-300 animate-ping' : 'bg-white/30'}`} />
                 </button>
 
@@ -705,21 +704,21 @@ export const HolographicPartInspectionModal: React.FC = () => {
                     className="flex-1 py-1 px-2 rounded-lg bg-black/75 hover:bg-reliance-blue/60 border border-reliance-cyan/40 text-white font-bold transition-all cursor-pointer text-center"
                     title="Zoom In (+)"
                   >
-                    🔍 +
+                    +
                   </button>
                   <button
                     onClick={handleZoomOut}
                     className="flex-1 py-1 px-2 rounded-lg bg-black/75 hover:bg-reliance-blue/60 border border-reliance-cyan/40 text-white font-bold transition-all cursor-pointer text-center"
                     title="Zoom Out (-)"
                   >
-                    🔍 -
+                    -
                   </button>
                   <button
                     onClick={handleResetView}
                     className="py-1 px-2 rounded-lg bg-black/75 hover:bg-reliance-blue/60 border border-reliance-cyan/40 text-reliance-cyan font-bold transition-all cursor-pointer"
                     title="Reset Center View"
                   >
-                    🎯 RESET
+                    RESET
                   </button>
                 </div>
               </div>
@@ -728,7 +727,7 @@ export const HolographicPartInspectionModal: React.FC = () => {
               <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[9px] font-mono text-reliance-cyan/90 bg-reliance-deepnavy/85 p-2 rounded-xl border border-reliance-cyan/20 gap-1 backdrop-blur-md">
                 <span>SPEC: {data.spec}</span>
                 <span className="text-cyan-300 font-bold flex items-center gap-1">
-                  <span>🖱️ DRAG TO ROTATE 360° • SCROLL TO ZOOM</span>
+                  <span>Drag to rotate · scroll to zoom</span>
                   <span>• 60 FPS</span>
                 </span>
               </div>

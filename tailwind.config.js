@@ -1,57 +1,94 @@
 /** @type {import('tailwindcss').Config} */
+
+// All colours come from the CSS tokens in src/styles/tokens.css
+const tok = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+const STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const ramp = (name) => Object.fromEntries(STEPS.map((s) => [s, tok(`${name}-${s}`)]));
+
+const accent = ramp('accent');
+const success = ramp('success');
+const warning = ramp('warning');
+const danger = ramp('danger');
+
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
+        bg: tok('bg'),
+        surface: { DEFAULT: tok('surface'), 2: tok('surface-2'), 3: tok('surface-3') },
+        line: { DEFAULT: tok('border'), strong: tok('border-strong') },
+        ink: { DEFAULT: tok('text'), muted: tok('text-muted'), faint: tok('text-faint') },
+        accent,
+        success,
+        warning,
+        danger,
+
+        // Tailwind families folded onto the four semantic tones
+        cyan: accent,
+        sky: accent,
+        blue: accent,
+        indigo: accent,
+        violet: accent,
+        purple: accent,
+        fuchsia: accent,
+        emerald: success,
+        green: success,
+        teal: success,
+        lime: success,
+        amber: warning,
+        yellow: warning,
+        orange: warning,
+        red: danger,
+        rose: danger,
+        pink: danger,
+
+        // Legacy names used across the HUD, now token-backed
         reliance: {
-          navy: '#002B49',
-          deepnavy: '#001726',
-          blue: '#004B87',
-          accent: '#0066B3',
-          red: '#ED1B24',
-          cyan: '#00F0FF',
-          dark: '#0A0E14',
-          surface: 'rgba(0, 43, 73, 0.65)',
-          surfaceHover: 'rgba(0, 75, 135, 0.75)',
-          border: 'rgba(0, 240, 255, 0.2)',
-          borderGlow: 'rgba(0, 240, 255, 0.5)',
-          textMain: '#F4F6F9',
-          textMuted: '#8EA8BF',
+          navy: tok('surface-2'),
+          deepnavy: tok('surface'),
+          blue: tok('surface-3'),
+          accent: tok('accent-500'),
+          red: tok('danger-400'),
+          cyan: tok('accent-400'),
+          dark: tok('bg'),
+          textMain: tok('text'),
+          textMuted: tok('text-muted'),
         },
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
-      boxShadow: {
-        'cyan-glow': '0 0 15px rgba(0, 240, 255, 0.35)',
-        'cyan-glow-lg': '0 0 25px rgba(0, 240, 255, 0.5)',
-        'red-glow': '0 0 20px rgba(237, 27, 36, 0.6)',
-        'dock': '0 8px 32px 0 rgba(0, 15, 30, 0.7)',
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-md)',
+        xl: 'var(--radius-md)',
+        '2xl': 'var(--radius-lg)',
+        '3xl': 'var(--radius-lg)',
       },
-      backdropBlur: {
-        xs: '2px',
+      // Neon glows replaced by a quiet outline; elevation from one panel shadow
+      boxShadow: {
+        'cyan-glow': '0 0 0 1px rgb(var(--accent-400) / 0.35)',
+        'cyan-glow-lg': '0 0 0 1px rgb(var(--accent-400) / 0.5)',
+        'emerald-glow': '0 0 0 1px rgb(var(--success-400) / 0.35)',
+        'amber-glow': '0 0 0 1px rgb(var(--warning-400) / 0.35)',
+        'red-glow': '0 0 0 1px rgb(var(--danger-400) / 0.5)',
+        'rose-glow': '0 0 0 1px rgb(var(--danger-400) / 0.5)',
+        dock: 'var(--shadow-panel)',
+      },
+      width: {
+        76: '19rem',
+        84: '21rem',
+        88: '22rem',
+        side: 'var(--side-panel-w)',
       },
       animation: {
         'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'radar-sweep': 'sweep 4s linear infinite',
-        'telemetry-flow': 'flow 2s linear infinite',
-      },
-      keyframes: {
-        sweep: {
-          '0%': { transform: 'rotate(0deg)' },
-          '100%': { transform: 'rotate(360deg)' },
-        },
-        flow: {
-          '0%': { backgroundPosition: '0% 50%' },
-          '100%': { backgroundPosition: '100% 50%' },
-        },
+        'spin-slow': 'spin 6s linear infinite',
       },
     },
   },
   plugins: [],
-}
+};

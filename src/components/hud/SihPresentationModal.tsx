@@ -250,7 +250,7 @@ export const SihPresentationModal: React.FC = () => {
                       </div>
                       <ul className="space-y-2 text-slate-700">
                         <li>
-                          <strong className="text-slate-900">Physics-Informed Cyber-Twin:</strong> 50.0 Hz ultra-fast digital twin coupling 1D Kalman state estimation with real-time WebGL 3D visualization.
+                          <strong className="text-slate-900">Physics-Informed Cyber-Twin:</strong> 200 Hz fixed-step digital twin coupling 1D Kalman state estimation with real-time WebGL 3D visualization.
                         </li>
                         <li>
                           <strong className="text-slate-900">ASTM D1250 Net Oil Reconciliation:</strong> Automatic deconvolution of Gross Liquid vs Net Dry Purified Oil, BS&amp;W water-cut %, and associated gas.
@@ -463,7 +463,7 @@ export const SihPresentationModal: React.FC = () => {
                     />
                     <div className="absolute inset-0 bg-cyan-900/20 backdrop-brightness-110 flex items-end p-3">
                       <span className="px-2 py-1 rounded bg-black/70 text-[10px] font-mono text-cyan-300 font-bold">
-                        1. 50.0 Hz Real-Time 3D Spatial Twin
+                        1. 200 Hz Real-Time 3D Spatial Twin
                       </span>
                     </div>
                   </div>
@@ -499,7 +499,7 @@ export const SihPresentationModal: React.FC = () => {
                 <div className="flex items-center justify-between pt-3 border-t border-white/10 font-mono text-xs">
                   <div className="flex items-center gap-2 text-emerald-400">
                     <Activity className="w-4 h-4 animate-spin" />
-                    <span>ANIMATED SIMULATION: 50.0 Hz CLOCK ACTIVE • 180-DAY DATABASE SYNCED</span>
+                    <span>PHYSICS: 200 Hz CLOCK ACTIVE • 180-DAY DATABASE SYNCED</span>
                   </div>
                   <div className="text-slate-400 text-[10px]">
                     PRESS 'SPACE' OR ARROW KEYS TO BROWSE SLIDES

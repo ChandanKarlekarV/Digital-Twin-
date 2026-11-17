@@ -161,7 +161,7 @@ export const TelemetryDrawer: React.FC = () => {
             <div>
               <div className="flex items-center gap-1.5 text-[10px] font-mono text-reliance-cyan font-bold uppercase tracking-wider">
                 <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                <span>Live telemetry · 50 Hz</span>
+                <span>Live telemetry · 200 Hz physics</span>
               </div>
               <h2 className="text-sm font-extrabold text-white truncate max-w-[240px]">
                 {assetInfo?.name || selectedAssetId || 'KG-D6 Subsea Complex'}
@@ -247,7 +247,7 @@ export const TelemetryDrawer: React.FC = () => {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-reliance-textMuted font-mono flex items-center gap-1.5 text-[11px]">
                     <Droplets className="w-3.5 h-3.5 text-emerald-400" />
-                    Net oil rate
+                    Condensate rate
                   </span>
                   <span className="text-[10px] text-emerald-400 font-mono font-bold">ASTM D1250</span>
                 </div>

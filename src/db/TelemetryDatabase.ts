@@ -1,8 +1,10 @@
 import { TelemetryRecord, TelemetryAggregate, TelemetryTimeBucket } from '../types/telemetry';
 import { sixMonthDataEngine } from './SixMonthDataEngine';
-import { coriolisEngine } from '../physics/CoriolisEngine';
+import { productionAt } from '../data/kgd6Production';
+import { solveNetwork, drillState, DRILL, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
+import { steadyRecord, drillRecord } from '../physics/MeterComputer';
 
-/** Live 50 Hz stream kept in RAM: ~57 s of all 7 assets */
+/** Live stream kept in RAM (records arrive at 50 Hz per asset from the 200 Hz physics): ~57 s of all 7 assets */
 const LIVE_CAPACITY = 20000;
 /** Each asset is sampled into the history once per minute */
 const HISTORY_SAMPLE_MS = 60 * 1000;
@@ -15,7 +17,7 @@ const IDB_STORE = 'history_samples';
 
 /**
  * Three-tier time-series store for VARUNA-AI:
- *  1. live   — fixed-size ring buffer of every 50 Hz record (O(1) insert, no array shifting)
+ *  1. live   — fixed-size ring buffer of every 50 Hz stored record (O(1) insert, no array shifting)
  *  2. history — time-sorted 15-minute seed + 1-minute live samples per asset, queried by
  *               binary search; live data can no longer push the 5-week history out
  *  3. disk   — IndexedDB, written in batched transactions every 5 s and restored on load,
@@ -99,75 +101,15 @@ class TelemetryDatabaseService {
     const startTime = now - thirtyFiveDaysMs;
     const stepIntervalMs = 15 * 60 * 1000; // 15-minute high-fidelity intervals
 
-    const assets = [
-      { id: 'RISER-ALPHA', share: 0.35, baseP: 242.0, baseT: 52.0 },
-      { id: 'RISER-BRAVO', share: 0.32, baseP: 238.5, baseT: 50.5 },
-      { id: 'MANIFOLD-D6-MAIN', share: 0.95, baseP: 255.0, baseT: 68.0 },
-      { id: 'XT-WELLHEAD-01', share: 0.18, baseP: 278.0, baseT: 78.5 },
-      { id: 'XT-WELLHEAD-02', share: 0.15, baseP: 282.0, baseT: 81.0 },
-      { id: 'TOPSIDE-MPFM-01', share: 1.00, baseP: 85.0, baseT: 38.0 },
-      { id: 'TOPSIDE-DRILL-RIG', share: 0.50, baseP: 210.0, baseT: 60.0 },
-    ];
-
+    // 5 weeks at 15-minute steps, computed from the published KG-D6 quarterly rates through
+    // the same network physics and flow-computer chain as the live stream (no random numbers)
     const records: TelemetryRecord[] = [];
-    const nominalTotalBpd = 122450;
-
+    const drill = drillState(DRILL.rpm, DRILL.wobKn);
     for (let t = startTime; t <= now; t += stepIntervalMs) {
-      const dayFraction = ((t % (24 * 3600 * 1000)) / (24 * 3600 * 1000)) * Math.PI * 2;
-      const diurnalFactor = 1.0 + 0.03 * Math.sin(dayFraction);
-      const dayIndex = Math.floor((t - startTime) / (24 * 3600 * 1000));
-      const trendFactor = 1.0 + 0.015 * Math.sin(dayIndex * 0.8);
-
-      for (const asset of assets) {
-        const noise = (Math.random() - 0.5) * 0.02;
-        const targetBpd = nominalTotalBpd * asset.share * diurnalFactor * trendFactor * (1 + noise);
-
-        const pLine = asset.baseP + (Math.random() - 0.5) * 3.5;
-        const tLine = asset.baseT + (Math.random() - 0.5) * 1.8;
-
-        const baseDensity = 807.2;
-        const apiGravity = 141.5 / (baseDensity / 999.016) - 131.5;
-        const waterCutPct = 4.2 + 0.8 * Math.sin(dayFraction) + (Math.random() - 0.5) * 0.5;
-
-        const alphaT = 341.0957 / (baseDensity * baseDensity);
-        const deltaT = tLine - 15.56;
-        const ctl = Math.exp(-alphaT * deltaT * (1 + 0.8 * alphaT * deltaT));
-        const cpl = 1 / (1 - 1.25e-5 * (pLine - 1.0));
-        const rawDensity = baseDensity * ctl * cpl * (1 + (waterCutPct / 100) * 0.24);
-
-        // Same Coriolis calibration as the live emitter (≈ 730 Hz for KG-D6 condensate)
-        const fOsc = coriolisEngine.computeFrequencyFromDensity(rawDensity, tLine) + (Math.random() - 0.5) * 1.2;
-        const grossMassRate = (targetBpd * 0.1589873 * baseDensity) / 86400;
-        const purifiedBpd = targetBpd * (1.0 - waterCutPct / 100);
-
-        records.push({
-          timestamp: t,
-          precise_time_iso: new Date(t).toISOString(),
-          asset_id: asset.id,
-          p_line_bar: Number(pLine.toFixed(2)),
-          t_line_c: Number(tLine.toFixed(2)),
-          f_osc_hz: Number(fOsc.toFixed(2)),
-          raw_density: Number(rawDensity.toFixed(2)),
-          corrected_density: Number(baseDensity.toFixed(2)),
-          api_gravity: Number(apiGravity.toFixed(2)),
-          water_cut_pct: Number(waterCutPct.toFixed(2)),
-          gross_mass_rate: Number(grossMassRate.toFixed(3)),
-          // Same meaning as live records: gross = oil + water, net oil is water-free
-          gross_liquid_bpd: Number(targetBpd.toFixed(1)),
-          net_oil_bpd: Number(purifiedBpd.toFixed(1)),
-          purified_oil_bpd: Number(purifiedBpd.toFixed(1)),
-          produced_water_bpd: Number((targetBpd * (waterCutPct / 100)).toFixed(1)),
-          associated_gas_mmscfd: Number(((purifiedBpd * 480) / 1e6).toFixed(2)),
-          status_flag: 0,
-          drill_rpm: 120,
-          drill_torque_knm: 28.4,
-          drill_wob_kn: 140,
-          drill_rop_mhr: 12.5,
-          drill_spp_bar: 210,
-        });
-      }
+      const net = solveNetwork(productionAt(t));
+      for (const s of Object.values(net)) records.push(steadyRecord(s, WATER_CUT_PCT, t));
+      records.push(drillRecord(DRILL.rpm, drill.torqueKnm, drill.ropMh, 0, t));
     }
-
     // Real samples recorded in earlier sessions come back from disk and merge with the seed
     const persisted = await this.loadPersisted(startTime);
     this.inMemoryRecords = records.concat(persisted, this.inMemoryRecords).sort((a, b) => a.timestamp - b.timestamp);

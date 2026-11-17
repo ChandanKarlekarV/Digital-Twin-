@@ -1,86 +1,165 @@
-import { TelemetryRecord } from '../types/telemetry';
 import { telemetryDb } from '../db/TelemetryDatabase';
 import { useTelemetryStore } from '../store/useTelemetryStore';
 import { useRigStore } from '../store/useRigStore';
 import { KalmanFilter1D } from './KalmanFilter';
-import { coriolisEngine } from './CoriolisEngine';
-import { astm1250Engine } from './ASTM1250Engine';
-import { multiphaseCutEngine } from './MultiphaseCut';
+import { meterRecord, drillRecord, tubeFrequency, DRILL_ASSET } from './MeterComputer';
 import { aiIngestionPipeline } from '../services/AiIngestionPipeline';
 import { midnightSettlementEngine } from '../services/MidnightSettlementEngine';
+import { productionAt } from '../data/kgd6Production';
+import {
+  solveNetwork,
+  slugging,
+  drillState,
+  WATER_CUT_PCT,
+  DRILL,
+  STICK_SLIP_HZ,
+  Disturbance,
+} from './KgD6FlowModel';
 
-const ASSET_BASELINES = [
-  { id: 'RISER-ALPHA', baseP: 242.0, baseT: 52.0, baseMass: 58.2, nominalBpd: 34200 },
-  { id: 'RISER-BRAVO', baseP: 238.5, baseT: 50.5, baseMass: 53.6, nominalBpd: 31500 },
-  { id: 'MANIFOLD-D6-MAIN', baseP: 255.0, baseT: 68.0, baseMass: 201.0, nominalBpd: 118000 },
-  { id: 'XT-WELLHEAD-01', baseP: 278.0, baseT: 78.5, baseMass: 38.0, nominalBpd: 22300 },
-  { id: 'XT-WELLHEAD-02', baseP: 282.0, baseT: 81.0, baseMass: 31.5, nominalBpd: 18500 },
-  { id: 'TOPSIDE-MPFM-01', baseP: 85.0, baseT: 38.0, baseMass: 201.0, nominalBpd: 118000 },
-  { id: 'TOPSIDE-DRILL-RIG', baseP: 210.0, baseT: 60.0, baseMass: 65.0, nominalBpd: 38000 },
-];
+/** Physics integration rate (fixed step) */
+export const PHYSICS_HZ = 200;
+/** Records written to the database (meter computer output rate) */
+export const STORE_HZ = 50;
+/** Live values pushed to the UI */
+const UI_HZ = 25;
+const DT = 1 / PHYSICS_HZ;
+const STORE_EVERY = PHYSICS_HZ / STORE_HZ;
+const UI_EVERY = PHYSICS_HZ / UI_HZ;
+/** Incident drills ease in/out with this time constant (s) */
+const INCIDENT_TAU = 1.5;
+/** Auto-advance an incident drill every 6 s */
+const INCIDENT_PHASE_S = 6;
 
-/** KG-D6 condensate base density at 15.56 °C (≈ 43.7 °API) */
-const BASE_OIL_DENSITY = 807.2;
-const NOMINAL_WATER_CUT = 4.5;
-
-const BRINE_DENSITY = 1025.0;
-/** Solution gas-oil ratio, scf of gas per stock-tank barrel */
-const GAS_OIL_RATIO_SCF_BBL = 480;
-
-/** In-situ oil density from the PVT line: thermal expansion lowers it ~0.65 kg/m³ per °C. */
-function inSituOilDensity(baseDensity: number, tempC: number): number {
-  return baseDensity - (tempC - 15.56) * 0.65;
-}
-
-/** Volume-weighted oil/brine mixture density seen by the Coriolis tube. */
-function expectedMixDensity(baseDensity: number, waterCutPct: number, tempC: number): number {
-  const wc = waterCutPct / 100;
-  return (1 - wc) * inSituOilDensity(baseDensity, tempC) + wc * BRINE_DENSITY;
-}
-
-interface AssetFilterBank {
-  pressure: KalmanFilter1D;
-  temperature: KalmanFilter1D;
-  frequency: KalmanFilter1D;
-  massRate: KalmanFilter1D;
-  waterCut: KalmanFilter1D;
-  drillTorque: KalmanFilter1D;
-  drillRop: KalmanFilter1D;
-}
+const PRODUCTION_ASSETS = ['RISER-ALPHA', 'RISER-BRAVO', 'MANIFOLD-D6-MAIN', 'XT-WELLHEAD-01', 'XT-WELLHEAD-02', 'TOPSIDE-MPFM-01'];
 
 /**
- * Ultra-Fast & High-Accuracy 50.0 Hz (20ms) Physics & Sensor Telemetry Emitter
- * Ingests subsea multiphase flows and topside rotary drilling dynamics in real-time.
+ * Transmitter model: first-order lag (time constant tau) and finite resolution. Readings
+ * differ from the true process value only through these two real instrument effects.
+ */
+class Sensor {
+  private v: number;
+  constructor(initial: number, private tau: number, private res: number) {
+    this.v = initial;
+  }
+  step(truth: number, dt: number): number {
+    this.v += (truth - this.v) * (1 - Math.exp(-dt / this.tau));
+    return Math.round(this.v / this.res) * this.res;
+  }
+}
+
+interface AssetSim {
+  p: Sensor;
+  t: Sensor;
+  mass: Sensor;
+  f: Sensor;
+  wc: Sensor;
+  kP: KalmanFilter1D;
+  kT: KalmanFilter1D;
+  kF: KalmanFilter1D;
+  kMass: KalmanFilter1D;
+  kWC: KalmanFilter1D;
+  slugPhase: number;
+  last?: { p: number; t: number; mass: number; f: number; wc: number; fp: number; ft: number; ff: number; fm: number; fwc: number };
+}
+
+/** Smoothed incident disturbance (eases toward the drill's target) */
+interface Incident {
+  flow: number;
+  kRiserA: number;
+  kManifold: number;
+  dWC: number;
+  rupture: number;
+  rpm: number;
+}
+const CALM: Incident = { flow: 1, kRiserA: 1, kManifold: 1, dWC: 0, rupture: 0, rpm: DRILL.rpm };
+
+/** Target disturbance for an incident drill phase (1-4) */
+function incidentTarget(scenario: string, phase: number): Incident {
+  const i = { ...CALM };
+  const ph = Math.max(1, Math.min(4, phase));
+  switch (scenario) {
+    case 'pipe_blockage': // restriction in riser Alpha: its friction rises, block flow falls
+      i.kRiserA = [4, 15, 60, 400][ph - 1]; // flow and pressures follow from the well deliverability
+      break;
+    case 'hydrate_plug': // hydrate building in the manifold; free water arrives with it
+      i.kManifold = [3, 10, 40, 250][ph - 1];
+      i.dWC = 3.5 * ph;
+      break;
+    case 'rupture': // loss of containment on riser Alpha
+      i.rupture = ph / 4;
+      i.flow = 0.2;
+      break;
+    case 'stuck_drill':
+    case 'drill_damage':
+      i.rpm = Math.max(0, DRILL.rpm - 32 * ph);
+      break;
+  }
+  return i;
+}
+
+const STATUS: Record<string, (ph: number) => number> = {
+  pipe_blockage: (ph) => (ph >= 3 ? 2 : 1),
+  hydrate_plug: (ph) => (ph >= 3 ? 2 : 3),
+  rupture: () => 2,
+  stuck_drill: (ph) => (ph >= 3 ? 4 : 1),
+  drill_damage: (ph) => (ph >= 3 ? 4 : 1),
+};
+const AFFECTS: Record<string, string[]> = {
+  pipe_blockage: ['RISER-ALPHA', 'MANIFOLD-D6-MAIN'],
+  hydrate_plug: ['MANIFOLD-D6-MAIN', 'XT-WELLHEAD-01'],
+  rupture: ['RISER-ALPHA', 'MANIFOLD-D6-MAIN'],
+  stuck_drill: [DRILL_ASSET],
+  drill_damage: [DRILL_ASSET],
+};
+
+const fOscFor = tubeFrequency;
+
+/**
+ * KG-D6 telemetry at a fixed 200 Hz physics step.
+ *
+ * Production comes from the published block rate (productionAt), the network physics from
+ * KgD6FlowModel, transients from riser slugging and incident drills, and readings from the
+ * transmitter model above. A setInterval wakes every 10 ms and runs however many 5 ms steps
+ * real time requires (an accumulator), so the physics rate does not depend on timer jitter.
  */
 class TelemetryEmitterService {
-  private timerId: number | NodeJS.Timeout | null = null;
+  private timerId: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
-  private tickCount = 0;
-  private filterBanks: Map<string, AssetFilterBank> = new Map();
-  private autoPhaseTick = 0;
-  private samplingIntervalMs = 20; // 50.0 Hz ultra-fast real-time sampling
+  private step = 0;
+  private simTime = 0;
+  private lastWall = 0;
+  private acc = 0;
+  private sims = new Map<string, AssetSim>();
+  private incident: Incident = { ...CALM };
+  private drillSensors = { torque: new Sensor(DRILL.designTorqueKnm, 0.05, 0.1), rop: new Sensor(DRILL.designRopMh, 2, 0.1) };
+  private kTorque = new KalmanFilter1D({ Q: 0.02, R: 0.05, initialState: DRILL.designTorqueKnm, maxResidualThreshold: 25 });
+  private kRop = new KalmanFilter1D({ Q: 0.01, R: 0.05, initialState: DRILL.designRopMh, maxResidualThreshold: 15 });
+  private phaseClock = 0;
 
   constructor() {
-    this.initFilterBanks();
+    this.initSims();
   }
 
-  /**
-   * Each asset's filters start at that asset's own operating point. (They used to all start at
-   * RISER-ALPHA's values, so other assets' readings were rejected as outliers and the display
-   * froze at 1245 Hz / 500 kg/m³ / 151 °API.)
-   */
-  private initFilterBanks(): void {
-    for (const asset of ASSET_BASELINES) {
-      const density = expectedMixDensity(BASE_OIL_DENSITY, NOMINAL_WATER_CUT, asset.baseT);
-      const fOsc = coriolisEngine.computeFrequencyFromDensity(density, asset.baseT);
-      this.filterBanks.set(asset.id, {
-        pressure: new KalmanFilter1D({ Q: 0.015, R: 0.20, initialState: asset.baseP, maxResidualThreshold: 45 }),
-        temperature: new KalmanFilter1D({ Q: 0.003, R: 0.06, initialState: asset.baseT, maxResidualThreshold: 15 }),
-        frequency: new KalmanFilter1D({ Q: 0.008, R: 0.12, initialState: fOsc, maxResidualThreshold: 20 }),
-        massRate: new KalmanFilter1D({ Q: 0.04, R: 0.35, initialState: asset.baseMass, maxResidualThreshold: 30 }),
-        waterCut: new KalmanFilter1D({ Q: 0.008, R: 0.08, initialState: NOMINAL_WATER_CUT, maxResidualThreshold: 10 }),
-        drillTorque: new KalmanFilter1D({ Q: 0.02, R: 0.18, initialState: 28.4, maxResidualThreshold: 25 }),
-        drillRop: new KalmanFilter1D({ Q: 0.01, R: 0.10, initialState: 12.5, maxResidualThreshold: 15 }),
+  private initSims(): void {
+    const net = solveNetwork(productionAt());
+    for (const id of PRODUCTION_ASSETS) {
+      const s = net[id];
+      const wc = WATER_CUT_PCT;
+      const f0 = fOscFor(wc, s.tC, s.pBar);
+      this.sims.set(id, {
+        // Pressure transmitter 0.1 s / 0.01 bar; RTD in thermowell 4 s / 0.01 °C;
+        // Coriolis mass 0.2 s / 0.01 kg/s and tube frequency 0.1 s / 0.001 Hz
+        p: new Sensor(s.pBar, 0.1, 0.01),
+        t: new Sensor(s.tC, 4, 0.01),
+        mass: new Sensor(s.liquidKgS, 0.2, 0.01),
+        f: new Sensor(f0, 0.1, 0.001),
+        wc: new Sensor(wc, 1, 0.01),
+        kP: new KalmanFilter1D({ Q: 0.01, R: 0.05, initialState: s.pBar, maxResidualThreshold: 45 }),
+        kT: new KalmanFilter1D({ Q: 0.002, R: 0.02, initialState: s.tC, maxResidualThreshold: 15 }),
+        kF: new KalmanFilter1D({ Q: 0.005, R: 0.02, initialState: f0, maxResidualThreshold: 20 }),
+        kMass: new KalmanFilter1D({ Q: 0.02, R: 0.05, initialState: s.liquidKgS, maxResidualThreshold: 30 }),
+        kWC: new KalmanFilter1D({ Q: 0.005, R: 0.02, initialState: wc, maxResidualThreshold: 10 }),
+        slugPhase: 0,
       });
     }
   }
@@ -88,255 +167,124 @@ class TelemetryEmitterService {
   public start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-
-    // 1. Seed 6-Month persistent database in background
     telemetryDb.seedSixMonthHistory().catch(console.error);
-
-    // 2. Start AI Automated Ingestion & Anomaly Detection Pipeline
     aiIngestionPipeline.start();
-
-    // 3. Start 12:00 Midnight Automated EOD Settlement Engine
     midnightSettlementEngine.start();
-
-    // 4. Ultra-Fast 50.0 Hz (20ms) interval timer
-    this.timerId = setInterval(() => {
-      this.emitTick();
-    }, this.samplingIntervalMs);
+    this.lastWall = performance.now();
+    this.timerId = setInterval(() => this.pump(), 10);
   }
 
   public stop(): void {
-    if (this.timerId) {
-      clearInterval(this.timerId);
-      this.timerId = null;
-    }
+    if (this.timerId) clearInterval(this.timerId);
+    this.timerId = null;
     aiIngestionPipeline.stop();
     midnightSettlementEngine.stop();
     this.isRunning = false;
   }
 
+  /** Physics integration rate */
   public getSamplingRateHz(): number {
-    return Math.round(1000 / this.samplingIntervalMs);
+    return PHYSICS_HZ;
   }
 
-  private emitTick(): void {
-    this.tickCount++;
-    const now = Date.now();
-    const preciseIso = new Date(now).toISOString();
+  public getStorageRateHz(): number {
+    return STORE_HZ;
+  }
 
-    const {
-      selectedAssetId,
-      emergencyScenario,
-      incidentPhase,
-      isAutoSimulatingPhases,
-      nextIncidentPhase,
-      setEmergencyScenario,
-    } = useRigStore.getState();
+  /** Runs the fixed steps owed since the last wake-up (capped at 0.25 s after a stall) */
+  private pump(): void {
+    const now = performance.now();
+    this.acc = Math.min(this.acc + (now - this.lastWall) / 1000, 0.25);
+    this.lastWall = now;
+    while (this.acc >= DT) {
+      this.acc -= DT;
+      this.advance(DT);
+    }
+  }
 
-    const activeAsset = selectedAssetId || 'RISER-ALPHA';
+  /** One physics step. Public for tests. */
+  public advance(dt: number = DT): void {
+    this.step++;
+    this.simTime += dt;
+    const store = useRigStore.getState();
+    const { emergencyScenario: scenario, incidentPhase: phase } = store;
 
-    // Auto-simulation progression: advance phase every 300 ticks (6 seconds at 50 Hz)
-    if (isAutoSimulatingPhases && emergencyScenario !== 'none') {
-      this.autoPhaseTick++;
-      if (this.autoPhaseTick >= 300) {
-        this.autoPhaseTick = 0;
-        if (incidentPhase < 4) {
-          nextIncidentPhase();
-        } else {
-          setEmergencyScenario('none', 1);
-        }
+    // Incident drill clock
+    if (store.isAutoSimulatingPhases && scenario !== 'none') {
+      this.phaseClock += dt;
+      if (this.phaseClock >= INCIDENT_PHASE_S) {
+        this.phaseClock = 0;
+        if (phase < 4) store.nextIncidentPhase();
+        else store.setEmergencyScenario('none', 1);
       }
     } else {
-      this.autoPhaseTick = 0;
+      this.phaseClock = 0;
     }
 
-    for (const asset of ASSET_BASELINES) {
-      let filterBank = this.filterBanks.get(asset.id);
-      if (!filterBank) {
-        this.initFilterBanks();
-        filterBank = this.filterBanks.get(asset.id)!;
-      }
+    // Ease the disturbance toward the drill's target
+    const target = scenario === 'none' ? CALM : incidentTarget(scenario, phase);
+    const a = 1 - Math.exp(-dt / INCIDENT_TAU);
+    (Object.keys(CALM) as (keyof Incident)[]).forEach((k) => (this.incident[k] += (target[k] - this.incident[k]) * a));
 
-      // Base physical variables with subtle wave / pump harmonics
-      const waveHarmonic = Math.sin(this.tickCount * 0.016) * 0.8;
-      const pumpHarmonic = Math.sin(this.tickCount * 0.08) * 0.3;
+    const d: Disturbance = {
+      flowFactor: this.incident.flow,
+      kFactor: { 'RISER-ALPHA': this.incident.kRiserA, 'MANIFOLD-D6-MAIN': this.incident.kManifold },
+    };
+    const block = productionAt();
+    const net = solveNetwork(block, d);
+    const store_ = this.step % STORE_EVERY === 0;
+    const ui = this.step % UI_EVERY === 0;
+    const activeAsset = store.selectedAssetId || 'RISER-ALPHA';
+    const statusFor = (id: string) => (scenario !== 'none' && AFFECTS[scenario]?.includes(id) ? STATUS[scenario]?.(phase) ?? 0 : 0);
 
-      let targetP = asset.baseP + waveHarmonic + pumpHarmonic;
-      let targetT = asset.baseT + Math.sin(this.tickCount * 0.004) * 0.2;
-      let targetMass = asset.baseMass * (1 + Math.sin(this.tickCount * 0.01) * 0.02);
-      let targetWC = NOMINAL_WATER_CUT + Math.sin(this.tickCount * 0.002) * 0.6;
-      let statusFlag = 0;
+    for (const id of PRODUCTION_ASSETS) {
+      const sim = this.sims.get(id)!;
+      const s = net[id];
+      // Slugging: deterministic pressure wave at the Gregory-Scott frequency
+      const slug = slugging(s);
+      sim.slugPhase = (sim.slugPhase + 2 * Math.PI * slug.freqHz * dt) % (2 * Math.PI);
+      let pTrue = s.pBar + slug.ampBar * Math.sin(sim.slugPhase);
+      if (id === 'RISER-ALPHA' && this.incident.rupture > 0.001) pTrue = Math.max(12, pTrue * (1 - 0.8 * this.incident.rupture));
+      const wcTrue = WATER_CUT_PCT + this.incident.dWC;
 
-      // Drill dynamics baseline
-      let targetTorque = 28.4 + Math.sin(this.tickCount * 0.03) * 1.2;
-      let targetRop = 12.5 + Math.sin(this.tickCount * 0.02) * 1.5;
-      let targetRpm = 120;
-      let targetWob = 140;
-
-      // ================= EMERGENCY & ANOMALY INCIDENT INJECTIONS =================
-      const pFactor = incidentPhase; // 1 to 4
-
-      switch (emergencyScenario) {
-        case 'pipe_blockage':
-          if (asset.id === 'MANIFOLD-D6-MAIN' || asset.id === 'RISER-ALPHA') {
-            if (pFactor === 1) {
-              targetP += 12.0 + Math.random() * 2.0;
-              targetMass *= 0.88;
-              statusFlag = 1;
-            } else if (pFactor === 2) {
-              targetP += 34.0 + Math.random() * 4.0;
-              targetMass *= 0.62;
-              statusFlag = 1;
-            } else if (pFactor >= 3) {
-              targetP += 72.0 + Math.random() * 6.0;
-              targetMass *= 0.15;
-              statusFlag = 2; // Critical ESD
-            }
-          }
-          break;
-
-        case 'hydrate_plug':
-          if (asset.id === 'MANIFOLD-D6-MAIN' || asset.id === 'XT-WELLHEAD-01') {
-            targetT -= 18.0 * pFactor;
-            targetP += 22.0 * pFactor;
-            targetWC += 3.5 * pFactor;
-            statusFlag = pFactor >= 3 ? 2 : 3;
-          }
-          break;
-
-        case 'stuck_drill':
-        case 'drill_damage':
-          if (asset.id === 'TOPSIDE-DRILL-RIG') {
-            targetTorque += 6.5 * pFactor + (Math.random() - 0.5) * 4.0;
-            targetRpm = Math.max(0, 120 - 32 * pFactor);
-            targetRop = Math.max(0.5, 12.5 - 3.2 * pFactor);
-            statusFlag = pFactor >= 3 ? 4 : 1;
-          }
-          break;
-
-        case 'rupture':
-          if (asset.id === 'RISER-ALPHA' || asset.id === 'MANIFOLD-D6-MAIN') {
-            targetP = Math.max(12.0, targetP - 65.0 * pFactor);
-            targetMass *= 0.2;
-            statusFlag = 2;
-          }
-          break;
-      }
-
-      // Inject raw sensor noise & occasional multiphase bubble glitch
-      const isGlitch = Math.random() < 0.015;
-      const glitchNoise = isGlitch ? (Math.random() - 0.5) * 14.0 : 0;
-      const gaussianNoiseP = (Math.random() - 0.5) * 1.4 + glitchNoise;
-      const gaussianNoiseT = (Math.random() - 0.5) * 0.4;
-      const gaussianNoiseMass = (Math.random() - 0.5) * 1.1;
-
-      const rawP = targetP + gaussianNoiseP;
-      const rawT = targetT + gaussianNoiseT;
-      const rawMass = Math.max(0, targetMass + gaussianNoiseMass);
-      const rawWC = Math.max(0, targetWC + (Math.random() - 0.5) * 0.6);
-      const rawTorque = targetTorque + (Math.random() - 0.5) * 0.8;
-      const rawRop = targetRop + (Math.random() - 0.5) * 0.4;
-
-      // Theoretical frequency for Coriolis tube
-      const expectedRawDensity = expectedMixDensity(BASE_OIL_DENSITY, rawWC, rawT);
-      const nominalFOsc = coriolisEngine.computeFrequencyFromDensity(expectedRawDensity, rawT);
-      const rawFOsc = nominalFOsc + (Math.random() - 0.5) * 2.0 + (isGlitch ? 10.0 : 0);
-
-      // Execute Kalman filtering
-      const kP = filterBank.pressure.update(rawP);
-      const kT = filterBank.temperature.update(rawT);
-      const kFOsc = filterBank.frequency.update(rawFOsc);
-      const kMass = filterBank.massRate.update(rawMass);
-      const kWC = filterBank.waterCut.update(rawWC);
-      const kTorque = filterBank.drillTorque.update(rawTorque);
-      const kRop = filterBank.drillRop.update(rawRop);
-
-      // Raw record calculations
-      const rawCoriolis = coriolisEngine.computeDensityFromFrequency(rawFOsc, rawT);
-      const rawAstm = astm1250Engine.executeFullCorrection(rawCoriolis.temp_compensated_density_kg_m3, rawT, rawP);
-      // Oil density comes from the PVT line (as in a real MPFM), not from the water-bearing mixture
-      const rawMultiphase = multiphaseCutEngine.deconvolveFlow(
-        rawCoriolis.temp_compensated_density_kg_m3,
-        inSituOilDensity(BASE_OIL_DENSITY, rawT),
-        rawMass,
-        BASE_OIL_DENSITY,
-        BRINE_DENSITY
-      );
-
-      // Filtered record calculations
-      const filtCoriolis = coriolisEngine.computeDensityFromFrequency(kFOsc.filtered, kT.filtered);
-      const filtAstm = astm1250Engine.executeFullCorrection(filtCoriolis.temp_compensated_density_kg_m3, kT.filtered, kP.filtered);
-      const filtMultiphase = multiphaseCutEngine.deconvolveFlow(
-        filtCoriolis.temp_compensated_density_kg_m3,
-        inSituOilDensity(BASE_OIL_DENSITY, kT.filtered),
-        kMass.filtered,
-        BASE_OIL_DENSITY,
-        BRINE_DENSITY
-      );
-
-      // net_oil_bpd is already water-free; gross liquid adds the produced water back
-      const netBpd = filtMultiphase.net_oil_bpd;
-      const producedWater = filtMultiphase.water_bpd;
-      const grossBpd = netBpd + producedWater;
-      const purifiedBpd = netBpd;
-      const associatedGas = (netBpd * GAS_OIL_RATIO_SCF_BBL) / 1e6;
-
-      const rawRecord: TelemetryRecord = {
-        timestamp: now,
-        precise_time_iso: preciseIso,
-        asset_id: asset.id,
-        p_line_bar: Number(rawP.toFixed(2)),
-        t_line_c: Number(rawT.toFixed(2)),
-        f_osc_hz: Number(rawFOsc.toFixed(2)),
-        raw_density: Number(rawCoriolis.uncompensated_density_kg_m3.toFixed(2)),
-        corrected_density: Number(rawAstm.rho_base.toFixed(2)),
-        api_gravity: Number(rawAstm.api_gravity.toFixed(2)),
-        water_cut_pct: Number(rawWC.toFixed(2)),
-        gross_mass_rate: Number(rawMass.toFixed(2)),
-        gross_liquid_bpd: Number((rawMultiphase.net_oil_bpd + rawMultiphase.water_bpd).toFixed(1)),
-        net_oil_bpd: Number(rawMultiphase.net_oil_bpd.toFixed(1)),
-        purified_oil_bpd: Number(rawMultiphase.net_oil_bpd.toFixed(1)),
-        produced_water_bpd: Number(rawMultiphase.water_bpd.toFixed(1)),
-        associated_gas_mmscfd: Number(((rawMultiphase.net_oil_bpd * GAS_OIL_RATIO_SCF_BBL) / 1e6).toFixed(2)),
-        status_flag: statusFlag,
-        drill_rpm: targetRpm,
-        drill_torque_knm: Number(rawTorque.toFixed(1)),
-        drill_wob_kn: targetWob,
-        drill_rop_mhr: Number(rawRop.toFixed(1)),
-        drill_spp_bar: 210,
+      const p = sim.p.step(pTrue, dt);
+      const t = sim.t.step(s.tC, dt);
+      const mass = sim.mass.step(s.liquidKgS * (1 + this.incident.dWC / 100), dt);
+      const wc = sim.wc.step(wcTrue, dt);
+      const f = sim.f.step(fOscFor(wcTrue, s.tC, pTrue), dt);
+      sim.last = {
+        p, t, mass, f, wc,
+        fp: sim.kP.update(p).filtered,
+        ft: sim.kT.update(t).filtered,
+        ff: sim.kF.update(f).filtered,
+        fm: sim.kMass.update(mass).filtered,
+        fwc: sim.kWC.update(wc).filtered,
       };
 
-      const filteredRecord: TelemetryRecord = {
-        timestamp: now,
-        precise_time_iso: preciseIso,
-        asset_id: asset.id,
-        p_line_bar: Number(kP.filtered.toFixed(2)),
-        t_line_c: Number(kT.filtered.toFixed(2)),
-        f_osc_hz: Number(kFOsc.filtered.toFixed(2)),
-        raw_density: Number(filtCoriolis.uncompensated_density_kg_m3.toFixed(2)),
-        corrected_density: Number(filtAstm.rho_base.toFixed(2)),
-        api_gravity: Number(filtAstm.api_gravity.toFixed(2)),
-        water_cut_pct: Number(kWC.filtered.toFixed(2)),
-        gross_mass_rate: Number(kMass.filtered.toFixed(2)),
-        gross_liquid_bpd: Number(grossBpd.toFixed(1)),
-        net_oil_bpd: Number(netBpd.toFixed(1)),
-        purified_oil_bpd: Number(purifiedBpd.toFixed(1)),
-        produced_water_bpd: Number(producedWater.toFixed(1)),
-        associated_gas_mmscfd: Number(associatedGas.toFixed(2)),
-        status_flag: statusFlag,
-        drill_rpm: targetRpm,
-        drill_torque_knm: Number(kTorque.filtered.toFixed(1)),
-        drill_wob_kn: targetWob,
-        drill_rop_mhr: Number(kRop.filtered.toFixed(1)),
-        drill_spp_bar: 210,
-      };
-
-      // Store in memory & IndexedDB database
-      telemetryDb.insert(filteredRecord);
-
-      // If this is the active asset selected by user in 3D scene, push to UI state
-      if (asset.id === activeAsset) {
-        useTelemetryStore.getState().updateTelemetry(rawRecord, filteredRecord);
+      if (store_ || (ui && id === activeAsset)) {
+        const L = sim.last;
+        const raw = meterRecord(id, s, { p: L.p, t: L.t, f: L.f, mass: L.mass, wc: L.wc }, statusFor(id));
+        const filtered = meterRecord(id, s, { p: L.fp, t: L.ft, f: L.ff, mass: L.fm, wc: L.fwc }, statusFor(id));
+        if (store_) telemetryDb.insert(filtered);
+        if (ui && id === activeAsset) useTelemetryStore.getState().updateTelemetry(raw, filtered);
       }
+    }
+
+    // Drilling: torque, ROP and standpipe pressure from the drill-string model
+    const rpm = this.incident.rpm;
+    const dState = drillState(rpm, DRILL.wobKn);
+    const stuck = scenario === 'stuck_drill' || scenario === 'drill_damage' ? phase / 4 : 0;
+    // Stick-slip: torsional oscillation at the string's first mode, growing with the drill phase
+    const torqueTrue = dState.torqueKnm * (1 + 0.25 * stuck * Math.sin(2 * Math.PI * STICK_SLIP_HZ * this.simTime));
+    const torque = this.drillSensors.torque.step(torqueTrue, dt);
+    const rop = this.drillSensors.rop.step(dState.ropMh, dt);
+    const fTorque = this.kTorque.update(torque).filtered;
+    const fRop = this.kRop.update(rop).filtered;
+    if (store_ || (ui && activeAsset === DRILL_ASSET)) {
+      const mk = (tq: number, rp: number) => drillRecord(rpm, tq, rp, statusFor(DRILL_ASSET));
+      const filtered = mk(fTorque, fRop);
+      if (store_) telemetryDb.insert(filtered);
+      if (ui && activeAsset === DRILL_ASSET) useTelemetryStore.getState().updateTelemetry(mk(torque, rop), filtered);
     }
   }
 }

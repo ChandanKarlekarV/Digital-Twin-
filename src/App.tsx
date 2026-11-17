@@ -224,7 +224,7 @@ export default function App() {
     sixMonthDataEngine.generateSixMonthHistory();
     telemetryDb.seedSixMonthHistory().catch(console.error);
 
-    // 2. Start the 50.0 Hz physical sensor engine
+    // 2. Start the 200 Hz physics / sensor engine
     telemetryEmitter.start();
 
     // 3. Start 10-second continuous dynamic tide & metocean phase cycling
@@ -440,7 +440,7 @@ export default function App() {
             Asset <strong className="text-ink font-medium">{selectedAssetId || 'KG-D6 main'}</strong>
           </span>
           <span>
-            Sensors <strong className="text-ink font-medium">50 Hz</strong>
+            Physics <strong className="text-ink font-medium">200 Hz</strong>
           </span>
           <span>
             Frame rate <strong className={fps >= 50 ? 'text-success-300 font-medium' : 'text-warning-300 font-medium'}>{fps} fps</strong>

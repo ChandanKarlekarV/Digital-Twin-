@@ -23,8 +23,8 @@ export interface KalmanFilterState {
   isOutlier: boolean;
 }
 
-/** Outliers in a row (0.2 s at 50 Hz) after which the filter accepts the new level. */
-const MAX_CONSECUTIVE_OUTLIERS = 10;
+/** Outliers in a row (0.2 s at the 200 Hz physics rate) after which the filter accepts the new level. */
+const MAX_CONSECUTIVE_OUTLIERS = 40;
 
 export class KalmanFilter1D {
   private A: number;

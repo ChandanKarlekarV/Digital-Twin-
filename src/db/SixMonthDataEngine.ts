@@ -1,11 +1,20 @@
 /**
  * 6-Month Historical Data Engine & Seeder for KG-D6 Subsea Digital Twin
- * Generates and indexes 180 days (6 full months) of calibrated offshore production,
- * multiphase separation, oil purification, and drilling mechanics.
+ * 180 days of KG-D6 daily settlements computed from the published quarterly block rates
+ * (src/data/kgd6Production.ts) through the network physics and flow-computer chain.
  */
 
 import { DailyProductionSummary, SixMonthAnalytics, AiAnomalyEvent } from '../types/eod';
-import { TelemetryRecord } from '../types/telemetry';
+import { productionAt, CONDENSATE_PRICE_USD_BBL } from '../data/kgd6Production';
+import { solveNetwork, slugging, drillState, DRILL, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
+import { steadyRecord } from '../physics/MeterComputer';
+
+/** FNV-1a 64-bit digest (hex) */
+const fnv64 = (s: string) => {
+  let h = 0xcbf29ce484222325n;
+  for (let i = 0; i < s.length; i++) h = ((h ^ BigInt(s.charCodeAt(i))) * 0x100000001b3n) & 0xffffffffffffffffn;
+  return h.toString(16).toUpperCase().padStart(16, '0');
+};
 
 export class SixMonthDataEngine {
   private static instance: SixMonthDataEngine;
@@ -31,148 +40,60 @@ export class SixMonthDataEngine {
     }
 
     const summaries: DailyProductionSummary[] = [];
-    const anomalies: AiAnomalyEvent[] = [];
     const totalDays = 180;
     const nowMs = targetDate.getTime();
-
-    // Baseline KG-D6 Field Constants
-    const baselineNominalBpd = 122450;
-    const usdToInrRate = 86.85;
+    const usdToInrRate = 86.85; // ASSUMPTION: fixed conversion for the INR column
+    const drill = drillState(DRILL.rpm, DRILL.wobKn);
 
     for (let dayOffset = totalDays - 1; dayOffset >= 0; dayOffset--) {
       const dayDate = new Date(nowMs - dayOffset * 24 * 3600 * 1000);
       dayDate.setHours(0, 0, 0, 0);
-
       const dateStr = dayDate.toISOString().split('T')[0];
-      const timestampMidnight = dayDate.getTime();
+      const midday = dayDate.getTime() + 12 * 3600 * 1000;
 
-      // Cyclical and seasonal variation factors (Monsoon storms in Oct-Nov, winter optimization in Dec-Jan)
-      const seasonalIndex = (totalDays - dayOffset) / totalDays;
-      const seasonalWave = Math.sin(seasonalIndex * Math.PI * 2) * 0.04;
-      const weeklyCycle = Math.sin((dayOffset % 7) * (Math.PI * 2 / 7)) * 0.015;
-      const randomJitter = (Math.sin(dayOffset * 37.7) * 0.025);
+      // Published block rate for that day, through the network physics and flow computer
+      const net = solveNetwork(productionAt(midday));
+      const exp = steadyRecord(net['TOPSIDE-MPFM-01'], WATER_CUT_PCT, midday);
+      const man = net['MANIFOLD-D6-MAIN'];
+      const slugAmp = slugging(net['RISER-ALPHA']).ampBar;
 
-      // Total Gross Liquid Extracted (BPD)
-      const efficiencyFactor = 0.96 + seasonalWave + weeklyCycle + randomJitter;
-      const grossBpd = Math.round(baselineNominalBpd * efficiencyFactor);
-      const grossBarrels = Math.round(grossBpd); // 24-hr daily volume at standard conditions
-
-      // Multiphase Water-Cut & BS&W (ASTM D1250)
-      // Realistic water-cut progression with intermittent water breakthroughs
-      const isWaterSurgeDay = dayOffset % 23 === 0;
-      const baseWaterCut = 4.2 + (180 - dayOffset) * 0.012; // Slight natural reservoir water encroachment
-      const waterCutPct = Number((baseWaterCut + (isWaterSurgeDay ? 4.5 : Math.sin(dayOffset * 13.3) * 0.8)).toFixed(2));
-
-      // Net Dry Purified Oil Produced
-      const oilPurityFraction = 1.0 - (waterCutPct / 100);
-      const purifiedBpd = Math.round(grossBpd * oilPurityFraction);
-      const purifiedBarrels = Math.round(purifiedBpd);
-      const producedWaterBpd = Math.round(grossBpd * (waterCutPct / 100));
-
-      // Associated Natural Gas (KG-D6 Gas-to-Oil Ratio ~ 480 SCF/bbl)
-      const gasRatio = 460 + Math.sin(dayOffset * 19.1) * 35;
-      const gasMmscfd = Number(((purifiedBpd * gasRatio) / 1000000).toFixed(2));
-
-      // Pressures & Temperatures
-      const avgPressure = Number((246.5 - (180 - dayOffset) * 0.03 + Math.sin(dayOffset * 7.1) * 3.8).toFixed(1));
-      const maxPressure = Number((avgPressure + 18.4 + Math.random() * 6.2).toFixed(1));
-      const avgTemp = Number((54.2 + Math.sin(dayOffset * 5.5) * 4.1).toFixed(1));
-      const apiGravity = Number((44.2 + Math.sin(dayOffset * 11.2) * 0.6).toFixed(1));
-      const baseDensity = Number((805.4 + Math.sin(dayOffset * 11.2) * 2.8).toFixed(1));
-
-      // Topside Drill String Operations
-      const isDrillMaintenanceDay = dayOffset % 45 === 0;
-      const drillUptime = isDrillMaintenanceDay ? 14.5 : Number((23.2 + Math.random() * 0.7).toFixed(1));
-      const avgRop = isDrillMaintenanceDay ? 6.2 : Number((12.4 + Math.sin(dayOffset * 8.9) * 2.8).toFixed(1));
-      const drilledMeters = Math.round(avgRop * drillUptime);
-      const avgTorque = Number((28.6 + Math.sin(dayOffset * 4.3) * 3.1).toFixed(1));
-      const plantUptime = isDrillMaintenanceDay ? 94.2 : Number((99.1 + Math.random() * 0.8).toFixed(1));
-
-      // Economics & Valuation ($76 - $84 / bbl Brent light crude blend)
-      const brentPriceUsd = 78.5 + Math.sin(dayOffset * 3.1) * 4.2;
-      const grossValueUsd = Math.round(purifiedBarrels * brentPriceUsd);
-      const grossValueInrCr = Number(((grossValueUsd * usdToInrRate) / 10000000).toFixed(2));
-
-      // AI Anomaly Events per Day
-      let dailyAnomaliesCount = 0;
-      if (isWaterSurgeDay) {
-        dailyAnomaliesCount += 1;
-        anomalies.push({
-          timestamp: timestampMidnight + 14 * 3600 * 1000,
-          precise_time: `${dateStr}T14:00:00.000Z`,
-          asset_id: 'MANIFOLD-D6-MAIN',
-          severity: 'WARNING',
-          category: 'PURITY_BREACH',
-          detected_value: `Water-cut: ${waterCutPct}%`,
-          nominal_baseline: 'Water-cut < 5.0%',
-          ai_inference_summary: 'ASTM D1250 water encroachment surge detected in deepwater riser manifold',
-          recommended_action: 'Increase demulsifier dosing at topside separator MPFM-01',
-          is_automated_logged: true,
-        });
-      }
-
-      if (avgTorque > 31.0) {
-        dailyAnomaliesCount += 1;
-        anomalies.push({
-          timestamp: timestampMidnight + 9 * 3600 * 1000,
-          precise_time: `${dateStr}T09:00:00.000Z`,
-          asset_id: 'TOPSIDE-DRILL-RIG',
-          severity: 'INFO',
-          category: 'DRILL_OVERLOAD',
-          detected_value: `Torque: ${avgTorque} kNm`,
-          nominal_baseline: 'Nominal Torque: 28.4 kNm',
-          ai_inference_summary: 'Subsea basalt transition layer encountered. Elevated stick-slip variance.',
-          recommended_action: 'Reduce WOB by 15 kN and increase mud flow by 200 L/min',
-          is_automated_logged: true,
-        });
-      }
-
-      // Safe hash signature generation for browser and Node.js environments
-      const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgPressure}:${apiGravity}`;
-      let hashSig = `DGH-KG6-${dateStr.replace(/-/g, '')}`;
-      try {
-        if (typeof btoa !== 'undefined') {
-          hashSig = `DGH-KG6-${btoa(rawPayload).slice(0, 16)}`;
-        } else if (typeof Buffer !== 'undefined') {
-          hashSig = `DGH-KG6-${Buffer.from(rawPayload).toString('base64').slice(0, 16)}`;
-        }
-      } catch {
-        hashSig = `DGH-KG6-${Math.abs(Math.sin(dayOffset * 99.7)).toString(36).substring(2, 18).toUpperCase()}`;
-      }
+      const purified = Math.round(exp.net_oil_bpd);
+      const water = Math.round(exp.produced_water_bpd ?? 0);
+      const gross = purified + water;
+      const valueUsd = Math.round(purified * CONDENSATE_PRICE_USD_BBL);
 
       summaries.push({
         id: totalDays - dayOffset,
         date_str: dateStr,
-        timestamp_midnight: timestampMidnight,
+        timestamp_midnight: dayDate.getTime(),
         settlement_type: 'AUTOMATED_MIDNIGHT',
-        gross_liquid_bpd: grossBpd,
-        gross_barrels_day: grossBarrels,
-        water_cut_avg_pct: waterCutPct,
-        purified_oil_bpd: purifiedBpd,
-        purified_barrels_day: purifiedBarrels,
-        produced_water_bpd: producedWaterBpd,
-        associated_gas_mmscfd: gasMmscfd,
-        avg_line_pressure_bar: avgPressure,
-        max_line_pressure_bar: maxPressure,
-        avg_temperature_c: avgTemp,
-        avg_api_gravity: apiGravity,
-        avg_base_density: baseDensity,
-        avg_drill_rop_mhr: avgRop,
-        total_drilled_meters: drilledMeters,
-        avg_drill_torque_knm: avgTorque,
-        drilling_uptime_hours: drillUptime,
-        plant_uptime_pct: plantUptime,
-        purity_compliance_pct: Number((100 - waterCutPct * 0.4).toFixed(1)),
-        estimated_gross_value_usd: grossValueUsd,
-        estimated_gross_value_inr: grossValueInrCr,
-        ai_anomalies_detected: dailyAnomaliesCount,
+        gross_liquid_bpd: gross,
+        gross_barrels_day: gross,
+        water_cut_avg_pct: exp.water_cut_pct,
+        purified_oil_bpd: purified,
+        purified_barrels_day: purified,
+        produced_water_bpd: water,
+        associated_gas_mmscfd: exp.associated_gas_mmscfd ?? 0,
+        avg_line_pressure_bar: Number(man.pBar.toFixed(1)),
+        max_line_pressure_bar: Number((man.pBar + slugAmp).toFixed(1)),
+        avg_temperature_c: Number(man.tC.toFixed(1)),
+        avg_api_gravity: exp.api_gravity,
+        avg_base_density: exp.corrected_density,
+        avg_drill_rop_mhr: Number(drill.ropMh.toFixed(1)),
+        total_drilled_meters: Math.round(drill.ropMh * 24),
+        avg_drill_torque_knm: Number(drill.torqueKnm.toFixed(1)),
+        drilling_uptime_hours: 24,
+        plant_uptime_pct: 100,
+        purity_compliance_pct: Number((100 - exp.water_cut_pct * 0.4).toFixed(1)),
+        estimated_gross_value_usd: valueUsd,
+        estimated_gross_value_inr: Number(((valueUsd * usdToInrRate) / 1e7).toFixed(2)),
+        ai_anomalies_detected: 0,
         status: 'CERTIFIED',
-        hash_signature: hashSig,
+        hash_signature: `DGH-KG6-${fnv64(`${dateStr}:${gross}:${purified}:${man.pBar.toFixed(1)}:${exp.api_gravity}`)}`,
       });
     }
-
     this.dailySummaries = summaries;
-    this.aiAnomalies = anomalies;
+    this.aiAnomalies = []; // only real detections are logged (by the live AI pipeline)
     this.isInitialized = true;
     return summaries;
   }

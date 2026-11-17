@@ -518,7 +518,7 @@ export const MidnightSettlementModal: React.FC = () => {
               <span>LOCAL DISK DB: SYNCED (180 DAYS)</span>
             </span>
             <span>•</span>
-            <span>SAMPLING RATE: <strong>50.0 Hz (20ms)</strong></span>
+            <span>PHYSICS <strong>200 Hz</strong> · STORED <strong>50 Hz</strong></span>
           </div>
 
           <div className="text-[10px] text-reliance-textMuted/70">

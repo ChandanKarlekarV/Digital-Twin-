@@ -9,11 +9,12 @@ import { DailyProductionSummary } from '../types/eod';
 import { telemetryDb } from '../db/TelemetryDatabase';
 import { sixMonthDataEngine } from '../db/SixMonthDataEngine';
 import { varunaVoice } from '../voice/VarunaVoiceSynthesizer';
+import { productionAt, CONDENSATE_PRICE_USD_BBL } from '../data/kgd6Production';
+import { solveNetwork, drillState, DRILL, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
+import { steadyRecord } from '../physics/MeterComputer';
 
 /** Topside multiphase meter on the export line: measures the whole block's production */
 const EXPORT_METER_ID = 'TOPSIDE-MPFM-01';
-/** Solution gas-oil ratio, scf per stock-tank barrel (same as TelemetryEmitter) */
-const GAS_OIL_RATIO_SCF_BBL = 480;
 
 export class MidnightSettlementEngineService {
   private static instance: MidnightSettlementEngineService;
@@ -80,31 +81,35 @@ export class MidnightSettlementEngineService {
     const drill = telemetryDb.getAggregates('TOPSIDE-DRILL-RIG', startMs, endMs);
     const hasFlow = flow.record_count > 0;
 
-    // Calibrated fallbacks only when the day has no data at all
-    const nominalGrossBpd = hasFlow ? flow.avg_gross_liquid_bpd ?? flow.avg_net_oil_bpd : 124800;
-    const avgWaterCut = hasFlow ? flow.avg_water_cut_pct : 4.8;
-    const purifiedBpd = Math.round(hasFlow ? flow.avg_purified_oil_bpd ?? flow.avg_net_oil_bpd : nominalGrossBpd * (1 - avgWaterCut / 100));
+    // Days without recorded data fall back to the published rate for that day, run through
+    // the same network physics and flow computer (never to invented constants)
+    const midday = startMs + 12 * 3600 * 1000;
+    const pub = productionAt(midday);
+    const ref = steadyRecord(solveNetwork(pub)['TOPSIDE-MPFM-01'], WATER_CUT_PCT, midday);
+    const nominalGrossBpd = hasFlow ? flow.avg_gross_liquid_bpd ?? flow.avg_net_oil_bpd : ref.gross_liquid_bpd ?? ref.net_oil_bpd;
+    const purifiedBpd = Math.round(hasFlow ? flow.avg_purified_oil_bpd ?? flow.avg_net_oil_bpd : ref.net_oil_bpd);
+    const avgWaterCut = hasFlow ? flow.avg_water_cut_pct : ref.water_cut_pct;
     const purifiedBarrels = purifiedBpd;
     const grossBarrels = Math.round(nominalGrossBpd);
     const producedWaterBpd = Math.max(0, Math.round(nominalGrossBpd - purifiedBpd));
-    const gasMmscfd = Number(((purifiedBpd * GAS_OIL_RATIO_SCF_BBL) / 1000000).toFixed(2));
+    // Gas scales with the measured condensate at the published condensate-gas ratio
+    const gasMmscfd = Number(((pub.gasMmscfd * purifiedBpd) / Math.max(pub.liquidsBpd, 1)).toFixed(2));
 
-    const avgP = hasFlow ? flow.avg_p_line_bar ?? (flow.max_p_line_bar + flow.min_p_line_bar) / 2 : 85.0;
-    const maxP = hasFlow ? flow.max_p_line_bar : 88.0;
-    const avgT = hasFlow ? flow.avg_t_line_c : 38.0;
-    const avgApi = hasFlow && flow.avg_api_gravity ? flow.avg_api_gravity : 43.5;
-    const avgDensity = hasFlow && flow.avg_corrected_density ? flow.avg_corrected_density : 807.2;
+    const avgP = hasFlow ? flow.avg_p_line_bar ?? (flow.max_p_line_bar + flow.min_p_line_bar) / 2 : ref.p_line_bar;
+    const maxP = hasFlow ? flow.max_p_line_bar : ref.p_line_bar;
+    const avgT = hasFlow ? flow.avg_t_line_c : ref.t_line_c;
+    const avgApi = hasFlow && flow.avg_api_gravity ? flow.avg_api_gravity : ref.api_gravity;
+    const avgDensity = hasFlow && flow.avg_corrected_density ? flow.avg_corrected_density : ref.corrected_density;
 
-    const avgTorque = drill.record_count > 0 ? drill.avg_drill_torque_knm ?? 28.4 : 28.4;
-    const avgRop = drill.record_count > 0 ? drill.avg_drill_rop_mhr ?? 12.5 : 12.5;
-    const drillUptime = 23.6;
+    const design = drillState(DRILL.rpm, DRILL.wobKn);
+    const avgTorque = drill.record_count > 0 ? drill.avg_drill_torque_knm ?? design.torqueKnm : design.torqueKnm;
+    const avgRop = drill.record_count > 0 ? drill.avg_drill_rop_mhr ?? design.ropMh : design.ropMh;
+    const drillUptime = 24;
     const drilledMeters = Math.round(avgRop * drillUptime);
 
-    const brentSpotUsd = 82.5;
-    const usdToInr = 86.85;
-    const grossValueUsd = Math.round(purifiedBarrels * brentSpotUsd);
+    const usdToInr = 86.85; // ASSUMPTION: fixed conversion for the INR column
+    const grossValueUsd = Math.round(purifiedBarrels * CONDENSATE_PRICE_USD_BBL);
     const grossValueInrCr = Number(((grossValueUsd * usdToInr) / 10000000).toFixed(2));
-
     const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgP.toFixed(1)}:${avgApi.toFixed(1)}`;
     // FNV-1a 64-bit digest of the settled figures: any change to a value changes the certificate
     let h = 0xcbf29ce484222325n;

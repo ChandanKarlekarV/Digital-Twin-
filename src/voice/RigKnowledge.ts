@@ -18,7 +18,7 @@ const METRICS: [Metric, RegExp][] = [
   ['api', /\bapi\b|gravity/],
   ['frequency', /frequency|coriolis|oscillation/],
   ['drill', /\brpm\b|torque|weight on bit|\bwob\b|penetration|\brop\b|vibration|\bmud\b|drill (speed|status|rate|data)|how fast .*drill/],
-  ['flow', /\bflow ?rate|production|producing|barrels|\bbpd\b|output|how much oil|oil rate/],
+  ['flow', /\bflow ?rate|production|producing|barrels|\bbpd\b|output|how much (oil|gas|condensate)|oil rate|condensate/],
   ['depth', /\bdepth|how deep/],
   ['about', /\b(what|tell me about|describe) (is )?(this|the) (rig|platform|field|twin)|kg ?d ?6|where is|who (operates|owns)|operator/],
   ['status', /\b(rig|platform|system|overall) (status|health|condition)|^status$|^health$|how is (the|everything)|is everything|any (alarm|alert|problem|issue)s?|status report|summary/],
@@ -49,7 +49,7 @@ function reading(m: Metric, r: TelemetryRecord, name: string): string {
   switch (m) {
     case 'pressure': return `Pressure at ${name} is ${f(r.p_line_bar, 1)} bar.`;
     case 'temperature': return `Temperature at ${name} is ${f(r.t_line_c, 1)} °C.`;
-    case 'flow': return `${name[0].toUpperCase() + name.slice(1)} is flowing ${f(r.net_oil_bpd)} barrels a day of net oil, ${f(r.gross_mass_rate, 1)} kilograms per second gross.`;
+    case 'flow': return `${name[0].toUpperCase() + name.slice(1)} is flowing ${f((r.associated_gas_mmscfd ?? 0) / 35.3147, 1)} million standard cubic metres a day of gas and ${f(r.net_oil_bpd)} barrels a day of condensate.`;
     case 'gas': return `Associated gas at ${name} is ${f(r.associated_gas_mmscfd, 1)} million standard cubic feet a day.`;
     case 'density': return `Density at ${name} is ${f(r.raw_density, 1)} kilograms per cubic metre at line conditions, ${f(r.corrected_density, 1)} corrected to 15 °C.`;
     case 'api': return `API gravity at ${name} is ${f(r.api_gravity, 1)} degrees.`;
@@ -69,7 +69,7 @@ function rigStatus(): string {
   const worst = Math.max(exp?.status_flag ?? 0, man?.status_flag ?? 0, drill?.status_flag ?? 0);
   const parts = [
     emergencyScenario && emergencyScenario !== 'none' ? `Active incident: ${emergencyScenario.replace(/_/g, ' ')}.` : `All systems ${STATUS_TEXT[worst] ?? 'nominal'}.`,
-    exp && `Export is ${f(exp.net_oil_bpd)} barrels a day, ${f(exp.associated_gas_mmscfd, 1)} million cubic feet of gas, water cut ${f(exp.water_cut_pct, 1)}%.`,
+    exp && `Export is ${f((exp.associated_gas_mmscfd ?? 0) / 35.3147, 1)} million standard cubic metres a day of gas and ${f(exp.net_oil_bpd)} barrels a day of condensate, water cut ${f(exp.water_cut_pct, 1)}%.`,
     man && `Manifold at ${f(man.p_line_bar, 1)} bar and ${f(man.t_line_c, 1)} °C.`,
     drill?.drill_rpm !== undefined && `Drill at ${f(drill.drill_rpm)} RPM.`,
   ];
@@ -78,7 +78,8 @@ function rigStatus(): string {
 
 const ABOUT =
   'This is the digital twin of the KG-D6 block in the Krishna-Godavari basin, Bay of Bengal, off the Andhra Pradesh coast. ' +
-  'It is operated by Reliance Industries with bp as partner. The twin models the platform, nine flowlines, seven wells, the subsea manifold and a drill string to 2,040 metres.';
+  'It is operated by Reliance Industries with bp as partner. It is mainly a gas field: in the July to September 2026 quarter it averaged 24.0 million standard cubic metres of gas a day and about 15,900 barrels a day of oil and condensate. ' +
+  'The twin runs that published rate through its pipeline physics at 200 steps a second.';
 
 /**
  * Returns a spoken answer when the utterance is a question about the rig, the off-topic

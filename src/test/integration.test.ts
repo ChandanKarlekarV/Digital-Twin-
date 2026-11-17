@@ -3,6 +3,7 @@ import { sixMonthDataEngine } from '../db/SixMonthDataEngine';
 import { aiIngestionPipeline } from '../services/AiIngestionPipeline';
 import { midnightSettlementEngine } from '../services/MidnightSettlementEngine';
 import { telemetryEmitter } from '../physics/TelemetryEmitter';
+import { productionAt } from '../data/kgd6Production';
 import { coriolisEngine } from '../physics/CoriolisEngine';
 import { astm1250Engine } from '../physics/ASTM1250Engine';
 import { multiphaseCutEngine } from '../physics/MultiphaseCut';
@@ -132,8 +133,10 @@ async function runEndToEndVerification() {
   console.log('\n--- TEST GROUP 8: 6-MONTH PRODUCTION LEDGER & ANALYTICS ---');
   const sixMoStats = sixMonthDataEngine.getSixMonthAnalytics();
   assert(
-    sixMoStats.total_days === 180 && sixMoStats.total_purified_dry_barrels > 10000000,
-    '180-Day 6-Month Macro Production Ledger Analytics',
+    // Every day must sit inside the published KG-D6 oil + condensate range (15,903 - 19,670 bbl/d)
+    sixMoStats.total_days === 180 &&
+      sixMonthDataEngine.getDailySummaries().every((d) => d.purified_oil_bpd >= 15800 && d.purified_oil_bpd <= 19700),
+    '180-Day Ledger From Published KG-D6 Quarterly Rates',
     `Total Days: ${sixMoStats.total_days} • Total Purified: ${(sixMoStats.total_purified_dry_barrels / 1e6).toFixed(2)}M Barrels • Gross Value: ₹${sixMoStats.total_estimated_revenue_inr_cr.toLocaleString()} Cr`
   );
 
@@ -141,7 +144,10 @@ async function runEndToEndVerification() {
   console.log('\n--- TEST GROUP 9: 12:00 MIDNIGHT EOD RECONCILIATION ENGINE ---');
   const settlement = midnightSettlementEngine.executeMidnightSettlement('ON_DEMAND_MANUAL');
   assert(
-    settlement.purified_oil_bpd > 40000 && settlement.water_cut_avg_pct > 0 && settlement.status === 'CERTIFIED',
+    // Within 1% of the published condensate rate for the day, through the full meter chain
+    Math.abs(settlement.purified_oil_bpd / productionAt().liquidsBpd - 1) < 0.01 &&
+      settlement.water_cut_avg_pct > 0 &&
+      settlement.status === 'CERTIFIED',
     'Automated 12:00 Midnight EOD Daily Settlement & ASTM D1250 Purification',
     `Date: ${settlement.date_str} • Gross: ${settlement.gross_liquid_bpd.toLocaleString()} BPD -> Purified: ${settlement.purified_oil_bpd.toLocaleString()} BPD (${settlement.water_cut_avg_pct}% BS&W) • DGH Seal: ${settlement.hash_signature}`
   );
@@ -174,12 +180,12 @@ async function runEndToEndVerification() {
   );
   aiIngestionPipeline.stop();
 
-  // TEST 12: Ultra-Fast 50.0 Hz (20ms) Telemetry Frequency Rate
-  console.log('\n--- TEST GROUP 11: 50.0 HZ ULTRA-FAST SAMPLING RATE ---');
+  // TEST 12: 200 Hz fixed-step physics clock
+  console.log('\n--- TEST GROUP 11: 200 HZ PHYSICS RATE ---');
   const samplingHz = telemetryEmitter.getSamplingRateHz();
   assert(
-    samplingHz === 50,
-    'Ultra-Fast & Accurate 50.0 Hz (20ms) Physics Clock',
+    samplingHz === 200,
+    '200 Hz (5 ms) fixed-step physics clock',
     `Telemetry sampling configured at ${samplingHz}.0 Hz (${1000 / samplingHz}ms period) for sub-millisecond precision`
   );
 

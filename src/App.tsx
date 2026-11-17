@@ -12,6 +12,7 @@ import { IncidentControlManager } from './components/hud/IncidentControlManager'
 import { KgD6WeatherSidePanel } from './components/hud/KgD6WeatherSidePanel';
 import { VarunaGestureVoiceHUD } from './components/hud/VarunaGestureVoiceHUD';
 import { dynamicTideEngine } from './physics/DynamicTideEngine';
+import { liveFeeds, useLiveFeeds } from './services/LiveFeeds';
 
 /*
  * Modals load on first open, so their code (KaTeX, reports, the slide deck) stays out of
@@ -127,6 +128,29 @@ const SidePanelRail: React.FC = () => {
   );
 };
 
+/** Footer readout of the live public feeds; a dot shows each feed's state */
+const LiveFeedFooter: React.FC = () => {
+  const f = useLiveFeeds();
+  const dot = (s: string) => (
+    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${s === 'live' ? 'bg-success-400' : s === 'error' ? 'bg-danger-400' : 'bg-warning-400'}`} />
+  );
+  const tide = f.tide.heightM !== null ? `${f.tide.heightM.toFixed(2)} m ${f.tide.trend === 'rising' ? '↑' : '↓'}` : '—';
+  const quakes = f.quakes.state === 'live' ? (f.quakes.count ? `${f.quakes.count}, max M${f.quakes.largest?.magnitude.toFixed(1)}` : 'none in 30 days') : '—';
+  return (
+    <div className="hidden md:flex items-center gap-4 pointer-events-auto">
+      <span title={`ECB reference rate ${f.fx.date ?? ''}`}>
+        {dot(f.fx.state)}USD/INR <strong className="text-ink font-medium">{f.fx.usdInr?.toFixed(2) ?? '—'}</strong>
+      </span>
+      <span title={f.tide.state === 'live' ? `Today ${f.tide.todayMin?.toFixed(2)}–${f.tide.todayMax?.toFixed(2)} m (Open-Meteo)` : ''}>
+        {dot(f.tide.state)}Tide <strong className="text-ink font-medium">{tide}</strong>
+      </span>
+      <span title="USGS, M2.5+ within 1,000 km of KG-D6">
+        {dot(f.quakes.state)}Quakes <strong className="text-ink font-medium">{quakes}</strong>
+      </span>
+    </div>
+  );
+};
+
 /** Zoom and layer-by-layer view buttons (the same actions as the two-hand and thumb gestures). */
 const ViewControls: React.FC<{ right: string }> = ({ right }) => {
   const nudgeZoom = useRigStore((s) => s.nudgeZoom);
@@ -230,6 +254,17 @@ export default function App() {
     // 3. Start 10-second continuous dynamic tide & metocean phase cycling
     dynamicTideEngine.start();
 
+    // 4. Live public feeds (ECB FX, tide, USGS earthquakes); re-price the ledger when FX arrives
+    liveFeeds.start();
+    let fxDate: string | null = null;
+    const unsubFx = liveFeeds.subscribe(() => {
+      const fx = liveFeeds.getStatus().fx;
+      if (fx.state === 'live' && fx.date !== fxDate) {
+        fxDate = fx.date;
+        sixMonthDataEngine.applyFx();
+      }
+    });
+
     // Rolling FPS calculation
     let animId: number;
     const calculateFps = () => {
@@ -248,6 +283,8 @@ export default function App() {
     return () => {
       telemetryEmitter.stop();
       dynamicTideEngine.stop();
+      liveFeeds.stop();
+      unsubFx();
       cancelAnimationFrame(animId);
     };
   }, []);
@@ -450,7 +487,7 @@ export default function App() {
           </span>
         </div>
         <div className="hidden md:flex items-center gap-2">
-          <span>Reliance KG-D6 · Krishna-Godavari basin</span>
+          <LiveFeedFooter />
         </div>
       </footer>
     </div>

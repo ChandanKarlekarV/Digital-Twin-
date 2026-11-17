@@ -8,6 +8,7 @@ import { DailyProductionSummary, SixMonthAnalytics, AiAnomalyEvent } from '../ty
 import { productionAt, CONDENSATE_PRICE_USD_BBL } from '../data/kgd6Production';
 import { solveNetwork, slugging, drillState, DRILL, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
 import { steadyRecord } from '../physics/MeterComputer';
+import { liveFeeds } from '../services/LiveFeeds';
 
 /** FNV-1a 64-bit digest (hex) */
 const fnv64 = (s: string) => {
@@ -42,7 +43,6 @@ export class SixMonthDataEngine {
     const summaries: DailyProductionSummary[] = [];
     const totalDays = 180;
     const nowMs = targetDate.getTime();
-    const usdToInrRate = 86.85; // ASSUMPTION: fixed conversion for the INR column
     const drill = drillState(DRILL.rpm, DRILL.wobKn);
 
     for (let dayOffset = totalDays - 1; dayOffset >= 0; dayOffset--) {
@@ -86,7 +86,8 @@ export class SixMonthDataEngine {
         plant_uptime_pct: 100,
         purity_compliance_pct: Number((100 - exp.water_cut_pct * 0.4).toFixed(1)),
         estimated_gross_value_usd: valueUsd,
-        estimated_gross_value_inr: Number(((valueUsd * usdToInrRate) / 1e7).toFixed(2)),
+        // INR at that day's ECB reference rate (live feed; fallback until it loads)
+        estimated_gross_value_inr: Number(((valueUsd * liveFeeds.usdInr(dateStr)) / 1e7).toFixed(2)),
         ai_anomalies_detected: 0,
         status: 'CERTIFIED',
         hash_signature: `DGH-KG6-${fnv64(`${dateStr}:${gross}:${purified}:${man.pBar.toFixed(1)}:${exp.api_gravity}`)}`,
@@ -187,6 +188,11 @@ export class SixMonthDataEngine {
     } else {
       this.dailySummaries.push(entry);
     }
+  }
+
+  /** Re-price the INR column once the ECB daily rates arrive */
+  public applyFx(): void {
+    for (const d of this.dailySummaries) d.estimated_gross_value_inr = Number(((d.estimated_gross_value_usd * liveFeeds.usdInr(d.date_str)) / 1e7).toFixed(2));
   }
 
   public getDailySummaries(): DailyProductionSummary[] {

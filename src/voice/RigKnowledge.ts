@@ -7,10 +7,14 @@ import { useRigStore } from '../store/useRigStore';
 import type { TelemetryRecord } from '../types/telemetry';
 import type { ParsedVoiceCommand } from './VoiceCommandParser';
 import { leakDetector } from '../services/LeakDetector';
+import { liveFeeds } from '../services/LiveFeeds';
 
-type Metric = 'leak' | 'pressure' | 'temperature' | 'flow' | 'gas' | 'density' | 'api' | 'water_cut' | 'frequency' | 'drill' | 'depth' | 'about' | 'status';
+type Metric = 'tide' | 'quake' | 'fx' | 'leak' | 'pressure' | 'temperature' | 'flow' | 'gas' | 'density' | 'api' | 'water_cut' | 'frequency' | 'drill' | 'depth' | 'about' | 'status';
 
 const METRICS: [Metric, RegExp][] = [
+  ['tide', /\btide|sea level|high water|low water/],
+  ['quake', /earthquake|quake|seismic|tremor/],
+  ['fx', /exchange rate|\bdollars?\b|\brupees?\b|\busd\b|\binr\b/],
   ['leak', /\bleak|leaking|loss of containment|mass balance|missing (gas|flow)/],
   ['water_cut', /\bwater ?cut|water content|bs ?w\b/],
   ['pressure', /\bpressure|\bpsi\b|\bbar\b/],
@@ -78,6 +82,22 @@ function rigStatus(): string {
   return parts.filter(Boolean).join(' ');
 }
 
+function liveAnswer(m: 'tide' | 'quake' | 'fx'): string {
+  const f = liveFeeds.getStatus();
+  if (m === 'tide') {
+    if (f.tide.heightM === null) return 'The live tide feed has not loaded yet.';
+    return `The sea level at the block is ${f.tide.heightM.toFixed(2)} metres above mean sea level and ${f.tide.trend}. Today it ranges from ${f.tide.todayMin?.toFixed(2)} to ${f.tide.todayMax?.toFixed(2)} metres.`;
+  }
+  if (m === 'quake') {
+    if (f.quakes.state !== 'live') return 'The USGS earthquake feed has not loaded yet.';
+    if (!f.quakes.count) return 'No earthquakes of magnitude 2.5 or more within 1,000 kilometres of KG-D6 in the last 30 days, according to USGS.';
+    const q = f.quakes.largest!;
+    return `${f.quakes.count} earthquakes within 1,000 kilometres in the last 30 days. The largest was magnitude ${q.magnitude.toFixed(1)}, ${Math.round(q.distanceKm)} kilometres away, ${q.place}.`;
+  }
+  if (f.fx.usdInr === null) return 'The exchange rate feed has not loaded yet.';
+  return `One US dollar is ${f.fx.usdInr.toFixed(2)} rupees, the European Central Bank reference rate for ${f.fx.date}.`;
+}
+
 function leakAnswer(): string {
   const s = leakDetector.getStatus();
   if (s.state === 'alarm') return `Leak alarm. The mass balance is short by ${s.imbalancePct.toFixed(1)} percent, about ${s.lossMmscmd.toFixed(2)} million standard cubic metres a day. Suspected location: ${s.location}.`;
@@ -101,6 +121,7 @@ export function answerRigQuestion(raw: string, parsed: ParsedVoiceCommand | null
   const metric = METRICS.find(([, re]) => re.test(text))?.[0];
   if (!metric) return !parsed && QUESTION.test(text) ? 'I can only answer questions about the KG-D6 rig.' : null;
   if (metric === 'leak') return leakAnswer();
+  if (metric === 'tide' || metric === 'quake' || metric === 'fx') return liveAnswer(metric);
   if (metric === 'status') return rigStatus();
   if (metric === 'about') return ABOUT;
   if (metric === 'depth') return 'The twin models 2,040 metres from sea level to the reservoir, the depth of the drill string and wells.';

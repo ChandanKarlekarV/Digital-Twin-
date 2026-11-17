@@ -85,7 +85,7 @@ const INTENTS: IntentDef[] = [
   { id: 'database', phrases: ['database', 'data base', 'ledger', 'six month', 'production ledger', 'history'] },
   { id: 'compliance', phrases: ['compliance', 'audit report', 'compliance report', 'audit'] },
   { id: 'weather', phrases: ['weather', 'forecast', 'metocean', 'wind'] },
-  { id: 'water_status', phrases: ['water status', 'ocean status', 'tide', 'tides', 'water current', 'sea state', 'current status'] },
+  { id: 'water_status', phrases: ['water status', 'ocean status', 'water current', 'sea state', 'current status'] },
   { id: 'physics_report', phrases: ['latex', 'physics report', 'math report', 'equations', 'derivation'] },
   { id: 'view_subsea', phrases: ['dive', 'subsea view', 'underwater', 'go under water', 'below water'] },
   { id: 'view_manifold', phrases: ['manifold', 'seabed', 'sea bed', 'sea floor', 'seafloor'] },

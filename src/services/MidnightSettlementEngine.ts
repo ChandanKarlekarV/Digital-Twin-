@@ -12,6 +12,7 @@ import { varunaVoice } from '../voice/VarunaVoiceSynthesizer';
 import { productionAt, CONDENSATE_PRICE_USD_BBL } from '../data/kgd6Production';
 import { solveNetwork, drillState, DRILL, WATER_CUT_PCT } from '../physics/KgD6FlowModel';
 import { steadyRecord } from '../physics/MeterComputer';
+import { liveFeeds } from './LiveFeeds';
 
 /** Topside multiphase meter on the export line: measures the whole block's production */
 const EXPORT_METER_ID = 'TOPSIDE-MPFM-01';
@@ -107,7 +108,7 @@ export class MidnightSettlementEngineService {
     const drillUptime = 24;
     const drilledMeters = Math.round(avgRop * drillUptime);
 
-    const usdToInr = 86.85; // ASSUMPTION: fixed conversion for the INR column
+    const usdToInr = liveFeeds.usdInr(dateStr); // ECB reference rate for the day
     const grossValueUsd = Math.round(purifiedBarrels * CONDENSATE_PRICE_USD_BBL);
     const grossValueInrCr = Number(((grossValueUsd * usdToInr) / 10000000).toFixed(2));
     const rawPayload = `${dateStr}:${grossBarrels}:${purifiedBarrels}:${avgP.toFixed(1)}:${avgApi.toFixed(1)}`;

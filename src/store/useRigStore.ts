@@ -452,8 +452,8 @@ interface RigState {
   isEodModalOpen: boolean;
   setEodModalOpen: (open: boolean) => void;
 
-  isSihModalOpen: boolean;
-  setSihModalOpen: (open: boolean) => void;
+  isPresentationOpen: boolean;
+  setPresentationOpen: (open: boolean) => void;
 
   isTelemetryDrawerOpen: boolean;
   toggleTelemetryDrawer: () => void;
@@ -727,8 +727,8 @@ export const useRigStore = create<RigState>((set, get) => ({
   isEodModalOpen: false,
   setEodModalOpen: (open) => set({ isEodModalOpen: open }),
 
-  isSihModalOpen: false,
-  setSihModalOpen: (open) => set({ isSihModalOpen: open }),
+  isPresentationOpen: false,
+  setPresentationOpen: (open) => set({ isPresentationOpen: open }),
 
   isTelemetryDrawerOpen: true,
   toggleTelemetryDrawer: () => set((s) => (s.isTelemetryDrawerOpen ? { isTelemetryDrawerOpen: false } : { isTelemetryDrawerOpen: true, isWeatherPanelOpen: false })),
@@ -1032,7 +1032,7 @@ export const useRigStore = create<RigState>((set, get) => ({
       case 'command_dock':
         return openPanel({ isCommandDockOpen: true }, 'Opening the command dock.');
       case 'presentation':
-        return openPanel({ isSihModalOpen: true }, 'Opening the presentation deck.');
+        return openPanel({ isPresentationOpen: true }, 'Opening the presentation deck.');
       case 'database':
         return openPanel({ isTelemetryDrawerOpen: true, isWeatherPanelOpen: false, isEodModalOpen: true }, 'Opening the six month production ledger.');
       case 'compliance':
@@ -1064,7 +1064,7 @@ export const useRigStore = create<RigState>((set, get) => ({
         return openPanel(
           {
             activeHoloModal: null,
-            isSihModalOpen: false,
+            isPresentationOpen: false,
             isEodModalOpen: false,
             isReportModalOpen: false,
             isPhysicsModalOpen: false,

@@ -48,7 +48,7 @@ export const CommandDock: React.FC = () => {
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
   const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
-  const setSihModalOpen = useRigStore((s) => s.setSihModalOpen);
+  const setPresentationOpen = useRigStore((s) => s.setPresentationOpen);
 
   const currentFlowPower = useRigStore((s) => s.currentFlowPower);
   const setCurrentFlowPower = useRigStore((s) => s.setCurrentFlowPower);
@@ -380,7 +380,7 @@ export const CommandDock: React.FC = () => {
           {/* Presentation deck */}
           <button
             onClick={() => {
-              setSihModalOpen(true);
+              setPresentationOpen(true);
               setCommandDockOpen(false);
             }}
             className="col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-600/30 hover:bg-amber-600/50 text-xs font-mono text-amber-200 border border-amber-400/50 transition-all cursor-pointer shadow-amber-glow font-bold"

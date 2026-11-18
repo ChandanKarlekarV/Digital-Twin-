@@ -16,5 +16,5 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }]
     }
   ],
-  "rewrites": [{ "source": "/((?!assets/|models/|mediapipe/|presentation/).*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/((?!assets/|models/|mediapipe/|deck/).*)", "destination": "/index.html" }]
 }

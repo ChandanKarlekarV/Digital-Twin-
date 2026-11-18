@@ -25,7 +25,7 @@ const LAZY_MODALS: [React.ComponentType, (s: RigState) => boolean][] = [
   [lazyNamed(() => import('./components/hud/ElevenLabsConfigModal'), 'ElevenLabsConfigModal'), (s) => s.isVoiceModalOpen],
   [lazyNamed(() => import('./components/hud/ComplianceReportModal'), 'ComplianceReportModal'), (s) => s.isReportModalOpen],
   [lazyNamed(() => import('./components/hud/MidnightSettlementModal'), 'MidnightSettlementModal'), (s) => s.isEodModalOpen],
-  [lazyNamed(() => import('./components/hud/SihPresentationModal'), 'SihPresentationModal'), (s) => s.isSihModalOpen],
+  [lazyNamed(() => import('./components/hud/PresentationModal'), 'PresentationModal'), (s) => s.isPresentationOpen],
   [lazyNamed(() => import('./components/hud/PipeSliceModal'), 'PipeSliceModal'), (s) => s.isPipeSliceModalOpen],
   [lazyNamed(() => import('./components/hud/HolographicPartInspectionModal'), 'HolographicPartInspectionModal'), (s) => !!s.activeHoloModal],
   [lazyNamed(() => import('./components/hud/PhysicsAuditModal'), 'PhysicsAuditModal'), (s) => s.isPhysicsModalOpen],
@@ -195,7 +195,7 @@ export default function App() {
   const setVoiceModalOpen = useRigStore((s) => s.setVoiceModalOpen);
   const setReportModalOpen = useRigStore((s) => s.setReportModalOpen);
   const setEodModalOpen = useRigStore((s) => s.setEodModalOpen);
-  const setSihModalOpen = useRigStore((s) => s.setSihModalOpen);
+  const setPresentationOpen = useRigStore((s) => s.setPresentationOpen);
 
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
   const setSplitViewActive = useRigStore((s) => s.setSplitViewActive);
@@ -328,7 +328,7 @@ export default function App() {
                 <MenuLabel>Data & Reports</MenuLabel>
                 <MenuItem icon={Calendar} title="Production Ledger" hint="180-day history and daily settlement" onClick={() => runMenu(() => setEodModalOpen(true))} />
                 <MenuItem icon={FileCheck} title="Compliance Report" hint="DGH / ISO audit, export as PDF or CSV" onClick={() => runMenu(() => setReportModalOpen(true))} />
-                <MenuItem icon={FileText} title="Presentation" hint="Deck for the Governor of Maharashtra" onClick={() => runMenu(() => setSihModalOpen(true))} />
+                <MenuItem icon={FileText} title="Presentation" hint="Deck for the Governor of Maharashtra" onClick={() => runMenu(() => setPresentationOpen(true))} />
                 <div className="border-t border-line mt-1 pt-1">
                   <button
                     onClick={() => runMenu(() => fileInputRef.current?.click())}

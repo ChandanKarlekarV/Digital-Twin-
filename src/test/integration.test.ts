@@ -315,7 +315,7 @@ async function runEndToEndVerification() {
   // 14. One-breath: "varuna open open ppt"
   useRigStore.getState().executeVoiceCommand('varuna open open ppt');
   assert(
-    useRigStore.getState().isSihModalOpen === true,
+    useRigStore.getState().isPresentationOpen === true,
     'Varuna One-Breath: "varuna open open ppt"',
     'Smart India Hackathon 6-Page Presentation deck opened successfully'
   );

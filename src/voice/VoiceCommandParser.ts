@@ -81,7 +81,7 @@ const INTENTS: IntentDef[] = [
   { id: 'pipe', phrases: ['pipe', 'flow line', 'flowline', 'riser', 'line'], numbered: { max: 9 } },
   { id: 'slice', phrases: ['slice', 'cross section', 'cut pipe', 'slice pipe', 'slice it'] },
   { id: 'command_dock', phrases: ['command dock', 'tools dock', 'dock', 'command center'] },
-  { id: 'presentation', phrases: ['presentation', 'ppt', 'slides', 'slide deck', 'sih deck'] },
+  { id: 'presentation', phrases: ['presentation', 'ppt', 'slides', 'slide deck'] },
   { id: 'database', phrases: ['database', 'data base', 'ledger', 'six month', 'production ledger', 'history'] },
   { id: 'compliance', phrases: ['compliance', 'audit report', 'compliance report', 'audit'] },
   { id: 'weather', phrases: ['weather', 'forecast', 'metocean', 'wind'] },

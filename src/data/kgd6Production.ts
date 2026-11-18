@@ -23,9 +23,6 @@ export const KGD6_QUARTERS: QuarterOutput[] = [
   { quarter: 'Q2 FY27', start: '2026-07-01', end: '2026-09-30', gasMmscmd: 24.0, liquidsBpd: 15903, source: 'RIL Q2 FY27 results coverage (30 Oct 2026)' },
 ];
 
-/** FY2025-26 annual averages (RIL Integrated Annual Report 2025-26) */
-export const KGD6_FY26 = { gasMmscmd: 25.9, liquidsBpd: 18170 };
-
 /** Oil & condensate realisation, Q2 FY27 (USD/bbl, results coverage) */
 export const CONDENSATE_PRICE_USD_BBL = 98.9;
 

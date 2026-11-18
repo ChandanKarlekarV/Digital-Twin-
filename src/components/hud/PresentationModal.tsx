@@ -18,9 +18,9 @@ const SLIDES = [
 ];
 const DECK_FILE = '/deck/VARUNA-AI_Governor_Deck.pptx';
 
-export const SihPresentationModal: React.FC = () => {
-  const isOpen = useRigStore((s) => s.isSihModalOpen);
-  const setOpen = useRigStore((s) => s.setSihModalOpen);
+export const PresentationModal: React.FC = () => {
+  const isOpen = useRigStore((s) => s.isPresentationOpen);
+  const setOpen = useRigStore((s) => s.setPresentationOpen);
   const [slide, setSlide] = useState(0);
 
   // Arrow keys / space page through the deck, Escape closes

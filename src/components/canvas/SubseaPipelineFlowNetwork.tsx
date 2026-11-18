@@ -234,7 +234,7 @@ export const SubseaPipelineFlowNetwork: React.FC = () => {
   const pipeGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const explode = useRef(0);
   const isSplitViewActive = useRigStore((s) => s.isSplitViewActive);
-  const anyPanelOpen = useRigStore((s) => !!s.activeHoloModal || s.isEodModalOpen || s.isSihModalOpen || s.isReportModalOpen);
+  const anyPanelOpen = useRigStore((s) => !!s.activeHoloModal || s.isEodModalOpen || s.isPresentationOpen || s.isReportModalOpen);
 
   // Exploded view: each of the 9 pipes slides away from the manifold on its own line —
   // outward along the direction it comes from, and slightly down; the header drops below.

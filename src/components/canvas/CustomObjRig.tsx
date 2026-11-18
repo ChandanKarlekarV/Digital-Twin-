@@ -63,7 +63,7 @@ export const CustomObjRig: React.FC<CustomObjRigProps> = ({ objUrl }) => {
     (s) =>
       !!s.activeHoloModal ||
       s.isEodModalOpen ||
-      s.isSihModalOpen ||
+      s.isPresentationOpen ||
       s.isReportModalOpen ||
       s.isPhysicsModalOpen ||
       s.isPipeSliceModalOpen

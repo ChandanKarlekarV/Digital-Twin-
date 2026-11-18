@@ -12,7 +12,7 @@ npm run build    # production build in dist/ (deployed by Vercel)
 npm test         # voice, gestures, physics, leak detection and integration suites
 ```
 
-Windows shortcuts: `install-and-run.bat` / `install-and-run.ps1`, or `npm start` to serve the built app locally.
+Windows shortcut: `install-and-run.bat` (installs, builds and opens the app), or `npm start` to serve the built app locally.
 
 ## What is real and what is modelled
 

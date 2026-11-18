@@ -14,7 +14,7 @@
  * to the design pressures/temperatures below; from then on readings follow the physics.
  * Values marked ASSUMPTION are not published by the operator.
  */
-import { KGD6_QUARTERS, MJ_FIELD, BlockProduction, productionAt } from '../data/kgd6Production';
+import { KGD6_QUARTERS, MJ_FIELD, BlockProduction } from'../data/kgd6Production';
 import { astm1250Engine } from './ASTM1250Engine';
 
 const G = 9.80665;
@@ -296,4 +296,3 @@ export function drillState(rpm: number, wobKn: number) {
 }
 
 /** Convenience: today's steady network */
-export const networkNow = (t = Date.now()) => solveNetwork(productionAt(t));

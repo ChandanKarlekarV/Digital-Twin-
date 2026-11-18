@@ -11,7 +11,7 @@ const SLIDES = [
   'How it works',
   'Live demo',
   'Real numbers',
-  'What it can change for Maharashtra',
+  'What it can change for India',
   'Ready for a pilot',
   'Thank you',
   'Sources and image credits',

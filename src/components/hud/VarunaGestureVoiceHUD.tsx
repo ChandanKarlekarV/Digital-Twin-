@@ -65,6 +65,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
   const micState = useRigStore((s) => s.micState);
   const micMessage = useRigStore((s) => s.micMessage);
   const voiceStatus = useRigStore((s) => s.voiceStatus);
+  const voiceHeard = useRigStore((s) => s.voiceHeard);
   const [typed, setTyped] = useState('');
 
   useEffect(() => {
@@ -400,10 +401,18 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
                     {micMessage ?? 'Press Wake to turn the microphone on.'}
                   </div>
                 )}
-                {isVarunaAwake && (
+                {isVarunaAwake ? (
                   <div className="text-success-300 truncate">
                     You: {voiceTranscript ? `“${voiceTranscript}”` : 'listening…'}
                   </div>
+                ) : (
+                  micOk &&
+                  voiceHeard &&
+                  Date.now() - voiceHeard.at < 15000 && (
+                    <div className="text-ink-faint truncate" title="Say “Varuna” first to give a command">
+                      Heard: “{voiceHeard.text}”
+                    </div>
+                  )
                 )}
                 {showReply && (
                   <div className="text-ink line-clamp-3">VARUNA: {voiceStatus.lastMessage}</div>

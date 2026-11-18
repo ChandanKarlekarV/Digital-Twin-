@@ -162,12 +162,21 @@ const wakeKey = (w: string) =>
 const isWakeKey = (k: string) =>
   k.length >= 4 && /^(v|f|ar)/.test(k) && k.includes('r') && k.includes('n') && levenshtein(k, 'varana') <= 1;
 
+/**
+ * US-English recognisers often end it with "-er" ("Varner", "Warner"). Accept that only for
+ * words starting with v/w, so rig words such as "burner" never wake VARUNA.
+ */
+const isWake = (word: string) => {
+  const k = wakeKey(word);
+  return isWakeKey(k) || (/^[vw]/i.test(word) && /ar$/.test(k) && isWakeKey(k.slice(0, -1)));
+};
+
 /** [start, end) word spans that are the wake word, including a trailing "AI". */
 function wakeSpans(words: string[]): [number, number][] {
   const spans: [number, number][] = [];
   for (let i = 0; i < words.length; i++) {
     const pair = words[i + 1] && words[i].length <= 5 && words[i + 1].length <= 4 ? words[i] + words[i + 1] : '';
-    let end = pair && isWakeKey(wakeKey(pair)) ? i + 2 : isWakeKey(wakeKey(words[i])) ? i + 1 : 0;
+    let end = pair && isWake(pair) ? i + 2 : isWake(words[i]) ? i + 1 : 0;
     if (!end) continue;
     if (/^a\.?i\.?$/i.test(words[end] ?? '')) end++;
     spans.push([i, end]);

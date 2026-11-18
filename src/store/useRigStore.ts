@@ -511,6 +511,9 @@ interface RigState {
   micState: MicState;
   micMessage: string | null;
   setMicState: (state: MicState, message?: string | null) => void;
+  /** Last words the microphone heard, awake or not (shows a misheard wake word) */
+  voiceHeard: { text: string; at: number } | null;
+  setVoiceHeard: (text: string) => void;
   setVoiceCommanderActive: (active: boolean) => void;
   setVoiceTranscript: (transcript: string | null) => void;
   setIsListeningSpeech: (listening: boolean) => void;
@@ -550,8 +553,25 @@ const getDirectionLabel = (deg: number): string => {
 };
 
 // Retrieve cached ElevenLabs Key if available
-const cachedApiKey = typeof window !== 'undefined' ? localStorage.getItem('varuna_elevenlabs_key') : null;
-const cachedVoiceId = typeof window !== 'undefined' ? localStorage.getItem('varuna_elevenlabs_voice_id') || 'pNInz6obpgDQGcFmaJgB' : 'pNInz6obpgDQGcFmaJgB';
+/** localStorage can be missing or throw (blocked site data, some private windows): never let that break the app */
+const storage = {
+  get: (k: string): string | null => {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null;
+    } catch {
+      return null;
+    }
+  },
+  set: (k: string, v: string | null) => {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (v === null) localStorage.removeItem(k);
+      else localStorage.setItem(k, v);
+    } catch {}
+  },
+};
+const cachedApiKey = storage.get('varuna_elevenlabs_key');
+const cachedVoiceId = storage.get('varuna_elevenlabs_voice_id') || 'pNInz6obpgDQGcFmaJgB';
 
 export const useRigStore = create<RigState>((set, get) => ({
   cameraViewMode: 'topside',
@@ -703,16 +723,11 @@ export const useRigStore = create<RigState>((set, get) => ({
   elevenLabsVoiceId: cachedVoiceId,
   isVoiceModalOpen: false,
   setElevenLabsApiKey: (key) => {
-    if (typeof window !== 'undefined') {
-      if (key) localStorage.setItem('varuna_elevenlabs_key', key);
-      else localStorage.removeItem('varuna_elevenlabs_key');
-    }
+    storage.set('varuna_elevenlabs_key', key || null);
     set({ elevenLabsApiKey: key });
   },
   setElevenLabsVoiceId: (id) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('varuna_elevenlabs_voice_id', id);
-    }
+    storage.set('varuna_elevenlabs_voice_id', id);
     set({ elevenLabsVoiceId: id });
   },
   setVoiceModalOpen: (open) => set({ isVoiceModalOpen: open }),
@@ -871,6 +886,8 @@ export const useRigStore = create<RigState>((set, get) => ({
   micState: 'off',
   micMessage: null,
   setMicState: (micState, micMessage = null) => set({ micState, micMessage }),
+  voiceHeard: null,
+  setVoiceHeard: (text) => set({ voiceHeard: { text, at: Date.now() } }),
   setVoiceCommanderActive: (active) => set({ isVoiceCommanderActive: active }),
   setVoiceTranscript: (transcript) => set({ voiceTranscript: transcript }),
   setIsListeningSpeech: (listening) => set({ isListeningSpeech: listening }),

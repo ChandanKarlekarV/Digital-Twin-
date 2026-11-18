@@ -48,7 +48,9 @@ for (const [text, id, num] of cases) {
 for (const t of ['Varuna', 'hey varuna', 'Varun a open crane', 'Baruna show helipad', 'veruna', 'waruna open drill', 'var una open drill',
   'Varuna AI status', 'Verna open pipe 3', 'Bharuna', 'ok Varun', 'VARUNA, what is the pressure?', 'Verona'])
   check(hasWakeWord(t), `wake  ${JSON.stringify(t)}`, true);
-for (const t of ['open the crane', 'banana', 'run a test', 'variable flow', 'turn on camera', 'marine riser', 'warning', 'very nice', 'around'])
+for (const t of ['Varner open crane', 'Warner', 'Verona', 'Baruna'])
+  check(hasWakeWord(t), `wake ${JSON.stringify(t)}`, true);
+for (const t of ['open the crane', 'banana', 'run a test', 'variable flow', 'turn on camera', 'marine riser', 'warning', 'very nice', 'around', 'flare burner', 'corner'])
   check(!hasWakeWord(t), `sleep ${JSON.stringify(t)}`, false);
 check(stripWakeWord('Varun a open crane two') === 'open crane two', 'strip "Varun a"', stripWakeWord('Varun a open crane two'));
 check(stripWakeWord('varuna ai rig status') === 'rig status', 'strip "varuna ai"', stripWakeWord('varuna ai rig status'));

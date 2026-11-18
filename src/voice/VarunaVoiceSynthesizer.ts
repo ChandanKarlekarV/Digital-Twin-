@@ -438,11 +438,15 @@ class VarunaVoiceSynthesizer {
   private stallCheck: ReturnType<typeof setTimeout> | undefined;
   private unlocked = false;
 
+  /** Our own bound on how long the current message may still be playing */
+  private speakingUntil = 0;
+
   private finishSpeaking(message: string, token: number): void {
     if (token !== this.speechToken) return;
     clearTimeout(this.watchdog);
     clearTimeout(this.stallCheck);
     this.liveUtterances = [];
+    this.speakingUntil = 0;
     useRigStore.getState().setVoiceStatus({ isSpeaking: false, lastMessage: message });
   }
 
@@ -467,9 +471,14 @@ class VarunaVoiceSynthesizer {
     }
   }
 
-  /** True only while audio is actually playing (not merely queued and silently dropped) */
+  /**
+   * True only while one of OUR messages is actually playing. Chrome's network voices can
+   * stall and report `speaking` forever; bounding it by our own estimate means a stalled
+   * engine can never make VARUNA deaf.
+   */
   public isSpeaking(): boolean {
     if (this.currentAudioElement && !this.currentAudioElement.paused && !this.currentAudioElement.ended) return true;
+    if (Date.now() > this.speakingUntil) return false;
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) return window.speechSynthesis.speaking;
     return false;
   }
@@ -490,7 +499,15 @@ class VarunaVoiceSynthesizer {
     clearTimeout(this.stallCheck);
     // Never stay "speaking" longer than the message could take (~170 words a minute + margin)
     const words = message.split(/\s+/).length;
-    this.watchdog = setTimeout(() => this.finishSpeaking(message, token), 2500 + words * 420);
+    const budget = 2500 + words * 420;
+    this.speakingUntil = Date.now() + budget;
+    this.watchdog = setTimeout(() => {
+      // Over time: the engine has stalled. Clear it so the next answer can play.
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+      } catch {}
+      this.finishSpeaking(message, token);
+    }, budget);
 
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setTimeout(() => this.finishSpeaking(message, token), 50);
@@ -500,6 +517,7 @@ class VarunaVoiceSynthesizer {
     try {
       const synth = window.speechSynthesis;
       synth.cancel();
+      synth.resume(); // Chrome: a stalled/paused engine queues new speech but never plays it
       const voice = this.pickVoice();
 
       // A browser that refuses to speak (no user gesture yet) queues nothing: release at once

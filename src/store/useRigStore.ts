@@ -81,6 +81,8 @@ export type HolographicComponentType =
   | 'command_dock';
 export type MetoceanCondition = 'calm' | 'monsoon' | 'cyclonic';
 
+export type MicState = 'off' | 'starting' | 'listening' | 'blocked' | 'unsupported' | 'error';
+
 export type RecognizedGesture =
   | 'PALM'
   | 'PINCH'
@@ -505,6 +507,10 @@ interface RigState {
   varunaWakeExpiry: number;
   voiceTranscript: string | null;
   isListeningSpeech: boolean;
+  /** Microphone state shown in the HUD, with a plain-language reason when it is not listening */
+  micState: MicState;
+  micMessage: string | null;
+  setMicState: (state: MicState, message?: string | null) => void;
   setVoiceCommanderActive: (active: boolean) => void;
   setVoiceTranscript: (transcript: string | null) => void;
   setIsListeningSpeech: (listening: boolean) => void;
@@ -862,6 +868,9 @@ export const useRigStore = create<RigState>((set, get) => ({
   varunaWakeExpiry: 0,
   voiceTranscript: null,
   isListeningSpeech: false,
+  micState: 'off',
+  micMessage: null,
+  setMicState: (micState, micMessage = null) => set({ micState, micMessage }),
   setVoiceCommanderActive: (active) => set({ isVoiceCommanderActive: active }),
   setVoiceTranscript: (transcript) => set({ voiceTranscript: transcript }),
   setIsListeningSpeech: (listening) => set({ isListeningSpeech: listening }),

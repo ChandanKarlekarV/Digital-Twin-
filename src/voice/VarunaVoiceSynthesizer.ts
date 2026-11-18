@@ -358,8 +358,13 @@ class VarunaVoiceSynthesizer {
             this.speakWebSpeechFallback(message);
           };
 
-          await audio.play();
-          return;
+          try {
+            await audio.play();
+            return;
+          } catch {
+            // autoplay refused: fall through to browser speech
+            this.currentAudioElement = null;
+          }
         }
       } catch (err) {
         console.warn('ElevenLabs speech generation fallback to WebSpeech:', err);
@@ -427,15 +432,68 @@ class VarunaVoiceSynthesizer {
       .trim();
   }
 
+  /** Utterances kept referenced until they finish (Chrome drops onend for collected ones) */
+  private liveUtterances: SpeechSynthesisUtterance[] = [];
+  private watchdog: ReturnType<typeof setTimeout> | undefined;
+  private stallCheck: ReturnType<typeof setTimeout> | undefined;
+  private unlocked = false;
+
   private finishSpeaking(message: string, token: number): void {
     if (token !== this.speechToken) return;
+    clearTimeout(this.watchdog);
+    clearTimeout(this.stallCheck);
+    this.liveUtterances = [];
     useRigStore.getState().setVoiceStatus({ isSpeaking: false, lastMessage: message });
+  }
+
+  /**
+   * Call from a click. Browsers only allow audio and speech after a user gesture; this
+   * resumes the audio context and primes speech synthesis so later answers are heard.
+   */
+  public unlock(): void {
+    if (this.unlocked || typeof window === 'undefined') return;
+    this.unlocked = true;
+    try {
+      this.initAudio();
+      if (this.audioCtx?.state === 'suspended') this.audioCtx.resume();
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+        this.pickVoice();
+      }
+    } catch {
+      this.unlocked = false;
+    }
+  }
+
+  /** True only while audio is actually playing (not merely queued and silently dropped) */
+  public isSpeaking(): boolean {
+    if (this.currentAudioElement && !this.currentAudioElement.paused && !this.currentAudioElement.ended) return true;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) return window.speechSynthesis.speaking;
+    return false;
+  }
+
+  /** Stop talking now (barge-in, or the user pressed Wake) */
+  public stop(): void {
+    const token = ++this.speechToken;
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+      this.currentAudioElement?.pause();
+    } catch {}
+    this.finishSpeaking(useRigStore.getState().voiceStatus.lastMessage, token);
   }
 
   private speakWebSpeechFallback(message: string): void {
     const token = ++this.speechToken;
+    clearTimeout(this.watchdog);
+    clearTimeout(this.stallCheck);
+    // Never stay "speaking" longer than the message could take (~170 words a minute + margin)
+    const words = message.split(/\s+/).length;
+    this.watchdog = setTimeout(() => this.finishSpeaking(message, token), 2500 + words * 420);
+
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setTimeout(() => this.finishSpeaking(message, token), 3000);
+      setTimeout(() => this.finishSpeaking(message, token), 50);
       return;
     }
 
@@ -444,8 +502,14 @@ class VarunaVoiceSynthesizer {
       synth.cancel();
       const voice = this.pickVoice();
 
+      // A browser that refuses to speak (no user gesture yet) queues nothing: release at once
+      this.stallCheck = setTimeout(() => {
+        if (!synth.speaking && !synth.pending) this.finishSpeaking(message, token);
+      }, 900);
+
       // Speak sentence by sentence: natural pauses, and Chrome no longer cuts off long text
       const sentences = this.humanize(message).match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter(Boolean) ?? [message];
+      this.liveUtterances = [];
       sentences.forEach((sentence, i) => {
         const u = new SpeechSynthesisUtterance(sentence);
         if (voice) {
@@ -457,10 +521,12 @@ class VarunaVoiceSynthesizer {
         u.rate = natural ? 1.0 : 0.94;
         u.pitch = 1.0;
         u.volume = 0.95;
-        if (i === sentences.length - 1) {
-          u.onend = () => this.finishSpeaking(message, token);
-          u.onerror = () => this.finishSpeaking(message, token);
-        }
+        if (i === sentences.length - 1) u.onend = () => this.finishSpeaking(message, token);
+        u.onerror = (e) => {
+          // "interrupted"/"canceled" come from our own cancel(); anything else ends the turn
+          if (e.error !== 'interrupted' && e.error !== 'canceled') this.finishSpeaking(message, token);
+        };
+        this.liveUtterances.push(u);
         synth.speak(u);
       });
     } catch {

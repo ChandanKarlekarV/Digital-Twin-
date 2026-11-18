@@ -58,8 +58,41 @@ async function loadMediaPipeHands(): Promise<void> {
   return mediaPipeLoad;
 }
 
+/**
+ * One Euro filter (Casiez et al., CHI 2012): an adaptive low-pass filter. Slow movement is
+ * smoothed hard (no jitter on a still hand), fast movement passes with little lag.
+ */
+class OneEuro {
+  private x: number | null = null;
+  private dx = 0;
+  private t = 0;
+  constructor(private minCutoff = 1.2, private beta = 9, private dCutoff = 1.0) {}
+  private static alpha(cutoff: number, dt: number) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+  filter(value: number, tSec: number): number {
+    if (this.x === null) {
+      this.x = value;
+      this.t = tSec;
+      return value;
+    }
+    const dt = Math.min(Math.max(tSec - this.t, 1 / 120), 0.25);
+    this.t = tSec;
+    const dxRaw = (value - this.x) / dt;
+    this.dx += OneEuro.alpha(this.dCutoff, dt) * (dxRaw - this.dx);
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+    this.x += OneEuro.alpha(cutoff, dt) * (value - this.x);
+    return this.x;
+  }
+}
+
 /** Frames a raw pose must persist before it is reported (debounces flicker at ~30 fps). */
 const POSE_STABLE_FRAMES = 4;
+/** A change in the number of hands must last this many frames (one-frame dropouts are ignored). */
+const HAND_COUNT_CONFIRM_FRAMES = 3;
+/** Per-frame motion below this is treated as tracking noise and removed (screen widths / frame). */
+const MOTION_DEADZONE = 0.0012;
 /** Hold time for count gestures (2-4 fingers, shaka) before a subsystem opens. */
 const INDEX_HOLD_MS = 700;
 /** Centroid speed (screen widths / frame) below which a hand counts as still. */
@@ -154,6 +187,12 @@ class VarunaGestureEngine {
   private poseHistory: RecognizedGesture[][] = [[], []];
   private handIsStill = false;
   private stablePoses: RecognizedGesture[] = [null, null];
+  /** One Euro filters per hand slot: 21 landmarks x (x, y, z) */
+  private filters: OneEuro[][] = [[], []];
+  /** Last extended/curled state of each finger per hand slot, for hysteresis */
+  private fingerState: boolean[][] = [[], []];
+  private countCandidate = 0;
+  private countCandidateFrames = 0;
 
   // Viewfinder callbacks
   private onFrameCallbacks: Set<(result: GestureTrackingResult, video: HTMLVideoElement) => void> = new Set();
@@ -324,8 +363,24 @@ class VarunaGestureEngine {
   private handleMediaPipeResults = (results: any): void => {
     if (!this.isRunning || !results) return;
 
-    const multiHandLandmarks = results.multiHandLandmarks || [];
+    const multiHandLandmarks = (results.multiHandLandmarks || []).slice(0, 2);
     const handsCount = multiHandLandmarks.length;
+
+    // Hand-count hysteresis: a hand that blinks out (or a false second hand) for a frame or
+    // two must not reset tracking or fire actions. Hold still until the change is confirmed.
+    if (handsCount !== this.prevHandsCount) {
+      this.countCandidateFrames = handsCount === this.countCandidate ? this.countCandidateFrames + 1 : 1;
+      this.countCandidate = handsCount;
+      if (this.countCandidateFrames < HAND_COUNT_CONFIRM_FRAMES) {
+        const sp = useRigStore.getState().gestureSpatial;
+        if (sp && (sp.deltaX || sp.deltaY || sp.zoomDelta)) {
+          useRigStore.getState().setGestureSpatial({ ...sp, deltaX: 0, deltaY: 0, zoomDelta: 0 });
+        }
+        return;
+      }
+    }
+    this.countCandidate = handsCount;
+    this.countCandidateFrames = 0;
 
     if (handsCount === 0) {
       this.prevHandsCount = 0;
@@ -399,13 +454,19 @@ class VarunaGestureEngine {
       this.prevDistance = null;
       this.poseHistory = [[], []];
       this.stablePoses = [null, null];
+      this.filters = [[], []];
+      this.fingerState = [[], []];
     }
 
+    const tSec = now / 1000;
+    // Remove sub-threshold jitter from a per-frame motion component, keep real motion intact
+    const deadzone = (d: number) => (Math.abs(d) <= MOTION_DEADZONE ? 0 : d - Math.sign(d) * MOTION_DEADZONE);
+
     // Process Hand 1
-    this.smoothedLandmarks1 = this.smoothLandmarks(this.smoothedLandmarks1, hand1Raw);
-    const hand1Data = this.stabilizePose(0, this.analyzeSingleHand(this.smoothedLandmarks1, this.prevPinchDist1));
-    const dH1_x = this.prevHand1Pos ? hand1Data.centroid.x - this.prevHand1Pos.x : 0;
-    const dH1_y = this.prevHand1Pos ? hand1Data.centroid.y - this.prevHand1Pos.y : 0;
+    this.smoothedLandmarks1 = this.smoothLandmarks(0, hand1Raw, tSec);
+    const hand1Data = this.stabilizePose(0, this.analyzeSingleHand(this.smoothedLandmarks1, this.prevPinchDist1, 0));
+    const dH1_x = this.prevHand1Pos ? deadzone(hand1Data.centroid.x - this.prevHand1Pos.x) : 0;
+    const dH1_y = this.prevHand1Pos ? deadzone(hand1Data.centroid.y - this.prevHand1Pos.y) : 0;
     this.prevHand1Pos = { x: hand1Data.centroid.x, y: hand1Data.centroid.y, time: now };
 
     // Process Hand 2 if detected
@@ -415,15 +476,17 @@ class VarunaGestureEngine {
     let combinedLandmarks = [...this.smoothedLandmarks1];
 
     if (hand2Raw) {
-      this.smoothedLandmarks2 = this.smoothLandmarks(this.smoothedLandmarks2, hand2Raw);
-      hand2Data = this.stabilizePose(1, this.analyzeSingleHand(this.smoothedLandmarks2, this.prevPinchDist2));
-      dH2_x = this.prevHand2Pos ? hand2Data.centroid.x - this.prevHand2Pos.x : 0;
-      dH2_y = this.prevHand2Pos ? hand2Data.centroid.y - this.prevHand2Pos.y : 0;
+      this.smoothedLandmarks2 = this.smoothLandmarks(1, hand2Raw, tSec);
+      hand2Data = this.stabilizePose(1, this.analyzeSingleHand(this.smoothedLandmarks2, this.prevPinchDist2, 1));
+      dH2_x = this.prevHand2Pos ? deadzone(hand2Data.centroid.x - this.prevHand2Pos.x) : 0;
+      dH2_y = this.prevHand2Pos ? deadzone(hand2Data.centroid.y - this.prevHand2Pos.y) : 0;
       this.prevHand2Pos = { x: hand2Data.centroid.x, y: hand2Data.centroid.y, time: now };
       combinedLandmarks = [...this.smoothedLandmarks1, ...this.smoothedLandmarks2];
     } else {
       this.smoothedLandmarks2 = [];
       this.prevHand2Pos = null;
+      this.filters[1] = [];
+      this.fingerState[1] = [];
     }
 
     // 2. 2D / 3D Laser Pointer Cursor: check if EITHER hand is pointing (INDEX_1 or _isPoint)
@@ -585,20 +648,29 @@ class VarunaGestureEngine {
     }));
   }
 
-  private smoothLandmarks(prev: HandLandmark[], current: HandLandmark[]): HandLandmark[] {
-    if (prev.length !== current.length) return current;
-    const alpha = 0.68;
-    return prev.map((p, i) => ({
+  /** One Euro filtering of every landmark coordinate for one hand slot */
+  private smoothLandmarks(slot: 0 | 1, current: HandLandmark[], tSec: number): HandLandmark[] {
+    const f = this.filters[slot];
+    if (f.length !== current.length * 3) {
+      this.filters[slot] = current.flatMap(() => [new OneEuro(), new OneEuro(), new OneEuro(1.0, 4)]);
+    }
+    const fs = this.filters[slot];
+    return current.map((p, i) => ({
       ...p,
-      x: p.x * (1 - alpha) + current[i].x * alpha,
-      y: p.y * (1 - alpha) + current[i].y * alpha,
-      z: (p.z || 0) * (1 - alpha) + (current[i].z || 0) * alpha,
+      x: fs[i * 3].filter(p.x, tSec),
+      y: fs[i * 3 + 1].filter(p.y, tSec),
+      z: fs[i * 3 + 2].filter(p.z || 0, tSec),
     }));
   }
 
+  /**
+   * @param slot hand slot for finger hysteresis (a finger needs a clearly different pose to
+   *             change state, so borderline fingers stop flickering); -1 = no memory
+   */
   private analyzeSingleHand(
     landmarks: HandLandmark[],
-    prevPinchDist: number | null
+    prevPinchDist: number | null,
+    slot: -1 | 0 | 1 = -1
   ): SingleHandData {
     if (landmarks.length < 21) {
       return {
@@ -636,7 +708,15 @@ class VarunaGestureEngine {
      * AND its tip is clearly farther from the wrist than its PIP joint. Using both cues
      * works for hands pointing toward the camera, where 2D lengths alone collapse.
      */
-    const fingerExtended = (mcpI: number, pipI: number, tipI: number) => {
+    const memory = slot >= 0 ? this.fingerState[slot] : [];
+    // Hysteresis: an extended finger stays extended until clearly curled, and vice versa
+    const keep = (i: number, extendNow: boolean, stillExtended: boolean) => {
+      const was = memory[i];
+      const v = was === undefined ? extendNow : was ? stillExtended : extendNow;
+      if (slot >= 0) memory[i] = v;
+      return v;
+    };
+    const fingerExtended = (i: number, mcpI: number, pipI: number, tipI: number) => {
       const mcp = landmarks[mcpI];
       const pip = landmarks[pipI];
       const tip = landmarks[tipI];
@@ -646,16 +726,17 @@ class VarunaGestureEngine {
       const lb = Math.hypot(bx, by) || 1e-6;
       const straightness = (ax * bx + ay * by) / (la * lb);
       const reach = dist(wrist, tip) - dist(wrist, pip);
-      return straightness > 0.55 && reach > palm * 0.12;
+      return keep(i, straightness > 0.62 && reach > palm * 0.15, straightness > 0.45 && reach > palm * 0.08);
     };
 
-    const isIndexExtended = fingerExtended(5, 6, 8);
-    const isMiddleExtended = fingerExtended(9, 10, 12);
-    const isRingExtended = fingerExtended(13, 14, 16);
-    const isPinkyExtended = fingerExtended(17, 18, 20);
+    const isIndexExtended = fingerExtended(1, 5, 6, 8);
+    const isMiddleExtended = fingerExtended(2, 9, 10, 12);
+    const isRingExtended = fingerExtended(3, 13, 14, 16);
+    const isPinkyExtended = fingerExtended(4, 17, 18, 20);
     // Thumb: tip well away from the index knuckle and from the palm's pinky side
-    const isThumbExtended =
-      dist(thumbTip, indexMcp) > palm * 0.55 && dist(thumbTip, pinkyMcp) > dist(thumbIp, pinkyMcp) * 1.1;
+    const thumbAway = dist(thumbTip, indexMcp);
+    const thumbOut = dist(thumbTip, pinkyMcp) / Math.max(dist(thumbIp, pinkyMcp), 1e-6);
+    const isThumbExtended = keep(0, thumbAway > palm * 0.6 && thumbOut > 1.12, thumbAway > palm * 0.48 && thumbOut > 1.05);
 
     const fingerCount =
       Number(isThumbExtended) +

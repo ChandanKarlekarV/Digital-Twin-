@@ -60,13 +60,43 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
   const [secondsRemaining, setSecondsRemaining] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const micState = useRigStore((s) => s.micState);
+  const micMessage = useRigStore((s) => s.micMessage);
+  const voiceStatus = useRigStore((s) => s.voiceStatus);
+  const [typed, setTyped] = useState('');
+
   useEffect(() => {
+    // Works at once if the microphone was allowed before; otherwise the first click starts it
     varunaVoiceCommander.start();
+    const firstClick = () => {
+      varunaVoice.unlock();
+      const s = useRigStore.getState().micState;
+      if (s !== 'listening' && s !== 'starting') varunaVoiceCommander.start();
+    };
+    window.addEventListener('pointerdown', firstClick, { once: true });
     return () => {
+      window.removeEventListener('pointerdown', firstClick);
       varunaVoiceCommander.stop();
       varunaGestureEngine.stop();
     };
   }, []);
+
+  const submitTyped = (e: React.FormEvent) => {
+    e.preventDefault();
+    varunaVoiceCommander.ask(typed);
+    setTyped('');
+  };
+
+  const micLabel: Record<string, string> = {
+    listening: 'Mic on',
+    starting: 'Starting mic…',
+    off: 'Mic off',
+    blocked: 'Mic blocked',
+    unsupported: 'No voice in this browser',
+    error: 'Mic problem',
+  };
+  const micOk = micState === 'listening';
+  const showReply = voiceStatus.lastMessage && Date.now() - voiceStatus.timestamp < 30000;
 
   useEffect(() => {
     if (!isVarunaAwake) {
@@ -341,33 +371,57 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
               </div>
 
               <button
-                onClick={wakeVaruna}
+                onClick={() => varunaVoiceCommander.wake()}
                 className="px-2 py-1 rounded-lg bg-reliance-blue/70 hover:bg-reliance-blue border border-reliance-cyan/40 text-white font-bold text-[9px] transition-all cursor-pointer flex items-center gap-1 shrink-0 shadow-sm"
-                title="Wake VARUNA without speaking"
+                title="Turn the microphone on and listen now"
               >
                 <Power className="w-2.5 h-2.5 text-emerald-300" />
                 <span>WAKE</span>
               </button>
             </div>
 
-            {/* Live Transcript / Speech Indicator */}
-            <div className="p-1.5 rounded-lg bg-black/60 border border-white/10 flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1.5 overflow-hidden">
-                <Mic
-                  className={`w-3 h-3 shrink-0 ${
-                    isListeningSpeech ? 'text-purple-400 animate-pulse' : 'text-reliance-textMuted'
-                  }`}
-                />
-                <div className={`truncate text-[10px] ${isVarunaAwake ? 'text-success-300' : 'text-ink-faint'}`}>
-                  {isVarunaAwake
-                    ? (voiceTranscript ? `“${voiceTranscript}”` : 'Listening, say a command')
-                    : 'Say “Varuna” to start'}
-                </div>
+            {/* Microphone status, with the reason when it is not listening */}
+            <div
+              className={`p-1.5 rounded-lg border flex items-start gap-1.5 ${
+                micOk ? 'bg-black/60 border-white/10' : 'bg-warning-950 border-warning-600'
+              }`}
+            >
+              <Mic
+                className={`w-3 h-3 mt-0.5 shrink-0 ${
+                  isListeningSpeech ? 'text-success-300 animate-pulse' : micOk ? 'text-ink-muted' : 'text-warning-300'
+                }`}
+              />
+              <div className="min-w-0 text-[10px] leading-snug">
+                <div className={micOk ? 'text-ink-muted' : 'text-warning-200 font-semibold'}>{micLabel[micState] ?? 'Mic'}</div>
+                {!micOk && (
+                  <div className="text-warning-200">
+                    {micMessage ?? 'Press Wake to turn the microphone on.'}
+                  </div>
+                )}
+                {isVarunaAwake && (
+                  <div className="text-success-300 truncate">
+                    You: {voiceTranscript ? `“${voiceTranscript}”` : 'listening…'}
+                  </div>
+                )}
+                {showReply && (
+                  <div className="text-ink line-clamp-3">VARUNA: {voiceStatus.lastMessage}</div>
+                )}
               </div>
-              <button onClick={() => wakeVaruna()} className="btn h-6 px-2 text-[10px]" title="Wake VARUNA without speaking">
-                Wake
-              </button>
             </div>
+
+            {/* Type instead of speaking (noisy rooms, browsers without speech) */}
+            <form onSubmit={submitTyped} className="flex items-center gap-1">
+              <input
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="Type to ask VARUNA, e.g. is there a leak?"
+                aria-label="Ask VARUNA"
+                className="flex-1 min-w-0 h-7 px-2 rounded-md bg-black/60 border border-white/15 text-[11px] text-ink placeholder:text-ink-faint focus:outline-none focus:border-accent-500"
+              />
+              <button type="submit" className="btn h-7 px-2 text-[10px]" disabled={!typed.trim()}>
+                Ask
+              </button>
+            </form>
 
             {/* Gesture Camera Viewfinder Box */}
             {isGestureCameraActive ? (

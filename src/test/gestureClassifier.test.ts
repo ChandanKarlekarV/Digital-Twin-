@@ -125,6 +125,38 @@ const none = () => feed([], 2);
   check(maxIn > 0, 'two hands apart zooms in', maxIn.toFixed(3));
   check(maxOut < 0, 'two hands together zooms out', maxOut.toFixed(3));
 
+  await none();
+  await none();
+
+  // 5. Noise: a still open palm with MediaPipe-like jitter (~0.4% of the frame) must not rotate
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 2;
+  const jitter = (lm: HandLandmark[], a: number) => lm.map((p) => ({ x: p.x + rand() * a, y: p.y + rand() * a, z: 0 }));
+  let moveFrames = 0;
+  let drift = 0;
+  for (let i = 0; i < 40; i++) {
+    engine.handleMediaPipeResults({ multiHandLandmarks: [raw(jitter(palm, 0.004))] });
+    const sp = useRigStore.getState().gestureSpatial;
+    if (useRigStore.getState().gestureDetected === 'MOVE') moveFrames++;
+    drift += Math.abs(sp.deltaX) + Math.abs(sp.deltaY);
+    await sleep(33);
+  }
+  check(moveFrames <= 2, 'jittery still palm does not rotate', `${moveFrames} move frames, drift ${drift.toFixed(4)}`);
+
+  // 6. A one-frame tracking dropout does not reset the held pose
+  const before = useRigStore.getState().gestureDetected;
+  engine.handleMediaPipeResults({ multiHandLandmarks: [] });
+  check(useRigStore.getState().gestureDetected === before, 'one-frame dropout ignored', `${before} -> ${useRigStore.getState().gestureDetected}`);
+
+  // 7. A real palm movement still rotates
+  let moved = 0;
+  for (let i = 0; i < 15; i++) {
+    engine.handleMediaPipeResults({ multiHandLandmarks: [raw(palm, i * 0.02)] });
+    moved += Math.abs(useRigStore.getState().gestureSpatial.deltaX);
+    await sleep(33);
+  }
+  check(moved > 0.05, 'deliberate palm swipe rotates', moved.toFixed(3));
+
   engine.isRunning = false;
   console.log(fail ? `${fail} failures` : 'all passed');
   process.exit(fail ? 1 : 0);

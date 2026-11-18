@@ -6,10 +6,12 @@
  *    refuses to restart an old one, which left the mic dead after a few commands.
  * 2. Health check every 2 s: if the mic should be on but no session is running (or a start
  *    never reported back), a new recogniser is built.
- * 3. After every reply VARUNA speaks, the session is recycled: on some machines Chrome's
- *    recogniser stays "on" but stops delivering words once audio has played.
- * 4. Echo guard follows VARUNA's real speech, bounded in time, so a stalled voice engine can
- *    never make it deaf. Saying "Varuna" while it talks interrupts it (barge-in).
+ * 3. Back-to-back commands: the session is never restarted between commands (no dead gap),
+ *    and while VARUNA is talking only its OWN words are ignored, recognised by content.
+ *    Anything else the user says (a command, a question, "Varuna") interrupts the reply
+ *    and runs at once.
+ * 4. The echo window is bounded by VARUNA's real speech time, so a stalled voice engine can
+ *    never make it deaf.
  * 5. The microphone starts from a click (Wake, or the first click on the page), as browsers
  *    require, and every failure is shown in the HUD in plain words.
  *
@@ -22,6 +24,7 @@
 import { useRigStore } from '../store/useRigStore';
 import { parseVoiceCommand, ParsedVoiceCommand, hasWakeWord, stripWakeWord, isUnambiguous } from './VoiceCommandParser';
 import { varunaVoice } from './VarunaVoiceSynthesizer';
+import { answerRigQuestion } from './RigKnowledge';
 
 declare global {
   interface Window {
@@ -30,9 +33,21 @@ declare global {
   }
 }
 
-const ECHO_TAIL_MS = 600;
+/** Recognisers deliver the transcript of VARUNA's last words up to ~2 s after it stops */
+const ECHO_WINDOW_MS = 2500;
+const NUMBER_WORDS: Record<string, string> = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9' };
+/** Lower-case words with digits for number words, punctuation removed */
+const wordSet = (text: string) =>
+  new Set(
+    (text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => NUMBER_WORDS[w] ?? w)
+  );
 /** The same command twice within this time is one utterance delivered twice, not a repeat */
-const DEBOUNCE_MS = 1200;
+const DEBOUNCE_MS = 700;
 /** Keep the window open this long after the last word heard while awake */
 const TALKING_GRACE_MS = 6000;
 /** Give up auto-restarting after this many network errors in a row */
@@ -62,8 +77,8 @@ class VarunaVoiceCommander {
   private networkErrors = 0;
   /** A session open is scheduled (restart back-off or recycle) */
   private openScheduled = false;
-  /** Set while we cut VARUNA off ourselves, so that stop does not recycle the session */
-  private interrupting = false;
+  /** Words of VARUNA's current / last reply, to recognise its own echo by content */
+  private spokenWords = new Set<string>();
 
   private lastSpokeAt = 0;
   private lastSignature = '';
@@ -76,12 +91,12 @@ class VarunaVoiceCommander {
 
   constructor() {
     useRigStore.subscribe((state, prev) => {
+      if (state.voiceStatus.isSpeaking && state.voiceStatus.lastMessage !== prev.voiceStatus.lastMessage) {
+        this.spokenWords = wordSet(state.voiceStatus.lastMessage);
+      }
       if (prev.voiceStatus.isSpeaking && !state.voiceStatus.isSpeaking) {
         this.lastSpokeAt = Date.now();
-        // Fresh session after a reply that finished by itself (see header, point 3). Not
-        // after an interruption: the user is talking into the current session right now.
-        if (this.interrupting) this.interrupting = false;
-        else if (this.wanted && this.sessionLive) this.recycle(ECHO_TAIL_MS);
+        this.spokenWords = wordSet(state.voiceStatus.lastMessage);
       }
     });
   }
@@ -228,11 +243,9 @@ class VarunaVoiceCommander {
     }
   }
 
-  /** Cut VARUNA off and listen at once (no echo tail, no session recycle) */
+  /** Cut VARUNA off and listen at once (no echo tail) */
   private interruptSpeech(): void {
-    if (useRigStore.getState().voiceStatus.isSpeaking) this.interrupting = true;
     varunaVoice.stop();
-    this.interrupting = false;
     this.lastSpokeAt = 0;
   }
 
@@ -259,7 +272,7 @@ class VarunaVoiceCommander {
     }, delay);
   }
 
-  /** Replace the running session with a fresh one after `delay` ms */
+  /** Replace the running session with a fresh one after `delay` ms (dead or stalled sessions only) */
   private recycle(delay: number): void {
     this.closeSession();
     this.scheduleOpen(delay);
@@ -277,9 +290,22 @@ class VarunaVoiceCommander {
 
   // ---------------------------------------------------------------- results
 
-  /** True while VARUNA's own voice could be picked up by the microphone */
-  private hearingOwnVoice(): boolean {
-    return varunaVoice.isSpeaking() || Date.now() - this.lastSpokeAt < ECHO_TAIL_MS;
+  /** True while VARUNA's own voice (or its late-arriving transcript) could reach us */
+  private inEchoWindow(): boolean {
+    return varunaVoice.isSpeaking() || Date.now() - this.lastSpokeAt < ECHO_WINDOW_MS;
+  }
+
+  /**
+   * Echo = the words heard are VARUNA's own reply. Most heard words appear in what it just
+   * said ("zooming in" while it says "Zooming in."), whereas a user command adds words the
+   * reply did not contain ("zoom out", "open crane one").
+   */
+  private isEcho(text: string): boolean {
+    const heard = [...wordSet(text)];
+    if (heard.length === 0 || this.spokenWords.size === 0) return false;
+    // Exact words only: the echo of "Zooming in." is "zooming in", the user's command is "zoom in"
+    const inReply = heard.filter((w) => this.spokenWords.has(w)).length;
+    return inReply / heard.length >= 0.75;
   }
 
   private handleResult(event: any): void {
@@ -298,11 +324,10 @@ class VarunaVoiceCommander {
       // Always show what the mic heard, so a misheard wake word is visible
       store.setVoiceHeard(top);
 
-      // Echo guard, with barge-in: the wake word interrupts VARUNA, anything else is its own echo
-      if (this.hearingOwnVoice()) {
-        if (!hasWake) continue;
-        this.interruptSpeech();
-      }
+      // Echo guard by content: VARUNA's own words are dropped, the user's words are not, even
+      // while VARUNA is still talking (back-to-back commands, barge-in)
+      const echoWindow = this.inEchoWindow();
+      if (echoWindow && !hasWake && this.isEcho(top)) continue;
 
       const awake = store.isVarunaAwake && Date.now() < store.varunaWakeExpiry;
       if (!awake && !hasWake) continue;
@@ -329,11 +354,15 @@ class VarunaVoiceCommander {
         }
         // Bare wake word already handled on the interim result
         if (woke && !best.parsed && !stripWakeWord(top)) continue;
+        // While VARUNA's voice may still be in the room, act only on something it can do:
+        // a command, a rig question, or the wake word. Never reply "sorry" to a garbled echo.
+        if (echoWindow && !hasWake && !best.parsed && !answerRigQuestion(stripWakeWord(top), null)) continue;
         this.execute(best.text, best.parsed);
       } else {
         // Bare wake word: wake immediately without waiting for the final result
         if (!awake && hasWake && !stripWakeWord(top) && this.wokeResultIndex !== i) {
           this.wokeResultIndex = i;
+          if (varunaVoice.isSpeaking()) this.interruptSpeech();
           store.wakeVaruna();
           continue;
         }
@@ -375,6 +404,8 @@ class VarunaVoiceCommander {
       this.lastSignature = sig;
       this.lastSignatureTime = now;
     }
+    // The user spoke over VARUNA: stop the old reply so the new one is heard
+    if (varunaVoice.isSpeaking()) this.interruptSpeech();
     useRigStore.getState().executeVoiceCommand(text);
   }
 }

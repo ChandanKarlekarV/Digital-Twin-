@@ -70,7 +70,67 @@ class FakeRecognition {
   }
 }
 
-(globalThis as any).window = { webkitSpeechRecognition: FakeRecognition, addEventListener() {}, removeEventListener() {} };
+/**
+ * Speech output that takes real time (60 ms a word) and is picked up by the microphone,
+ * as on a laptop with speakers: the recogniser hears VARUNA's own words as an echo.
+ */
+const MS_PER_WORD = 60;
+class FakeUtterance {
+  text: string;
+  voice: unknown = null;
+  lang = '';
+  rate = 1;
+  pitch = 1;
+  volume = 1;
+  onend: (() => void) | null = null;
+  onerror: ((e: { error: string }) => void) | null = null;
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+const fakeSynth = {
+  speaking: false,
+  pending: false,
+  queue: [] as FakeUtterance[],
+  timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  getVoices: () => [],
+  addEventListener() {},
+  resume() {},
+  cancel() {
+    clearTimeout(this.timer);
+    const q = this.queue;
+    this.queue = [];
+    this.speaking = false;
+    q.forEach((u) => u.onerror?.({ error: 'interrupted' }));
+  },
+  speak(u: FakeUtterance) {
+    this.queue.push(u);
+    if (!this.speaking) this.next();
+  },
+  next() {
+    const u = this.queue[0];
+    if (!u) {
+      this.speaking = false;
+      return;
+    }
+    this.speaking = true;
+    const words = u.text.split(/\s+/).filter(Boolean).length;
+    if (u.text.trim()) setTimeout(() => echo(u.text), 20); // the mic hears it
+    this.timer = setTimeout(() => {
+      this.queue.shift();
+      u.onend?.();
+      this.next();
+    }, words * MS_PER_WORD);
+  },
+};
+let echo: (text: string) => void = () => {};
+(globalThis as any).SpeechSynthesisUtterance = FakeUtterance;
+(globalThis as any).window = {
+  webkitSpeechRecognition: FakeRecognition,
+  speechSynthesis: fakeSynth,
+  addEventListener() {},
+  removeEventListener() {},
+};
 // Node 21+ already has a read-only `navigator` with a language
 
 (async () => {
@@ -87,6 +147,8 @@ class FakeRecognition {
   const awake = () => useRigStore.getState().isVarunaAwake && Date.now() < useRigStore.getState().varunaWakeExpiry;
   const closeWindow = () => useRigStore.setState({ isVarunaAwake: false, varunaWakeExpiry: 0 });
   const settle = () => sleep(900); // reply finished + echo tail + session recycle
+  echo = (text) => live()?.say(text.toLowerCase().replace(/[.,!?]/g, ''));
+  const zooms = () => useRigStore.getState().cameraNudge.seq;
 
   varunaVoiceCommander.start();
   await sleep(30);
@@ -149,6 +211,51 @@ class FakeRecognition {
   await sleep(50);
   await say('zoom in');
   check(reply() === 'Zooming in.', 'Wake button then command', reply());
+  await settle();
+
+  // ---- Back to back: commands given one after another without saying "Varuna" again ----
+  // (a) right after the reply ends
+  closeWindow();
+  await say('Varuna open crane one');
+  await sleep(500); // reply plays and ends
+  const z0 = zooms();
+  await say('zoom in');
+  await sleep(150);
+  await say('zoom out');
+  await sleep(150);
+  await say('open crane two');
+  check(zooms() - z0 === 2, 'back to back: zoom in, zoom out after a reply', zooms() - z0);
+  check(useRigStore.getState().activeHoloModal === 'crane2', 'back to back: third command (open crane two)', useRigStore.getState().activeHoloModal);
+
+  // (b) while VARUNA is still speaking its reply (user does not wait)
+  await settle();
+  const z1 = zooms();
+  await say('open helipad'); // reply ~5 words = 300 ms of speech
+  await sleep(80);
+  check(useRigStore.getState().voiceStatus.isSpeaking, '...VARUNA is speaking the reply', useRigStore.getState().voiceStatus.isSpeaking);
+  await say('zoom in'); // spoken over VARUNA's voice
+  check(zooms() - z1 === 1, 'command spoken during the reply is taken', zooms() - z1);
+
+  // (c) VARUNA's own words must never run as commands ("Zooming in." echo must not zoom again)
+  await settle();
+  const z2 = zooms();
+  await say('zoom in');
+  await sleep(1200);
+  check(zooms() - z2 === 1, 'echo of "Zooming in." does not zoom again', zooms() - z2);
+
+  // (d) a long chain: six commands in a row, awake the whole time
+  await settle();
+  const chain = ['zoom in', 'zoom out', 'open crane one', 'close', 'zoom in', 'zoom out'];
+  const z3 = zooms();
+  let ok = 0;
+  for (const cmd of chain) {
+    const before = zooms();
+    await say(cmd);
+    await sleep(250);
+    const st = useRigStore.getState();
+    if (cmd.startsWith('zoom') ? zooms() === before + 1 : cmd === 'close' ? st.activeHoloModal === null : st.activeHoloModal === 'crane1') ok++;
+  }
+  check(ok === chain.length, 'six commands back to back', `${ok}/${chain.length}, zooms ${zooms() - z3}`);
 
   varunaVoiceCommander.stop();
   console.log(fail ? `${fail} failures` : 'all passed');

@@ -49,7 +49,16 @@ const cases: [string, HandLandmark[], string | null][] = [
   ['shaka', hand('up', 'down', 'down', 'down', 'up'), 'INDEX_5'],
   ['thumb up', thumb(-1), 'THUMB_UP'],
   ['thumb down', thumb(1), 'THUMB_DOWN'],
+  ['OK sign', okSign(), 'PINCH'],
 ];
+
+/** OK sign: index curled forward so its tip touches the thumb tip, other three fingers up */
+function okSign(): HandLandmark[] {
+  const lm = hand('down', 'down', 'up', 'up', 'up');
+  [[0.45, 0.58], [0.43, 0.56], [0.42, 0.6]].forEach(([x, y], i) => (lm[6 + i] = { x, y, z: 0 }));
+  [[0.45, 0.75], [0.43, 0.7], [0.42, 0.65], [0.42, 0.61]].forEach(([x, y], i) => (lm[1 + i] = { x, y, z: 0 }));
+  return lm;
+}
 
 /** Fist with the thumb standing straight up (dir -1) or down (dir 1) */
 function thumb(dir: 1 | -1): HandLandmark[] {
@@ -156,6 +165,26 @@ const none = () => feed([], 2);
     await sleep(33);
   }
   check(moved > 0.05, 'deliberate palm swipe rotates', moved.toFixed(3));
+  await none();
+  await none();
+
+  // 8. One-hand OK sign: moving up zooms in, moving down zooms out
+  const shift = (lm: HandLandmark[], dy: number) => lm.map((p) => ({ ...p, y: p.y + dy }));
+  const okZoom = async (dir: 1 | -1) => {
+    let sum = 0;
+    for (let i = 0; i < 14; i++) {
+      engine.handleMediaPipeResults({ multiHandLandmarks: [raw(shift(okSign(), dir * i * 0.012))] });
+      if (useRigStore.getState().gestureDetected === 'ZOOM') sum += useRigStore.getState().gestureSpatial.zoomDelta;
+      await sleep(33);
+    }
+    return sum;
+  };
+  const up = await okZoom(-1);
+  await none();
+  await none();
+  const down = await okZoom(1);
+  check(up > 0, 'OK sign moved up zooms in', up.toFixed(3));
+  check(down < 0, 'OK sign moved down zooms out', down.toFixed(3));
 
   engine.isRunning = false;
   console.log(fail ? `${fail} failures` : 'all passed');

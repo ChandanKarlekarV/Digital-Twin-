@@ -35,6 +35,8 @@ export type VoiceIntentId =
   | 'water_status'
   | 'physics_report'
   | 'view_topside'
+  | 'zoom_in'
+  | 'zoom_out'
   | 'view_subsea'
   | 'view_manifold'
   | 'start_camera'
@@ -89,7 +91,9 @@ const INTENTS: IntentDef[] = [
   { id: 'physics_report', phrases: ['latex', 'physics report', 'math report', 'equations', 'derivation'] },
   { id: 'view_subsea', phrases: ['dive', 'subsea view', 'underwater', 'go under water', 'below water'] },
   { id: 'view_manifold', phrases: ['manifold', 'seabed', 'sea bed', 'sea floor', 'seafloor'] },
-  { id: 'view_topside', phrases: ['reset view', 'home view', 'default view', 'overview', 'full view', 'show whole rig', 'zoom out'] },
+  { id: 'view_topside', phrases: ['reset view', 'home view', 'default view', 'overview', 'full view', 'show whole rig'] },
+  { id: 'zoom_in', phrases: ['zoom in', 'zoom closer', 'get closer', 'move closer', 'come closer', 'magnify', 'enlarge', 'bigger'] },
+  { id: 'zoom_out', phrases: ['zoom out', 'zoom back', 'move back', 'further', 'farther', 'pull back', 'smaller'] },
   { id: 'start_camera', phrases: ['start camera', 'start webcam', 'enable gestures', 'gesture mode', 'turn on camera'] },
   { id: 'stop_camera', phrases: ['stop camera', 'stop webcam', 'disable gestures', 'turn off camera'] },
   { id: 'close', phrases: ['close', 'close window', 'close panel', 'dismiss', 'cancel', 'go back', 'exit'] },
@@ -322,5 +326,5 @@ export function isUnambiguous(p: ParsedVoiceCommand): boolean {
 
 export const VOICE_HELP_TEXT =
   'You can say: split view, assemble, helipad, crane one or two, accommodation, drill bit, drill string, ' +
-  'pipe one to nine, well one to seven, slice pipe, weather, water status, or reset view. ' +
+  'pipe one to nine, well one to seven, slice pipe, weather, water status, zoom in, zoom out, or reset view. ' +
   'You can also ask me about the rig: pressure, temperature, flow, density, gas, water cut, drill speed, or rig status.';

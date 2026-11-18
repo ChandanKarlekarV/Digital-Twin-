@@ -3,6 +3,7 @@
  *
  *   Open palm, moving ...... rotate the view        Palm held still ...... freeze
  *   Two palms apart ........ zoom in                Two palms together ... zoom out
+ *   OK sign, move up ....... zoom in                OK sign, move down ... zoom out
  *   Thumb up / down ........ one view layer up / down (derrick ... drill bit)
  *   1-5 fingers, held ...... SELECT a part (1 = helipad or the pointed part,
  *                            2 = crane 1, 3 = crane 2, 4 = command dock,
@@ -100,6 +101,8 @@ const STILL_SPEED = 0.006;
 /** Two-hand zoom: ignore spread changes below this (screen widths / frame), then scale. */
 const ZOOM_DEADZONE = 0.0035;
 const ZOOM_GAIN = 1.1;
+/** One-hand OK-sign zoom: vertical hand motion (screen heights / frame) to zoom delta */
+const PINCH_ZOOM_GAIN = 1.6;
 /** Thumb up/down: hold time before a layer step, and the repeat interval while held. */
 const THUMB_HOLD_MS = 450;
 const THUMB_REPEAT_MS = 1300;
@@ -563,6 +566,16 @@ class VarunaGestureEngine {
           gesture = 'PALM';
           activeMode = 'IDLE';
         }
+      } else if (pose === 'PINCH') {
+        // OK sign: move up to zoom in, down to zoom out; held still it just holds
+        if (Math.abs(dH1_y) > STILL_SPEED * 0.4) {
+          zoomDelta = -dH1_y * PINCH_ZOOM_GAIN;
+          gesture = 'ZOOM';
+          activeMode = 'ZOOM';
+        } else {
+          gesture = 'PINCH';
+          activeMode = 'IDLE';
+        }
       } else if (pose === 'FIST' || pose === 'THUMB_UP' || pose === 'THUMB_DOWN') {
         gesture = pose;
         activeMode = 'IDLE';
@@ -760,8 +773,13 @@ class VarunaGestureEngine {
     // Unambiguous pose vocabulary:
     //  FIST, THUMB_UP, THUMB_DOWN, INDEX_1 (point), INDEX_2 (V), INDEX_3 (three),
     //  INDEX_4 (four, thumb tucked), INDEX_5 (shaka: thumb + pinky), PALM (all five open)
+    // OK sign: thumb and index tips touching, the other three fingers up -> one-hand zoom
+    const isOkPinch =
+      dist(thumbTip, indexTip) < palm * 0.3 && !isIndexExtended && isMiddleExtended && isRingExtended && isPinkyExtended;
+
     let gesture: RecognizedGesture;
-    if (isShaka) gesture = 'INDEX_5';
+    if (isOkPinch) gesture = 'PINCH';
+    else if (isShaka) gesture = 'INDEX_5';
     else if (thumbVertical) gesture = tdy < 0 ? 'THUMB_UP' : 'THUMB_DOWN';
     else if (isFist) gesture = 'FIST';
     else if (isPoint) gesture = 'INDEX_1';

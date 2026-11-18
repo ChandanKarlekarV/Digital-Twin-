@@ -158,16 +158,28 @@ const ViewControls: React.FC<{ right: string }> = ({ right }) => {
   const mode = useRigStore((s) => s.cameraViewMode);
   const layer = VIEW_LAYERS.findIndex((l) => l.mode === mode);
   const btn = 'btn btn-icon';
+
+  // Keyboard: + / = zoom in, - zoom out (ignored while typing in a field)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target instanceof Element ? e.target : null;
+      if (e.ctrlKey || e.metaKey || e.altKey || el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (e.key === '+' || e.key === '=') nudgeZoom(0.75);
+      else if (e.key === '-' || e.key === '_') nudgeZoom(1.33);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [nudgeZoom]);
   return (
     <div
       className="absolute top-16 z-30 flex flex-col items-end gap-1.5 transition-[right] duration-300"
       style={{ right }}
     >
       <div className="flex flex-col gap-1 p-1 rounded-md glass-pill">
-        <button className={btn} onClick={() => nudgeZoom(0.75)} title="Zoom in">
+        <button className={btn} onClick={() => nudgeZoom(0.75)} title="Zoom in (+)" aria-label="Zoom in">
           <ZoomIn className="w-4 h-4" />
         </button>
-        <button className={btn} onClick={() => nudgeZoom(1.33)} title="Zoom out">
+        <button className={btn} onClick={() => nudgeZoom(1.33)} title="Zoom out (−)" aria-label="Zoom out">
           <ZoomOut className="w-4 h-4" />
         </button>
         <span className="h-px bg-line mx-1" />

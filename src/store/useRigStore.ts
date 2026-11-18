@@ -1059,6 +1059,12 @@ export const useRigStore = create<RigState>((set, get) => ({
         return;
       case 'view_topside':
         return openPanel({ cameraViewMode: 'topside', activeHoloModal: null }, 'Returning to the full rig view.');
+      case 'zoom_in':
+        get().nudgeZoom(0.6);
+        return say('Zooming in.');
+      case 'zoom_out':
+        get().nudgeZoom(1.65);
+        return say('Zooming out.');
       case 'view_subsea':
         return openPanel({ cameraViewMode: 'subsea' }, 'Diving below the waterline.');
       case 'view_manifold':

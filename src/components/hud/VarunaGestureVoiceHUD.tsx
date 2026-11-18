@@ -19,6 +19,8 @@ const GESTURE_GUIDE: [string, string][] = [
   ['Palm still', 'Freeze'],
   ['Two hands apart', 'Zoom in'],
   ['Two hands together', 'Zoom out'],
+  ['OK sign, move up', 'Zoom in'],
+  ['OK sign, move down', 'Zoom out'],
   ['Thumb up', 'Layer up'],
   ['Thumb down', 'Layer down'],
   ['1 finger / point', 'Helipad or pointed part'],
@@ -31,7 +33,7 @@ const GESTURE_GUIDE: [string, string][] = [
 ];
 
 const GESTURE_NAMES: Record<string, string> = {
-  PALM: 'Freeze', MOVE: 'Rotating', ZOOM: 'Zooming', FIST: 'Fist', MERGE: 'Two fists',
+  PALM: 'Freeze', MOVE: 'Rotating', ZOOM: 'Zooming', PINCH: 'OK: move to zoom', FIST: 'Fist', MERGE: 'Two fists',
   THUMB_UP: 'Layer up', THUMB_DOWN: 'Layer down', INDEX_1: '1 finger', INDEX_2: '2 fingers',
   INDEX_3: '3 fingers', INDEX_4: '4 fingers', INDEX_5: 'Thumb + pinky',
 };
@@ -311,7 +313,7 @@ export const VarunaGestureVoiceHUD: React.FC = () => {
       const ok = await varunaGestureEngine.start();
       if (ok) {
         varunaVoice.speakCustom(
-          'Gestures on. Move an open palm to rotate, stretch two hands to zoom, thumb up or down to change layer, and hold up fingers then make a fist to open a part.'
+          'Gestures on. Move an open palm to rotate, stretch two hands or move an OK sign up and down to zoom, thumb up or down to change layer, and hold up fingers then make a fist to open a part.'
         );
       }
     }
